@@ -4,6 +4,7 @@ const TIPO_DOC_LABEL = {
   '07': 'Nota crédito',
   '08': 'Nota débito',
   '09': 'Guía remisión',
+  '31': 'GRE transportista',
 };
 
 const COD_TO_TIPO = {
@@ -12,6 +13,7 @@ const COD_TO_TIPO = {
   '07': 'NOTA_CREDITO',
   '08': 'NOTA_DEBITO',
   '09': 'GUIA_EMISION',
+  '31': 'GUIA_TRANSPORTISTA',
 };
 
 const TIPO_CONFIG = {
@@ -20,9 +22,11 @@ const TIPO_CONFIG = {
   NOTA_CREDITO: { tipoDoc: '07', serie: 'FC01', correlativoInicio: 1 },
   NOTA_DEBITO: { tipoDoc: '08', serie: 'FD01', correlativoInicio: 1 },
   GUIA_EMISION: { tipoDoc: '09', serie: 'T001', correlativoInicio: 1 },
+  GUIA_TRANSPORTISTA: { tipoDoc: '31', serie: 'V001', correlativoInicio: 1 },
 };
 
 const EMITIBLE_TIPO_DOCS = ['01', '03', '07', '08', '09'];
+const ALL_SERIE_TIPO_DOCS = [...EMITIBLE_TIPO_DOCS, '31'];
 const DEFAULT_CORRELATIVO_DIGITOS = 8;
 const MIN_CORRELATIVO_DIGITOS = 1;
 const MAX_CORRELATIVO_DIGITOS = 20;
@@ -83,6 +87,7 @@ function defaultSeriesConfig() {
     '07': { serie: 'FC01', correlativo_inicio: 1, correlativo_digitos: DEFAULT_CORRELATIVO_DIGITOS },
     '08': { serie: 'FD01', correlativo_inicio: 1, correlativo_digitos: DEFAULT_CORRELATIVO_DIGITOS },
     '09': { serie: 'T001', correlativo_inicio: 1, correlativo_digitos: DEFAULT_CORRELATIVO_DIGITOS },
+    '31': { serie: 'V001', correlativo_inicio: 1, correlativo_digitos: DEFAULT_CORRELATIVO_DIGITOS },
   };
 }
 
@@ -92,7 +97,7 @@ function normalizeStoredSeriesConfig(raw) {
   const defaults = defaultSeriesConfig();
   const merged = { ...defaults };
 
-  for (const tipoDoc of EMITIBLE_TIPO_DOCS) {
+  for (const tipoDoc of ALL_SERIE_TIPO_DOCS) {
     const entry = raw[tipoDoc];
     if (!entry || typeof entry !== 'object') continue;
 

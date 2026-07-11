@@ -144,7 +144,8 @@ async function getObjectBuffer(key) {
 
 async function uploadCertificado(companyRuc, buffer, filename) {
   const key = buildCertificadoKey(companyRuc, filename);
-  const contentType = 'application/x-pkcs12';
+  const isPem = /\.pem$/i.test(filename);
+  const contentType = isPem ? 'application/x-pem-file' : 'application/x-pkcs12';
   return uploadBuffer(key, buffer, contentType);
 }
 

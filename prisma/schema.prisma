@@ -338,8 +338,22 @@ model Address {
   company Company?
   cliente Cliente?
   almacen Almacen?
+  empresaUbicacion EmpresaUbicacion?
 
   @@map("addresses")
+}
+
+/// Ubicaciones GRE (partida/destino) guardadas por empresa.
+model EmpresaUbicacion {
+  id         String   @id @default(uuid()) @db.VarChar(36)
+  companyRuc String   @map("company_ruc") @db.VarChar(11)
+  etiqueta   String   @db.VarChar(120)
+  addressId  String   @unique @map("address_id") @db.VarChar(36)
+  address    Address  @relation(fields: [addressId], references: [id], onDelete: Cascade)
+  creadoEn   DateTime @default(now()) @map("creado_en")
+
+  @@index([companyRuc])
+  @@map("empresa_ubicaciones")
 }
 
 model Almacen {
@@ -441,6 +455,8 @@ model Configuracion {
   versionActual           String? @map("version_actual") @db.VarChar(20)
   versionMinima           String? @map("version_minima") @db.VarChar(20)
   notasRelease            String? @map("notas_release") @db.Text
+  /// Si true, la app móvil bloquea el acceso y obliga ir a Play Store.
+  actualizar              Boolean @default(false)
   mantenimientoActivo     Boolean @default(false) @map("mantenimiento_activo")
   mensajeMantenimiento    String? @map("mensaje_mantenimiento") @db.Text
   urlTerminos             String? @map("url_terminos") @db.VarChar(500)

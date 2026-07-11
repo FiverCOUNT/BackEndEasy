@@ -69,7 +69,7 @@ async function payloadGreBase(invoice) {
       razon_social: company.nombre,
     },
   };
-  return credencialesSunatService.attachToPayload(company, payload);
+  return credencialesSunatService.attachToPayload(company, payload, { tipoDoc: invoice.tipoDoc });
 }
 
 async function registrarEvento(companyRuc, guiaId, body = {}) {

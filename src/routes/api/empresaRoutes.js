@@ -7,6 +7,7 @@ const inventarioApiController = require('../../controllers/inventarioApiControll
 const almacenApiController = require('../../controllers/almacenApiController');
 const clienteApiController = require('../../controllers/clienteApiController');
 const comprobanteApiController = require('../../controllers/comprobanteApiController');
+const empresaAddressApiController = require('../../controllers/empresaAddressApiController');
 
 const router = express.Router({ mergeParams: true });
 
@@ -29,6 +30,11 @@ router.post('/almacenes', requireAdmin, almacenApiController.create);
 router.get('/clientes', clienteApiController.list);
 router.post('/clientes', clienteApiController.create);
 
+router.get('/addresses', empresaAddressApiController.list);
+router.post('/addresses', empresaAddressApiController.create);
+router.put('/addresses/:id', empresaAddressApiController.update);
+router.delete('/addresses/:id', empresaAddressApiController.destroy);
+
 router.get('/comprobantes/emisor/health', comprobanteApiController.healthEmisor);
 router.get('/comprobantes', comprobanteApiController.list);
 router.get('/compras', comprobanteApiController.listCompras);
@@ -40,6 +46,7 @@ router.get('/comprobantes/:id/archivos/:tipo', comprobanteApiController.descarga
 router.get('/comprobantes/:id/series-entregadas', comprobanteApiController.listSeriesEntregadas);
 router.get('/comprobantes/:id', comprobanteApiController.getById);
 router.post('/comprobantes/:id/emitir', comprobanteApiController.emitir);
+router.delete('/comprobantes/:id', comprobanteApiController.eliminar);
 
 router.post('/inventario/movimientos', inventarioApiController.registrarMovimiento);
 router.get('/inventario/movimientos', inventarioApiController.listMovimientos);

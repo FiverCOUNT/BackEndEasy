@@ -87,7 +87,7 @@ async function getById(req, res, next) {
       return res.status(404).json({ success: false, message: 'Comprobante no encontrado' });
     }
 
-    res.json(comprobanteModel.toApiInvoice(invoice, serializeOptions(req)));
+    res.json(await comprobanteModel.toApiInvoiceEnriched(invoice, serializeOptions(req)));
   } catch (err) {
     next(err);
   }
@@ -138,9 +138,23 @@ async function descargarArchivo(req, res, next) {
 /** Re-emite un borrador existente por id (uso interno / admin). */
 async function emitir(req, res, next) {
   try {
-    const invoice = await comprobanteModel.findByIdForEmission(req.params.id, req.companyRuc);
+    let invoice = await comprobanteModel.findByIdForEmission(req.params.id, req.companyRuc);
     if (!invoice) {
       return res.status(404).json({ success: false, message: 'Comprobante no encontrado' });
+    }
+
+    if (
+      invoice.estado === 'RECHAZADO'
+      && req.body
+      && typeof req.body === 'object'
+      && Object.keys(req.body).length > 0
+    ) {
+      const actualizado = await comprobanteModel.updateRejectedFromMobileRequest(
+        req.params.id,
+        req.companyRuc,
+        req.body,
+      );
+      if (actualizado) invoice = actualizado;
     }
 
     if (!TIPOS_EMITIBLES.has(invoice.tipoDoc)) {
@@ -280,6 +294,25 @@ async function comunicarGreBaja(req, res, next) {
   }
 }
 
+async function eliminar(req, res, next) {
+  try {
+    const result = await comprobanteModel.deleteNoAceptadoInvoice(
+      req.params.id,
+      req.companyRuc,
+    );
+    return res.json({
+      success: true,
+      message: `Comprobante ${result.serie}-${result.correlativo} eliminado`,
+      id: result.id,
+    });
+  } catch (err) {
+    if (err.status) {
+      return res.status(err.status).json({ success: false, message: err.message });
+    }
+    next(err);
+  }
+}
+
 module.exports = {
   crearYEmitir,
   list,
@@ -292,4 +325,5 @@ module.exports = {
   healthEmisor,
   registrarGreEvento,
   comunicarGreBaja,
+  eliminar,
 };

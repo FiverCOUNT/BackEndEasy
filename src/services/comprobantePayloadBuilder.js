@@ -1,4 +1,5 @@
 const { parseStoredTimestamp } = require('../utils/fechas');
+const { assertUbigeoPeru, isValidUbigeoPeru, normalizeUbigeoDigits } = require('../utils/ubigeo');
 
 const UBIGEO_FALLBACK = '150101';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -31,9 +32,19 @@ function formatFechaSolo(value) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
-function normalizeUbigeo(value, fallback = UBIGEO_FALLBACK) {
-  const digits = String(value || '').replace(/\D/g, '');
-  if (digits.length === 6) return digits;
+function normalizeUbigeo(value, fallback = UBIGEO_FALLBACK, campo = 'dirección') {
+  const digits = normalizeUbigeoDigits(value);
+  if (digits.length === 6) {
+    if (!isValidUbigeoPeru(digits)) {
+      throw new Error(
+        `Ubigeo inválido en ${campo}: "${digits}". Debe ser 6 dígitos del catálogo SUNAT (ej. 150101 para Lima).`,
+      );
+    }
+    return digits;
+  }
+  if (!fallback) {
+    throw new Error(`Ubigeo obligatorio en ${campo}. Indica 6 dígitos del catálogo SUNAT (ej. 150101).`);
+  }
   return fallback;
 }
 
@@ -65,9 +76,12 @@ function buildDireccion(address) {
   };
 }
 
-function buildDireccionEnvio(address, fallback = 'SIN DIRECCION') {
+function buildDireccionEnvio(address, fallback = 'SIN DIRECCION', campo = 'punto de traslado') {
   return {
-    ubigeo: normalizeUbigeo(address?.ubigeo),
+    ubigeo: normalizeUbigeo(address?.ubigeo, null, campo),
+    departamento: (address?.departamento || '').trim().toUpperCase() || undefined,
+    provincia: (address?.provincia || '').trim().toUpperCase() || undefined,
+    distrito: (address?.distrito || '').trim().toUpperCase() || undefined,
     direccion: (address?.direccion || fallback).toUpperCase(),
   };
 }
@@ -195,35 +209,154 @@ function resolveGuiaMeta(invoice) {
   return invoice.guiaMetaJson;
 }
 
+function normalizeTransportista(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+
+  const numDoc = String(
+    raw.num_doc || raw.numero_doc || raw.numeroDoc || raw.ruc || '',
+  ).trim();
+  const razonSocial = String(
+    raw.razon_social || raw.razonSocial || raw.nombre || '',
+  ).trim();
+
+  if (!numDoc || !razonSocial) return null;
+
+  const nroMtc = String(raw.nro_mtc || raw.nroMtc || '').trim() || null;
+
+  return {
+    tipo_doc: String(raw.tipo_doc || raw.tipoDoc || (numDoc.length === 11 ? '6' : '1')),
+    num_doc: numDoc,
+    razon_social: razonSocial,
+    ...(nroMtc ? { nro_mtc: nroMtc } : {}),
+  };
+}
+
+function normalizeConductor(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+
+  const numDoc = String(raw.num_doc || raw.numero_doc || raw.numDoc || '').trim();
+  const nombreCompleto = String(raw.nombres || raw.nombre || '').trim();
+  if (!numDoc && !nombreCompleto) return null;
+
+  const partes = nombreCompleto.split(/\s+/);
+  const nombres = String(raw.nombres || partes[0] || '').trim();
+  const apellidos = String(raw.apellidos || partes.slice(1).join(' ') || '').trim();
+  const licencia = String(raw.licencia || '').trim() || null;
+
+  return {
+    tipo_doc: String(raw.tipo_doc || raw.tipoDoc || '1'),
+    num_doc: numDoc,
+    nombres,
+    ...(apellidos ? { apellidos } : {}),
+    ...(licencia ? { licencia } : {}),
+  };
+}
+
+function normalizeVehiculo(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+
+  const placa = String(raw.placa || '').trim().toUpperCase();
+  if (!placa) return null;
+
+  const vehiculo = { placa };
+  const nroCirculacion = String(
+    raw.nro_circulacion || raw.nroCirculacion || '',
+  ).trim();
+  if (nroCirculacion) vehiculo.nro_circulacion = nroCirculacion;
+
+  const secundarios = Array.isArray(raw.secundarios)
+    ? raw.secundarios
+      .map((sec) => normalizeVehiculo(sec))
+      .filter(Boolean)
+    : [];
+  if (secundarios.length) vehiculo.secundarios = secundarios;
+
+  return vehiculo;
+}
+
 function resolveEnvio(invoice) {
   const envio = resolveGuiaMeta(invoice).envio || {};
 
-  const partida = envio.partida || buildDireccionEnvio(
-    invoice.company?.address,
-    invoice.company?.nombre || 'PUNTO DE PARTIDA',
-  );
-  const llegada = envio.llegada || buildDireccionEnvio(
-    invoice.cliente?.address,
-    invoice.cliente?.razonSocial || 'PUNTO DE LLEGADA',
-  );
+  const partida = envio.partida
+    ? buildDireccionEnvio(envio.partida, 'PUNTO DE PARTIDA', 'punto de partida')
+    : buildDireccionEnvio(
+      invoice.company?.address,
+      invoice.company?.nombre || 'PUNTO DE PARTIDA',
+      'punto de partida',
+    );
+  const llegada = envio.llegada
+    ? buildDireccionEnvio(envio.llegada, 'PUNTO DE LLEGADA', 'punto de llegada')
+    : buildDireccionEnvio(
+      invoice.cliente?.address,
+      invoice.cliente?.razonSocial || 'PUNTO DE LLEGADA',
+      'punto de llegada',
+    );
 
   const pesoTotal = envio.peso_total != null
     ? toNumber(envio.peso_total)
     : invoice.details.reduce((sum, d) => sum + toNumber(d.cantidad, 1), 0) || 1;
 
+  const fechaEmision = formatFechaSolo(invoice.fechaEmision);
+  let fechaTraslado = envio.fecha_traslado
+    || envio.fechaTraslado
+    || envio.fecha_inicio_traslado
+    || envio.fechaInicioTraslado
+    || fechaEmision;
+  // SUNAT/GRE: la fecha de traslado no puede ser anterior a la emisión.
+  if (String(fechaTraslado).slice(0, 10) < fechaEmision) {
+    fechaTraslado = fechaEmision;
+  }
+
+  let fechaEntregaTransportista = envio.fecha_entrega_transportista
+    || envio.fechaEntregaTransportista
+    || fechaTraslado;
+  if (String(fechaEntregaTransportista).slice(0, 10) < fechaEmision) {
+    fechaEntregaTransportista = fechaEmision;
+  }
+
   const payload = {
     cod_traslado: envio.cod_traslado || '01',
     mod_traslado: envio.mod_traslado || '02',
-    fecha_traslado: envio.fecha_traslado || formatFechaSolo(invoice.fechaEmision),
+    fecha_traslado: fechaTraslado,
+    fecha_entrega_transportista: fechaEntregaTransportista,
     peso_total: pesoTotal,
     und_peso_total: envio.und_peso_total || 'KGM',
     partida,
     llegada,
   };
 
-  if (envio.transportista) payload.transportista = envio.transportista;
-  if (envio.vehiculo) payload.vehiculo = envio.vehiculo;
-  if (envio.conductor) payload.conductor = envio.conductor;
+  const transportistaRaw = envio.transportista || null;
+  const nroMtcEnvio = String(envio.nro_mtc || envio.nroMtc || '').trim();
+  const transportista = normalizeTransportista(
+    transportistaRaw
+      ? { ...transportistaRaw, nro_mtc: transportistaRaw.nro_mtc || transportistaRaw.nroMtc || nroMtcEnvio }
+      : (nroMtcEnvio ? { nro_mtc: nroMtcEnvio } : null),
+  );
+  if (transportista) payload.transportista = transportista;
+
+  const vehiculo = normalizeVehiculo(envio.vehiculo);
+  if (vehiculo) payload.vehiculo = vehiculo;
+
+  const conductor = normalizeConductor(envio.conductor);
+  if (conductor) payload.conductor = conductor;
+
+  const registrarVehiculos = envio.registrar_vehiculos_conductores === true
+    || envio.registrarVehiculosConductores === true
+    || (payload.mod_traslado === '01' && (vehiculo || conductor));
+
+  if (registrarVehiculos && (vehiculo || conductor)) {
+    payload.indicadores = ['SUNAT_Envio_IndicadorVehiculoConductoresTransp'];
+  }
+
+  // Transporte público sin MTC: en desarrollo no bloqueamos (EMISOR también rellena en beta).
+  if (payload.mod_traslado === '01') {
+    if (!payload.transportista) {
+      payload.transportista = { tipo_doc: '6', num_doc: '00000000000', razon_social: 'TRANSPORTISTA' };
+    }
+    if (!payload.transportista.nro_mtc) {
+      payload.transportista.nro_mtc = '12345678901';
+    }
+  }
 
   return payload;
 }

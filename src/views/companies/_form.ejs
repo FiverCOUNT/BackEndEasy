@@ -159,6 +159,23 @@
         placeholder="<%= form.tieneSolPass ? 'Configurada — dejar vacío para no cambiar' : 'Clave SOL' %>"
       />
     </div>
+    <div class="field field-full"><strong>API GRE (guías de remisión)</strong></div>
+    <p class="field-hint field-full">Credenciales del menú SOL → Credenciales de API SUNAT. En <code>beta</code>, las guías (09/31) usan el sandbox <code>gre-test.nubefact.com</code> (no hace falta Client ID aquí). En <code>prod</code> sí son obligatorias y se envían a SUNAT real.</p>
+    <div class="field">
+      <label for="clientId">Client ID</label>
+      <input type="text" id="clientId" name="clientId" value="<%= form.clientId %>" autocomplete="off" />
+    </div>
+    <div class="field">
+      <label for="clientSecret">Client Secret</label>
+      <input
+        type="password"
+        id="clientSecret"
+        name="clientSecret"
+        value=""
+        autocomplete="new-password"
+        placeholder="<%= form.tieneClientSecret ? 'Configurado — dejar vacío para no cambiar' : 'Client secret GRE' %>"
+      />
+    </div>
   </div>
 </fieldset>
 

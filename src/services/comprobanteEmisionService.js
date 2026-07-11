@@ -13,7 +13,9 @@ function inventarioDebeBloquearEmision(inventario) {
 
 async function payloadParaEmision(invoice) {
   const payload = buildPayload(invoice);
-  return credencialesSunatService.attachToPayload(invoice.company, payload);
+  return credencialesSunatService.attachToPayload(invoice.company, payload, {
+    tipoDoc: invoice.tipoDoc,
+  });
 }
 
 async function payloadResumenParaEmision(company, boletas, correlativo) {
@@ -219,7 +221,7 @@ async function crearYEmitirDesdeMobile(companyRuc, body, options = {}) {
       };
     }
 
-    const guardado = comprobanteModel.toApiInvoice(
+    const guardado = await comprobanteModel.toApiInvoiceEnriched(
       (await comprobanteModel.findByIdForEmission(invoice.id, companyRuc)) || invoice,
       options,
     );

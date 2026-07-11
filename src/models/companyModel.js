@@ -30,9 +30,11 @@ function toPublic(company) {
     creadoEn: company.creadoEn,
     addressId: company.addressId,
     solUser: company.solUser,
+    clientId: company.clientId,
     tieneCertificado: company.tieneCertificado,
     rutaFirma: company.rutaFirma,
     tieneSolPass: Boolean(company.solPass),
+    tieneClientSecret: Boolean(company.clientSecret),
     tieneCertificatePassword: Boolean(company.certificatePassword),
     seriesConfig: normalizeStoredSeriesConfig(company.seriesConfigJson),
     usuariosCount: company._count?.usuarios ?? 0,
@@ -83,7 +85,15 @@ function buildCompanyData(body, options = {}) {
     activo: body.activo === 'on' || body.activo === 'true' || body.activo === true,
     isActive: body.isActive === 'on' || body.isActive === 'true' || body.isActive === true,
     solUser: (body.solUser || '').trim() || null,
+    clientId: (body.clientId || '').trim() || null,
   };
+
+  const clientSecret = (body.clientSecret || '').trim();
+  if (clientSecret) {
+    data.clientSecret = clientSecret;
+  } else if (!keepEmptyPasswords || !existing) {
+    data.clientSecret = null;
+  }
 
   const solPass = (body.solPass || '').trim();
   if (solPass) {
@@ -177,7 +187,9 @@ async function create(body, { certFile = null } = {}) {
 
   if (certFile?.buffer?.length) {
     const companyCertificadoService = require('../services/companyCertificadoService');
-    const uploaded = await companyCertificadoService.uploadCertificado(companyData.ruc, certFile);
+    const uploaded = await companyCertificadoService.uploadCertificado(companyData.ruc, certFile, {
+      password: companyData.certificatePassword || '',
+    });
     if (uploaded) {
       companyData.rutaFirma = uploaded.key;
       companyData.tieneCertificado = true;
@@ -212,7 +224,10 @@ async function update(id, body, { certFile = null, existing = null } = {}) {
   if (certFile?.buffer?.length) {
     const companyCertificadoService = require('../services/companyCertificadoService');
     const ruc = companyData.ruc || current.ruc;
-    const uploaded = await companyCertificadoService.uploadCertificado(ruc, certFile);
+    const certPassword = companyData.certificatePassword || current.certificatePassword || '';
+    const uploaded = await companyCertificadoService.uploadCertificado(ruc, certFile, {
+      password: certPassword,
+    });
     if (uploaded) {
       companyData.rutaFirma = uploaded.key;
       companyData.tieneCertificado = true;

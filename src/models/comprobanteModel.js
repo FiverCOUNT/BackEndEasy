@@ -11,6 +11,11 @@ const {
   calendarDayStartMsPe,
   calendarDayEndMsPe,
 } = require('../utils/fechas');
+const {
+  resolveTipoConfig: resolveTipoConfigFromSeries,
+  formatCorrelativo,
+  parseCorrelativoNumber,
+} = require('../utils/seriesConfig');
 
 const IGV_RATE = 0.18;
 
@@ -65,11 +70,8 @@ function toNumber(value, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
-function resolveTipoConfig(tipoRaw) {
-  const key = String(tipoRaw || '').trim().toUpperCase();
-  if (TIPO_CONFIG[key]) return TIPO_CONFIG[key];
-  if (COD_TO_TIPO[key]) return TIPO_CONFIG[COD_TO_TIPO[key]];
-  throw new Error(`Tipo de comprobante no válido: ${tipoRaw}`);
+function resolveTipoConfig(tipoRaw, company = null) {
+  return resolveTipoConfigFromSeries(tipoRaw, company);
 }
 
 function parseRemitente(body) {
@@ -210,16 +212,19 @@ function calcularTotales(details) {
   };
 }
 
-async function getNextCorrelativo(companyRuc, tipoDoc, serie) {
+async function getNextCorrelativo(companyRuc, tipoDoc, serie, options = {}) {
+  const inicio = Math.max(1, Number.parseInt(String(options.correlativoInicio ?? 1), 10) || 1);
+  const digitos = Number.parseInt(String(options.correlativoDigitos ?? 8), 10) || 8;
+
   const last = await prisma.invoice.findFirst({
     where: { companyRuc, tipoDoc, serie },
     orderBy: { correlativo: 'desc' },
     select: { correlativo: true },
   });
 
-  const current = last ? parseInt(String(last.correlativo).replace(/\D/g, ''), 10) : 0;
-  const next = Number.isFinite(current) ? current + 1 : 1;
-  return String(next).padStart(8, '0');
+  const current = last ? parseCorrelativoNumber(last.correlativo) : 0;
+  const next = Math.max(inicio, (Number.isFinite(current) ? current : 0) + 1);
+  return formatCorrelativo(next, digitos);
 }
 
 async function resolveClienteId(companyRuc, receptor) {
@@ -314,14 +319,45 @@ function aggregateDetailsFromFacturas(facturas) {
   return aggregated;
 }
 
+function normalizeFechaEnvio(value) {
+  if (!value) return null;
+  const normalized = String(value).trim().slice(0, 10);
+  return normalized || null;
+}
+
+function resolveFechaInicioTrasladoEnvio(envioBody) {
+  return normalizeFechaEnvio(
+    envioBody.fecha_traslado
+    || envioBody.fechaTraslado
+    || envioBody.fecha_inicio_traslado
+    || envioBody.fechaInicioTraslado
+    || null,
+  );
+}
+
+function resolveFechaEntregaTransportistaEnvio(envioBody, fechaInicioFallback = null) {
+  return normalizeFechaEnvio(
+    envioBody.fecha_entrega_transportista
+    || envioBody.fechaEntregaTransportista
+    || null,
+  ) || fechaInicioFallback;
+}
+
 function buildEnvioMeta(body, company, cliente) {
   const envioBody = body.envio && typeof body.envio === 'object' ? body.envio : {};
+  const fechaInicioTraslado = resolveFechaInicioTrasladoEnvio(envioBody)
+    || resolveFechaEntregaTransportistaEnvio(envioBody);
+  const fechaEntregaTransportista = resolveFechaEntregaTransportistaEnvio(
+    envioBody,
+    fechaInicioTraslado,
+  );
 
   return {
     envio: {
       cod_traslado: envioBody.cod_traslado || envioBody.codTraslado || '01',
       mod_traslado: envioBody.mod_traslado || envioBody.modTraslado || '02',
-      fecha_traslado: envioBody.fecha_traslado || envioBody.fechaTraslado || null,
+      fecha_traslado: fechaInicioTraslado,
+      fecha_entrega_transportista: fechaEntregaTransportista,
       peso_total: envioBody.peso_total ?? envioBody.pesoTotal ?? null,
       und_peso_total: envioBody.und_peso_total || envioBody.undPesoTotal || 'KGM',
       partida: envioBody.partida || (company?.address
@@ -333,6 +369,11 @@ function buildEnvioMeta(body, company, cliente) {
       transportista: envioBody.transportista || undefined,
       vehiculo: envioBody.vehiculo || undefined,
       conductor: envioBody.conductor || undefined,
+      nro_mtc: envioBody.nro_mtc || envioBody.nroMtc || envioBody.transportista?.nro_mtc || undefined,
+      registrar_vehiculos_conductores:
+        envioBody.registrar_vehiculos_conductores
+        ?? envioBody.registrarVehiculosConductores
+        ?? undefined,
     },
   };
 }
@@ -684,6 +725,52 @@ function sanitizeSunatForApi(sunatJson, includePayload = true) {
   return cleaned;
 }
 
+function collectFacturaIdsFromGuias(rows) {
+  const ids = new Set();
+  for (const row of rows) {
+    if (!['09', '31'].includes(row.tipoDoc) || !row.guiaMetaJson) continue;
+    const refs = row.guiaMetaJson.facturas_vinculadas;
+    if (!Array.isArray(refs)) continue;
+    for (const id of refs) {
+      const trimmed = String(id || '').trim();
+      if (trimmed) ids.add(trimmed);
+    }
+  }
+  return [...ids];
+}
+
+async function loadFacturaRefMap(companyRuc, facturaIds) {
+  if (!facturaIds.length) return new Map();
+  const rows = await prisma.invoice.findMany({
+    where: { companyRuc, id: { in: facturaIds } },
+    select: { id: true, tipoDoc: true, serie: true, correlativo: true },
+  });
+  return new Map(rows.map((row) => [row.id, row]));
+}
+
+function buildGuiaApiFields(invoice, facturaMap = new Map()) {
+  if (!['09', '31'].includes(invoice.tipoDoc) || !invoice.guiaMetaJson) return {};
+
+  const meta = invoice.guiaMetaJson;
+  const envio = meta.envio && typeof meta.envio === 'object' ? meta.envio : undefined;
+  const facturas = (Array.isArray(meta.facturas_vinculadas) ? meta.facturas_vinculadas : [])
+    .map((id) => facturaMap.get(String(id || '').trim()))
+    .filter(Boolean)
+    .map((row) => ({
+      id: row.id,
+      tipo_doc: row.tipoDoc,
+      serie: row.serie,
+      correlativo: row.correlativo,
+    }));
+
+  return {
+    envio,
+    facturas: facturas.length ? facturas : undefined,
+    remitente: meta.remitente || undefined,
+    guia_remitente: meta.guia_remitente || undefined,
+  };
+}
+
 function toApiCompraInvoice(invoice, sellerCompany, options = {}) {
   if (!invoice) return null;
   const base = toApiInvoice(invoice, { ...options, includeSunatPayload: false });
@@ -707,7 +794,7 @@ function toApiCompraInvoice(invoice, sellerCompany, options = {}) {
 function toApiInvoice(invoice, options = {}) {
   if (!invoice) return null;
 
-  const { apiBaseUrl, companyRuc, includeSunatPayload = true } = options;
+  const { apiBaseUrl, companyRuc, includeSunatPayload = true, facturaMap = new Map() } = options;
   const estadoEfectivo = resolveEstadoApi(invoice);
   const invoiceForUrls = { ...invoice, estado: estadoEfectivo };
   const fileUrls = comprobanteArchivosService.resolveFileUrls(invoiceForUrls, apiBaseUrl);
@@ -778,6 +865,7 @@ function toApiInvoice(invoice, options = {}) {
       code: legend.code,
       value: legend.value,
     })),
+    ...buildGuiaApiFields(invoice, facturaMap),
   };
 }
 
@@ -791,6 +879,37 @@ function mapEstadoEmision(tipoDoc, emisorData) {
   if (emisorData.success === false) return 'RECHAZADO';
   if (emisorData.success === true) return 'ENVIADO';
   return 'ENVIADO';
+}
+
+/**
+ * gre-test a veces responde solo "Error inesperado"; enriquecemos el mensaje
+ * para que en la app se entienda la causa más probable.
+ */
+function enrichSunatDescripcion(emisorData) {
+  const codigo = String(emisorData?.error?.codigo ?? emisorData?.codigo_cdr ?? '');
+  const mensaje = String(
+    emisorData?.error?.mensaje ||
+    emisorData?.error?.descripcion ||
+    emisorData?.descripcion ||
+    emisorData?.mensaje ||
+    '',
+  ).trim();
+
+  if (!mensaje) return null;
+
+  const isGeneric500 =
+    (codigo === '500' || /error inesperado/i.test(mensaje)) &&
+    /inesperado/i.test(mensaje);
+
+  if (isGeneric500) {
+    return (
+      'Error inesperado del sandbox GRE (gre-test). '
+      + 'Revisa: RUC del XML alineado con OAuth demo, fecha de traslado ≥ emisión, '
+      + 'y si es transporte público (01) el nro_mtc del transportista.'
+    );
+  }
+
+  return mensaje;
 }
 
 async function findCompany(companyRuc) {
@@ -856,10 +975,12 @@ async function marcarBoletasResumidas(ids, resumenData) {
 }
 
 async function createFromMobileRequest(companyRuc, body) {
-  const tipoConfig = resolveTipoConfig(body.tipo);
+  const company = await findCompany(companyRuc);
+  if (!company) throw new Error('No se encontró la empresa emisora.');
+
+  const tipoConfig = resolveTipoConfig(body.tipo, company);
   const receptor = validateReceptorForTipo(tipoConfig.tipoDoc, parseReceptor(body));
   const lineas = Array.isArray(body.lineas) ? body.lineas : [];
-  const company = await findCompany(companyRuc);
 
   let saleDetails = [];
   let guiaMetaJson = null;
@@ -944,7 +1065,15 @@ async function createFromMobileRequest(companyRuc, body) {
     : calcularTotales(saleDetails);
 
   const clienteId = await resolveClienteId(companyRuc, receptor);
-  const correlativo = await getNextCorrelativo(companyRuc, tipoConfig.tipoDoc, tipoConfig.serie);
+  const correlativo = await getNextCorrelativo(
+    companyRuc,
+    tipoConfig.tipoDoc,
+    tipoConfig.serie,
+    {
+      correlativoInicio: tipoConfig.correlativoInicio,
+      correlativoDigitos: tipoConfig.correlativoDigitos,
+    },
+  );
 
   let documentoAfectadoId = null;
   let motivoCodigo = null;
@@ -1028,8 +1157,10 @@ async function findAllByCompany(companyRuc, { desde = null, hasta = null, apiBas
     });
   });
 
+  const facturaMap = await loadFacturaRefMap(companyRuc, collectFacturaIdsFromGuias(filtered));
+
   return filtered.map((row) =>
-    toApiInvoice(row, { apiBaseUrl, companyRuc, includeSunatPayload: false }),
+    toApiInvoice(row, { apiBaseUrl, companyRuc, includeSunatPayload: false, facturaMap }),
   );
 }
 
@@ -1173,6 +1304,7 @@ async function applyEmisionResult(id, companyRuc, tipoDoc, emisorData, options =
             ? String(emisorData.error.codigo)
             : null,
       sunatDescripcionDirecto:
+        enrichSunatDescripcion(emisorData) ||
         emisorData.descripcion ||
         emisorData.mensaje ||
         emisorData.error?.mensaje ||
@@ -1197,7 +1329,7 @@ async function applyEmisionResult(id, companyRuc, tipoDoc, emisorData, options =
     await aplicarEstadoLineasDocumentoAfectadoNotaCredito(updated, options.lineasBody || null);
   }
 
-  return toApiInvoice(updated, options);
+  return toApiInvoiceEnriched(updated, options);
 }
 
 async function getArchivoBuffer(invoice, tipo, options = {}) {
@@ -1261,6 +1393,13 @@ async function marcarAnulado(id, companyRuc, motivo) {
   });
 }
 
+async function toApiInvoiceEnriched(invoice, options = {}) {
+  if (!invoice) return null;
+  const companyRuc = options.companyRuc || invoice.companyRuc;
+  const facturaMap = await loadFacturaRefMap(companyRuc, collectFacturaIdsFromGuias([invoice]));
+  return toApiInvoice(invoice, { ...options, companyRuc, facturaMap });
+}
+
 async function deleteDraftInvoice(id, companyRuc) {
   const row = await prisma.invoice.findFirst({
     where: { id, companyRuc, estado: 'BORRADOR' },
@@ -1276,6 +1415,96 @@ async function deleteDraftInvoice(id, companyRuc) {
   return true;
 }
 
+/**
+ * Elimina un comprobante registrado que aún no fue aceptado por SUNAT.
+ * No permite borrar ACEPTADO ni ANULADO.
+ */
+async function deleteNoAceptadoInvoice(id, companyRuc) {
+  const row = await prisma.invoice.findFirst({
+    where: { id, companyRuc },
+    select: { id: true, estado: true, serie: true, correlativo: true, tipoDoc: true },
+  });
+  if (!row) {
+    const err = new Error('Comprobante no encontrado');
+    err.status = 404;
+    throw err;
+  }
+
+  const estado = String(row.estado || '').toUpperCase();
+  if (estado === 'ACEPTADO' || estado === 'ANULADO') {
+    const err = new Error(
+      `No se puede eliminar un comprobante en estado ${estado}. Solo borradores, enviados o rechazados.`,
+    );
+    err.status = 409;
+    throw err;
+  }
+
+  await prisma.invoice.updateMany({
+    where: { documentoAfectadoId: id },
+    data: { documentoAfectadoId: null },
+  });
+  await prisma.invoice.delete({ where: { id } });
+  return {
+    id: row.id,
+    serie: row.serie,
+    correlativo: row.correlativo,
+    tipo_doc: row.tipoDoc,
+    estado,
+  };
+}
+
+/** Aplica cambios del body mobile a un comprobante rechazado antes de reemitir. */
+async function updateRejectedFromMobileRequest(id, companyRuc, body) {
+  const invoice = await prisma.invoice.findFirst({
+    where: { id, companyRuc, estado: 'RECHAZADO' },
+    include: INVOICE_INCLUDE,
+  });
+  if (!invoice) return null;
+
+  if (!['09', '31'].includes(invoice.tipoDoc)) return invoice;
+
+  const company = await findCompany(companyRuc);
+  const clienteRow = invoice.cliente
+    || (invoice.clienteId
+      ? await prisma.cliente.findFirst({
+          where: { id: invoice.clienteId },
+          include: { address: true },
+        })
+      : null);
+
+  const prevMeta = invoice.guiaMetaJson && typeof invoice.guiaMetaJson === 'object'
+    ? invoice.guiaMetaJson
+    : {};
+  const envioMeta = buildEnvioMeta(body, company, clienteRow);
+
+  let facturasVinculadas = prevMeta.facturas_vinculadas;
+  const facturasBody = body.facturas || body.facturasVinculadas;
+  if (Array.isArray(facturasBody) && facturasBody.length) {
+    const facturas = await loadFacturasVinculadas(companyRuc, facturasBody);
+    facturasVinculadas = facturas.map((f) => f.id);
+  }
+
+  const guiaMetaJson = {
+    ...prevMeta,
+    ...envioMeta,
+    facturas_vinculadas: facturasVinculadas,
+  };
+
+  const observacion = (body.observaciones || body.observacion || '').trim() || invoice.observacion;
+
+  await prisma.invoice.update({
+    where: { id },
+    data: {
+      guiaMetaJson,
+      observacion,
+      motivoCodigo: String(body.motivo_codigo || body.motivoCodigo || invoice.motivoCodigo || '').trim() || null,
+      motivoNota: (body.motivo_nota || body.motivoNota || invoice.motivoNota || '').trim() || null,
+    },
+  });
+
+  return findByIdForEmission(id, companyRuc);
+}
+
 module.exports = {
   findAll,
   findAllByCompany,
@@ -1286,9 +1515,12 @@ module.exports = {
   findBoletasPendientesResumen,
   marcarBoletasResumidas,
   createFromMobileRequest,
+  updateRejectedFromMobileRequest,
   deleteDraftInvoice,
+  deleteNoAceptadoInvoice,
   applyEmisionResult,
   toApiInvoice,
+  toApiInvoiceEnriched,
   getArchivoBuffer,
   toPublic: toPublicSummary,
   findInvoiceRow,

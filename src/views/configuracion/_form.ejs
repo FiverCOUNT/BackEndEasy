@@ -66,6 +66,13 @@
       <label for="notasRelease">Notas de la versión</label>
       <textarea id="notasRelease" name="notasRelease" rows="4" placeholder="Novedades, correcciones..."><%= form.notasRelease %></textarea>
     </div>
+    <div class="field field-check field-full">
+      <label>
+        <input type="checkbox" name="actualizar" <%= form.actualizar ? 'checked' : '' %> />
+        Forzar actualización en la app (obliga ir a Play Store)
+      </label>
+      <p class="field-hint">Cuando está activo, los usuarios no pueden usar la app hasta actualizar desde la URL de Play Store.</p>
+    </div>
   </div>
 </fieldset>
 
