@@ -25,6 +25,7 @@ function toApi(item) {
     company_ruc: item.companyRuc,
     kind: item.kind,
     codigo: item.codigo,
+    codigo_sunat: item.codigoSunat,
     nombre: item.nombre,
     descripcion: item.descripcion,
     unidad: item.unidad,
@@ -44,6 +45,7 @@ function toPublic(item) {
   return {
     ...api,
     companyRuc: api.company_ruc,
+    codigoSunat: api.codigo_sunat,
     precioUnitario: api.precio_unitario,
     afectacionIgv: api.afectacion_igv,
     manejaStock: api.maneja_stock,
@@ -69,6 +71,7 @@ function buildSearchWhere({ q = '', kind = '', companyRuc = '' } = {}) {
     where.OR = [
       { nombre: { contains: term } },
       { codigo: { contains: term } },
+      { codigoSunat: { contains: term } },
       { descripcion: { contains: term } },
       { companyRuc: { contains: term } },
       { unidad: { contains: term } },
@@ -92,6 +95,7 @@ function parseBody(body) {
     companyRuc: (body.companyRuc || body.company_ruc || '').trim(),
     kind: KINDS.includes(kind) ? kind : 'PRODUCT',
     codigo: (body.codigo || '').trim() || null,
+    codigoSunat: (body.codigoSunat || body.codigo_sunat || '').trim().slice(0, 32) || null,
     nombre: (body.nombre || '').trim(),
     descripcion: (body.descripcion || '').trim() || null,
     unidad: (body.unidad || (isProduct ? 'NIU' : 'ZZ')).trim(),
@@ -172,24 +176,26 @@ async function getItemIdsLinkedToAlmacen(companyRuc, almacenId) {
 }
 
 async function findByCompanyRuc(companyRuc, { almacenId, restrictToAlmacen = false } = {}) {
+  const where = { companyRuc };
+  // En contexto de almacén solo productos inventariables; servicios no aplican.
+  if (almacenId) {
+    where.kind = 'PRODUCT';
+  }
+
   let rows = await prisma.catalogItem.findMany({
-    where: { companyRuc },
+    where,
     orderBy: { nombre: 'asc' },
   });
 
   if (restrictToAlmacen && almacenId) {
     const linkedIds = await getItemIdsLinkedToAlmacen(companyRuc, almacenId);
-    rows = rows.filter((row) => {
-      if (row.kind === 'SERVICE') return true;
-      return linkedIds.has(row.id);
-    });
+    rows = rows.filter((row) => linkedIds.has(row.id));
   }
 
   let items = await enrichStock(rows, almacenId);
 
   if (restrictToAlmacen && almacenId) {
     items = items.filter((item) => {
-      if (item.kind === 'SERVICE') return item.activo !== false;
       const stock = item.stock_actual ?? 0;
       if (item.maneja_stock || item.maneja_serie) return stock > 0;
       return true;
@@ -226,6 +232,7 @@ async function create(body, id = randomUUID()) {
       companyRuc: data.companyRuc,
       kind: data.kind,
       codigo: data.codigo,
+      codigoSunat: data.codigoSunat,
       nombre: data.nombre,
       descripcion: data.descripcion,
       unidad: data.unidad,
@@ -241,6 +248,62 @@ async function create(body, id = randomUUID()) {
   return row;
 }
 
+function normalizarNombreCatalogo(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function esUnidadServicioCatalogo(unidad) {
+  const u = String(unidad || '').trim().toUpperCase();
+  return !u || u === 'ZZ' || u === 'ZZZ' || u.startsWith('SERV') || u === 'SRV';
+}
+
+/** Línea de compra recibida (SIRE/XML) que no debe materializarse en catálogo/almacén. */
+function esLineaServicioCompra(linea = {}) {
+  const kindHint = String(linea.kind || '').trim().toUpperCase();
+  return kindHint === 'SERVICE' || esUnidadServicioCatalogo(linea.unidad);
+}
+
+/**
+ * Busca un ítem del catálogo del comprador para una línea de compra recibida.
+ * Solo enlaza automáticamente si coincide el código SUNAT (UNSPSC).
+ * No crea ítems: el nombre del proveedor puede diferir del tuyo.
+ */
+async function findOrCreateForCompraLinea(companyRuc, linea = {}) {
+  const ruc = String(companyRuc || '').replace(/\D/g, '');
+  if (ruc.length !== 11) {
+    throw new Error('companyRuc inválido para catálogo de compra.');
+  }
+
+  if (esLineaServicioCompra(linea)) {
+    return null;
+  }
+
+  const codigoSunat = String(linea.codigo_sunat || linea.codigoSunat || '')
+    .trim()
+    .replace(/\D/g, '')
+    .slice(0, 32) || null;
+
+  if (codigoSunat && /^\d{8}$/.test(codigoSunat)) {
+    const bySunat = await prisma.catalogItem.findFirst({
+      where: {
+        companyRuc: ruc,
+        kind: 'PRODUCT',
+        codigoSunat,
+        activo: true,
+      },
+    });
+    if (bySunat) return bySunat;
+  }
+
+  // Sin match SUNAT: no crear ni enlazar por nombre/código interno del proveedor.
+  return null;
+}
+
 async function update(id, body) {
   const data = parseBody(body);
   let manejaSerie = data.kind === 'PRODUCT' ? data.manejaSerie : false;
@@ -252,6 +315,7 @@ async function update(id, body) {
       companyRuc: data.companyRuc,
       kind: data.kind,
       codigo: data.codigo,
+      codigoSunat: data.codigoSunat,
       nombre: data.nombre,
       descripcion: data.descripcion,
       unidad: data.unidad,
@@ -309,6 +373,9 @@ module.exports = {
   findById,
   findByCodigo,
   findByCodigoExceptId,
+  findOrCreateForCompraLinea,
+  esLineaServicioCompra,
+  esUnidadServicioCatalogo,
   create,
   update,
   setActive,

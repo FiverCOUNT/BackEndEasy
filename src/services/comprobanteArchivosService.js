@@ -73,7 +73,11 @@ function resolveR2KeyFromInvoice(invoice, tipo) {
 }
 
 function getLegacyArchivos(invoice) {
-  return invoice.archivosJson && typeof invoice.archivosJson === 'object' ? invoice.archivosJson : null;
+  const raw = invoice.archivosJson;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  // Solo el formato CPE legado (xml/pdf/cdr). El mapa clave→valor de adjuntos no aplica aquí.
+  if (!(raw.xml || raw.pdf || raw.cdr_zip || raw.cdr)) return null;
+  return raw;
 }
 
 function getLegacyStorageKey(invoice, tipo) {
@@ -378,11 +382,14 @@ function hasArchivoDisponible(invoice, tipo) {
   return false;
 }
 
-function resolveFileUrls(invoice, apiBaseUrl) {
+function resolveFileUrls(invoice, apiBaseUrl, options = {}) {
   const columns = resolveColumnUrlsFromLegacy(invoice, apiBaseUrl);
   const r2Enabled = objectStorageService.isEnabled();
+  // En compras recibidas el access RUC es el receptor (auth), no el emisor del CPE.
+  const accessRuc = String(options.accessCompanyRuc || invoice.companyRuc || '').trim()
+    || invoice.companyRuc;
   const base = apiBaseUrl
-    ? `${apiBaseUrl.replace(/\/$/, '')}/api/empresas/${invoice.companyRuc}/comprobantes/${invoice.id}/archivos`
+    ? `${apiBaseUrl.replace(/\/$/, '')}/api/empresas/${accessRuc}/comprobantes/${invoice.id}/archivos`
     : null;
 
   const pick = (storedUrl, tipo) => {
@@ -395,7 +402,7 @@ function resolveFileUrls(invoice, apiBaseUrl) {
       if (publicUrl) return publicUrl;
     }
 
-    if (base && hasArchivoDisponible(invoice, tipo)) {
+    if (base && (hasArchivoDisponible(invoice, tipo) || canServeGeneratedPdf(invoice, tipo))) {
       return `${base}/${tipo}`;
     }
 
@@ -407,6 +414,13 @@ function resolveFileUrls(invoice, apiBaseUrl) {
     xml_url: pick(columns.xmlUrlDirecto, 'xml'),
     cdr_zip_url: pick(columns.cdrZipUrl, 'cdr'),
   };
+}
+
+/** PDF se puede generar on-the-fly (como emitidos) si no es borrador. */
+function canServeGeneratedPdf(invoice, tipo) {
+  if (tipo !== 'pdf') return false;
+  const estado = String(invoice.estado || '').toUpperCase();
+  return estado && estado !== 'BORRADOR';
 }
 
 module.exports = {

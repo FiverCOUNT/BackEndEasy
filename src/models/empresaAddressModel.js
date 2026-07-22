@@ -39,37 +39,32 @@ function buildAddressFields(input) {
   };
 }
 
-function buildAddressData(input) {
-  const fields = buildAddressFields(input);
-  if (!fields) return null;
-  return { id: randomUUID(), ...fields };
-}
-
 function toApi(row) {
   if (!row) return null;
   return {
     id: row.id,
     company_ruc: row.companyRuc,
     etiqueta: row.etiqueta,
-    address: row.address
-      ? {
-          ubigeo: row.address.ubigeo,
-          departamento: row.address.departamento,
-          provincia: row.address.provincia,
-          distrito: row.address.distrito,
-          urbanizacion: row.address.urbanizacion,
-          direccion: row.address.direccion,
-          cod_local: row.address.codLocal,
-        }
-      : null,
+    // Misma forma anidada que espera la app móvil.
+    address: {
+      ubigeo: row.ubigeo,
+      departamento: row.departamento,
+      provincia: row.provincia,
+      distrito: row.distrito,
+      urbanizacion: row.urbanizacion,
+      direccion: row.direccion,
+      cod_local: row.codLocal,
+    },
   };
 }
 
 async function listByCompany(companyRuc) {
-  return prisma.empresaUbicacion.findMany({
-    where: { companyRuc },
-    include: { address: true },
-    orderBy: { creadoEn: 'desc' },
+  return prisma.address.findMany({
+    where: {
+      companyRuc,
+      etiqueta: { not: null },
+    },
+    orderBy: [{ creadoEn: 'desc' }, { etiqueta: 'asc' }],
   });
 }
 
@@ -81,31 +76,26 @@ async function create(companyRuc, body) {
     throw err;
   }
 
-  const addressData = buildAddressData(parseAddressInput(body));
-  if (!addressData) {
+  const fields = buildAddressFields(parseAddressInput(body));
+  if (!fields) {
     const err = new Error('Indica ubigeo y dirección completos');
     err.status = 400;
     throw err;
   }
 
-  return prisma.$transaction(async (tx) => {
-    await tx.address.create({ data: addressData });
-    return tx.empresaUbicacion.create({
-      data: {
-        id: randomUUID(),
-        companyRuc,
-        etiqueta,
-        addressId: addressData.id,
-      },
-      include: { address: true },
-    });
+  return prisma.address.create({
+    data: {
+      id: randomUUID(),
+      companyRuc,
+      etiqueta,
+      ...fields,
+    },
   });
 }
 
 async function update(companyRuc, id, body) {
-  const existing = await prisma.empresaUbicacion.findFirst({
-    where: { id, companyRuc },
-    include: { address: true },
+  const existing = await prisma.address.findFirst({
+    where: { id, companyRuc, etiqueta: { not: null } },
   });
   if (!existing) {
     const err = new Error('Ubicación no encontrada');
@@ -120,27 +110,26 @@ async function update(companyRuc, id, body) {
     throw err;
   }
 
-  const addressFields = buildAddressFields(parseAddressInput(body) || existing.address);
-  if (!addressFields) {
+  const fields = buildAddressFields(parseAddressInput(body) || existing);
+  if (!fields) {
     const err = new Error('Indica ubigeo y dirección completos');
     err.status = 400;
     throw err;
   }
 
-  return prisma.empresaUbicacion.update({
+  return prisma.address.update({
     where: { id },
     data: {
       etiqueta,
-      address: { update: addressFields },
+      ...fields,
     },
-    include: { address: true },
   });
 }
 
 async function remove(companyRuc, id) {
-  const existing = await prisma.empresaUbicacion.findFirst({
-    where: { id, companyRuc },
-    select: { id: true, addressId: true },
+  const existing = await prisma.address.findFirst({
+    where: { id, companyRuc, etiqueta: { not: null } },
+    select: { id: true },
   });
   if (!existing) {
     const err = new Error('Ubicación no encontrada');
@@ -148,8 +137,7 @@ async function remove(companyRuc, id) {
     throw err;
   }
 
-  // Borrar address cascada a empresa_ubicaciones (onDelete Cascade).
-  await prisma.address.delete({ where: { id: existing.addressId } });
+  await prisma.address.delete({ where: { id: existing.id } });
   return { id: existing.id };
 }
 

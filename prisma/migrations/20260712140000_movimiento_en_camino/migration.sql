@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE `movimientos`
+  MODIFY COLUMN `estado` ENUM('BORRADOR', 'EN_CAMINO', 'DESPACHADA', 'ANULADA') NULL;

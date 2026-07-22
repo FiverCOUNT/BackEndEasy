@@ -45,7 +45,7 @@
     <% }); %>
   </select>
   <span class="field-hint" id="rol-hint">
-    Administrador: acceso total (puede ver otros almacenes). Usuario: solo su almacén en la app.
+    ADMIN sin empresa = acceso solo al panel web. ADMIN/USUARIO con empresa = app móvil.
   </span>
 </div>
 
@@ -60,8 +60,8 @@
 
 <div class="field">
   <label for="companyId">Empresa</label>
-  <select id="companyId" name="companyId" required>
-    <option value="">— Sin empresa —</option>
+  <select id="companyId" name="companyId">
+    <option value="">— Sin empresa (admin plataforma) —</option>
     <% companies.forEach(function(c) { %>
       <option
         value="<%= String(c.id) %>"
@@ -72,7 +72,7 @@
       </option>
     <% }); %>
   </select>
-  <span class="field-hint" id="company-hint">Obligatoria. Define la empresa del usuario.</span>
+  <span class="field-hint" id="company-hint">Obligatoria para usuarios de app. Opcional solo para ADMIN del panel.</span>
 </div>
 
 <div class="field" id="almacen-field">
@@ -86,8 +86,10 @@
 <script>
 (function () {
   var company = document.getElementById('companyId');
+  var rol = document.getElementById('rol');
   var almacenField = document.getElementById('almacen-field');
   var almacen = document.getElementById('almacenId');
+  var companyHint = document.getElementById('company-hint');
   var allAlmacenes = <%- JSON.stringify(almacenes.map(function(a) {
     return {
       id: a.id,
@@ -114,8 +116,16 @@
   function rebuildAlmacenOptions() {
     var ruc = selectedCompanyRuc();
     var hasCompany = Boolean(ruc);
+    var isPlatformAdmin = rol.value === 'ADMIN' && !hasCompany;
+
     almacenField.style.display = hasCompany ? '' : 'none';
-    almacen.required = hasCompany;
+    almacen.required = hasCompany && !isPlatformAdmin;
+    company.required = rol.value !== 'ADMIN';
+    if (companyHint) {
+      companyHint.textContent = rol.value === 'ADMIN'
+        ? 'Opcional para ADMIN del panel. Si eliges empresa, también usa la app.'
+        : 'Obligatoria. Define la empresa del usuario en la app.';
+    }
 
     var previous = almacen.value || selectedAlmacenId || '';
     almacen.innerHTML = '<option value="">— Seleccionar almacén —</option>';
@@ -143,6 +153,7 @@
     selectedAlmacenId = '';
     rebuildAlmacenOptions();
   });
+  rol.addEventListener('change', rebuildAlmacenOptions);
   rebuildAlmacenOptions();
 })();
 </script>

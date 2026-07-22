@@ -64,6 +64,13 @@ function resolveCodigoProducto(catalogItem, detail, lineIndex) {
   return `PRD${String(lineIndex + 1).padStart(4, '0')}`;
 }
 
+function normalizeCodLocal(value) {
+  const raw = String(value ?? '').trim();
+  // SUNAT: 4 dígitos del establecimiento (0000 = principal).
+  if (/^\d{4}$/.test(raw)) return raw;
+  return '0000';
+}
+
 function buildDireccion(address) {
   return {
     ubigeo: normalizeUbigeo(address?.ubigeo),
@@ -72,18 +79,29 @@ function buildDireccion(address) {
     distrito: (address?.distrito || 'LIMA').toUpperCase(),
     urbanizacion: address?.urbanizacion || '-',
     direccion: address?.direccion || '-',
-    cod_local: address?.codLocal || '0000',
+    cod_local: normalizeCodLocal(address?.codLocal),
   };
 }
 
-function buildDireccionEnvio(address, fallback = 'SIN DIRECCION', campo = 'punto de traslado') {
-  return {
+function buildDireccionEnvio(address, fallback = 'SIN DIRECCION', campo = 'punto de traslado', options = {}) {
+  const codLocalRaw = address?.cod_local ?? address?.codLocal;
+  const rucRaw = address?.ruc ?? options.ruc ?? null;
+  const out = {
     ubigeo: normalizeUbigeo(address?.ubigeo, null, campo),
     departamento: (address?.departamento || '').trim().toUpperCase() || undefined,
     provincia: (address?.provincia || '').trim().toUpperCase() || undefined,
     distrito: (address?.distrito || '').trim().toUpperCase() || undefined,
     direccion: (address?.direccion || fallback).toUpperCase(),
   };
+  // Motivo 04 (y similares): GRE exige RUC + cod_local del establecimiento en partida/llegada.
+  if (options.incluirEstablecimiento) {
+    out.cod_local = normalizeCodLocal(codLocalRaw);
+    const ruc = String(rucRaw || '').trim();
+    if (ruc) out.ruc = ruc;
+  } else if (codLocalRaw != null && String(codLocalRaw).trim() !== '') {
+    out.cod_local = normalizeCodLocal(codLocalRaw);
+  }
+  return out;
 }
 
 function buildEmisor(company) {
@@ -209,6 +227,67 @@ function resolveGuiaMeta(invoice) {
   return invoice.guiaMetaJson;
 }
 
+function buildDocumentosRelacionadosPayload(invoice) {
+  const companyRuc = String(invoice.company?.ruc || invoice.companyRuc || '').trim();
+  const tipoDescByCode = {
+    '01': 'FACTURA',
+    '03': 'BOLETA DE VENTA',
+    '04': 'LIQUIDACION DE COMPRA',
+    '09': 'GUIA DE REMISION REMITENTE',
+    '31': 'GUIA DE REMISION TRANSPORTISTA',
+  };
+
+  const mapDocumento = (doc) => {
+    if (!doc?.serie || doc.correlativo == null) return null;
+    const tipo = doc.tipoDoc;
+    const out = {
+      tipo_doc: tipo,
+      tipo_desc: tipoDescByCode[tipo] || undefined,
+      serie: doc.serie,
+      correlativo: String(doc.correlativo),
+    };
+    const emisorNumero = String(doc.emisorRuc || doc.companyRuc || '').trim();
+    if (emisorNumero && emisorNumero !== companyRuc) {
+      out.emisor_externo = true;
+      out.emisor_tipo_doc = '6';
+      out.emisor_numero_doc = emisorNumero;
+      out.emisor_razon_social = doc.emisorRazonSocial || undefined;
+      out.emisor = emisorNumero;
+    }
+    return out;
+  };
+
+  const lines = Array.isArray(invoice.lineInvoices) ? invoice.lineInvoices : [];
+  if (lines.length) {
+    return lines
+      .map((row) => {
+        const inv = row?.invoice2;
+        if (!inv) return null;
+        return mapDocumento({
+          tipoDoc: inv.tipoDoc,
+          serie: inv.serie,
+          correlativo: inv.correlativo,
+          companyRuc: inv.companyRuc,
+          emisorRuc: inv.companyRuc,
+        });
+      })
+      .filter(Boolean);
+  }
+
+  const meta = resolveGuiaMeta(invoice);
+  if (meta.guia_remitente?.serie && meta.guia_remitente?.correlativo) {
+    const mapped = mapDocumento({
+      tipoDoc: meta.guia_remitente.tipo_doc || '09',
+      serie: meta.guia_remitente.serie,
+      correlativo: meta.guia_remitente.correlativo,
+      emisorRuc: meta.remitente?.numero_doc || undefined,
+      emisorRazonSocial: meta.remitente?.razon_social || undefined,
+    });
+    return mapped ? [mapped] : [];
+  }
+  return [];
+}
+
 function normalizeTransportista(raw) {
   if (!raw || typeof raw !== 'object') return null;
 
@@ -274,22 +353,41 @@ function normalizeVehiculo(raw) {
   return vehiculo;
 }
 
+/** En privado solo se declara la placa; permisos/TUCE quedan en catálogo, no en el XML. */
+function vehiculoSoloPlaca(vehiculo) {
+  if (!vehiculo || typeof vehiculo !== 'object') return vehiculo;
+  const out = { placa: vehiculo.placa };
+  if (Array.isArray(vehiculo.secundarios) && vehiculo.secundarios.length) {
+    out.secundarios = vehiculo.secundarios
+      .map((sec) => vehiculoSoloPlaca(sec))
+      .filter((sec) => sec?.placa);
+  }
+  return out;
+}
+
 function resolveEnvio(invoice) {
   const envio = resolveGuiaMeta(invoice).envio || {};
+  const codTraslado = String(envio.cod_traslado || envio.codTraslado || '01');
+  // 02 compra / 04 misma empresa / 07 subcontratista / 18: punto = establecimiento del remitente.
+  const incluirEstablecimiento = ['02', '04', '07', '18'].includes(codTraslado);
+  const rucEmpresa = String(invoice.company?.ruc || invoice.companyRuc || '').trim() || null;
+  const dirOpts = { incluirEstablecimiento, ruc: rucEmpresa };
 
   const partida = envio.partida
-    ? buildDireccionEnvio(envio.partida, 'PUNTO DE PARTIDA', 'punto de partida')
+    ? buildDireccionEnvio(envio.partida, 'PUNTO DE PARTIDA', 'punto de partida', dirOpts)
     : buildDireccionEnvio(
       invoice.company?.address,
       invoice.company?.nombre || 'PUNTO DE PARTIDA',
       'punto de partida',
+      dirOpts,
     );
   const llegada = envio.llegada
-    ? buildDireccionEnvio(envio.llegada, 'PUNTO DE LLEGADA', 'punto de llegada')
+    ? buildDireccionEnvio(envio.llegada, 'PUNTO DE LLEGADA', 'punto de llegada', dirOpts)
     : buildDireccionEnvio(
-      invoice.cliente?.address,
-      invoice.cliente?.razonSocial || 'PUNTO DE LLEGADA',
+      invoice.cliente?.address || invoice.company?.address,
+      invoice.cliente?.razonSocial || invoice.company?.nombre || 'PUNTO DE LLEGADA',
       'punto de llegada',
+      dirOpts,
     );
 
   const pesoTotal = envio.peso_total != null
@@ -314,8 +412,21 @@ function resolveEnvio(invoice) {
     fechaEntregaTransportista = fechaEmision;
   }
 
+  if (
+    incluirEstablecimiento
+    && partida.cod_local
+    && llegada.cod_local
+    && partida.cod_local === llegada.cod_local
+    && String(partida.direccion || '').trim() === String(llegada.direccion || '').trim()
+  ) {
+    throw new Error(
+      'En traslado entre establecimientos (motivo 04), partida y llegada deben ser distintos '
+        + '(otro código de local SUNAT o dirección).',
+    );
+  }
+
   const payload = {
-    cod_traslado: envio.cod_traslado || '01',
+    cod_traslado: codTraslado,
     mod_traslado: envio.mod_traslado || '02',
     fecha_traslado: fechaTraslado,
     fecha_entrega_transportista: fechaEntregaTransportista,
@@ -326,35 +437,88 @@ function resolveEnvio(invoice) {
   };
 
   const transportistaRaw = envio.transportista || null;
-  const nroMtcEnvio = String(envio.nro_mtc || envio.nroMtc || '').trim();
-  const transportista = normalizeTransportista(
+  const nroMtcEmpresa = String(invoice.company?.nroMtc || '').trim();
+  const nroMtcEnvio = String(envio.nro_mtc || envio.nroMtc || '').trim() || nroMtcEmpresa;
+  // No inventar transportista = empresa emisora (SUNAT 2560).
+  let transportista = normalizeTransportista(
     transportistaRaw
-      ? { ...transportistaRaw, nro_mtc: transportistaRaw.nro_mtc || transportistaRaw.nroMtc || nroMtcEnvio }
-      : (nroMtcEnvio ? { nro_mtc: nroMtcEnvio } : null),
+      ? {
+          ...transportistaRaw,
+          nro_mtc: transportistaRaw.nro_mtc || transportistaRaw.nroMtc || nroMtcEnvio,
+        }
+      : null,
   );
-  if (transportista) payload.transportista = transportista;
 
   const vehiculo = normalizeVehiculo(envio.vehiculo);
-  if (vehiculo) payload.vehiculo = vehiculo;
-
   const conductor = normalizeConductor(envio.conductor);
+
+  const emisorRuc = String(invoice.company?.ruc || invoice.companyRuc || '').trim();
+  const destDoc = String(invoice.cliente?.numeroDoc || invoice.cliente?.numero_doc || '').trim();
+  const carrierDoc = String(transportista?.num_doc || '').trim();
+
+  // 2560: transportista ≠ remitente ni destinatario.
+  // Caso típico: eligieron público (01) pero pusieron su propio RUC + vehículo propio.
+  if (
+    payload.mod_traslado === '01'
+    && carrierDoc
+    && (carrierDoc === emisorRuc || (destDoc && carrierDoc === destDoc))
+  ) {
+    if (vehiculo || conductor) {
+      payload.mod_traslado = '02';
+      transportista = null;
+    } else {
+      throw new Error(
+        'El transportista no puede ser el mismo RUC del remitente o destinatario (error SUNAT 2560). '
+          + 'Usa transporte privado (02) con tu vehículo/conductor, o un transportista distinto.',
+      );
+    }
+  }
+
+  // 3347: privado sin CarrierParty.
+  // 3452+: permisos/TUCE/autorización solo van en público; en privado el payload lleva solo placa.
+  // (No se borra nada del catálogo de vehículos; solo se omite al armar el XML.)
+  let vehiculoPayload = vehiculo;
+  if (payload.mod_traslado === '02') {
+    transportista = null;
+    delete payload.fecha_entrega_transportista;
+    if (vehiculoPayload) {
+      vehiculoPayload = vehiculoSoloPlaca(vehiculoPayload);
+    }
+  }
+
+  if (transportista) payload.transportista = transportista;
+  if (vehiculoPayload) payload.vehiculo = vehiculoPayload;
   if (conductor) payload.conductor = conductor;
 
-  const registrarVehiculos = envio.registrar_vehiculos_conductores === true
-    || envio.registrarVehiculosConductores === true
-    || (payload.mod_traslado === '01' && (vehiculo || conductor));
+  // Indicador de vehículo/conductores del transportista: solo aplica a transporte público.
+  const registrarVehiculos = payload.mod_traslado === '01'
+    && (
+      envio.registrar_vehiculos_conductores === true
+      || envio.registrarVehiculosConductores === true
+      || Boolean(vehiculo || conductor)
+    );
 
   if (registrarVehiculos && (vehiculo || conductor)) {
     payload.indicadores = ['SUNAT_Envio_IndicadorVehiculoConductoresTransp'];
   }
 
-  // Transporte público sin MTC: en desarrollo no bloqueamos (EMISOR también rellena en beta).
   if (payload.mod_traslado === '01') {
     if (!payload.transportista) {
-      payload.transportista = { tipo_doc: '6', num_doc: '00000000000', razon_social: 'TRANSPORTISTA' };
+      throw new Error(
+        'Transporte público (01) requiere un transportista distinto al remitente/destinatario.',
+      );
     }
     if (!payload.transportista.nro_mtc) {
-      payload.transportista.nro_mtc = '12345678901';
+      payload.transportista.nro_mtc = nroMtcEmpresa || '12345678901';
+    }
+  }
+
+  if (payload.mod_traslado === '02') {
+    if (!payload.vehiculo?.placa) {
+      throw new Error('Transporte privado (02) requiere la placa del vehículo.');
+    }
+    if (!payload.conductor?.num_doc) {
+      throw new Error('Transporte privado (02) requiere los datos del conductor.');
     }
   }
 
@@ -398,6 +562,11 @@ function buildVentaPayload(invoice) {
   return payload;
 }
 
+function isGreSandboxEntorno(company) {
+  const value = String(company?.entorno || 'beta').toLowerCase();
+  return value === 'beta' || value === 'homologacion' || value === 'test' || value === 'demo';
+}
+
 function buildGuiaPayload(invoice) {
   if (!invoice.details?.length) {
     throw new Error('La guía no tiene líneas de detalle.');
@@ -407,7 +576,7 @@ function buildGuiaPayload(invoice) {
   if (!company) throw new Error('No se encontró la empresa emisora.');
   if (!invoice.cliente) throw new Error('La guía requiere destinatario.');
 
-  return {
+  const payload = {
     version: '2022',
     serie: invoice.serie,
     correlativo: String(invoice.correlativo),
@@ -417,6 +586,16 @@ function buildGuiaPayload(invoice) {
     envio: resolveEnvio(invoice),
     detalles: invoice.details.map((detail, index) => buildDetalleGuia(detail, detail.catalogItem, index)),
   };
+
+  const docs = buildDocumentosRelacionadosPayload(invoice);
+  // gre-test no valida facturas/compras externas → error 3380.
+  // En beta se guardan en BD (app) pero no se envían en el XML.
+  // En producción (api-cpe SUNAT) sí se envían.
+  if (docs.length && !isGreSandboxEntorno(company)) {
+    payload.documentos_relacionados = docs;
+  }
+
+  return payload;
 }
 
 function buildResumenPayload(company, boletas, correlativoResumen = '001') {
@@ -477,12 +656,9 @@ function buildGuiaTransportistaPayload(invoice) {
     detalles: invoice.details.map((detail, index) => buildDetalleGuia(detail, detail.catalogItem, index)),
   };
 
-  if (meta.guia_remitente?.serie && meta.guia_remitente?.correlativo) {
-    payload.documentos_relacionados = [{
-      tipo_doc: meta.guia_remitente.tipo_doc || '09',
-      serie: meta.guia_remitente.serie,
-      correlativo: String(meta.guia_remitente.correlativo),
-    }];
+  const docs = buildDocumentosRelacionadosPayload(invoice);
+  if (docs.length && !isGreSandboxEntorno(company)) {
+    payload.documentos_relacionados = docs;
   }
 
   return payload;

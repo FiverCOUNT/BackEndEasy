@@ -72,6 +72,8 @@
               <thead>
                 <tr>
                   <th>Tipo</th>
+                  <th>Código</th>
+                  <th>Código SUNAT</th>
                   <th>Nombre</th>
                   <th>Empresa</th>
                   <th>Precio</th>
@@ -84,6 +86,8 @@
                 <% items.forEach(function(it) { %>
                   <tr>
                     <td><span class="badge badge-kind-<%= it.kind.toLowerCase() %>"><%= it.kind %></span></td>
+                    <td class="muted"><%= it.codigo || '—' %></td>
+                    <td class="muted"><%= it.codigoSunat || '—' %></td>
                     <td>
                       <strong><%= it.nombre %></strong>
                       <% if (it.descripcion) { %><br><span class="muted"><%= it.descripcion %></span><% } %>

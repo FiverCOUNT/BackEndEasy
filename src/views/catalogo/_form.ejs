@@ -24,9 +24,34 @@
     <input type="text" id="nombre" name="nombre" value="<%= form.nombre || '' %>" required />
   </div>
   <div class="field">
-    <label for="codigo">Código interno (SUNAT) *</label>
+    <label for="codigo">Código interno</label>
     <input type="text" id="codigo" name="codigo" value="<%= form.codigo || '' %>" maxlength="30" pattern="[A-Za-z0-9.\-_/]{1,30}" placeholder="PROD001" />
-    <p class="field-hint">Alfanumérico, máx. 30 caracteres. Se envía a SUNAT como código de producto.</p>
+    <p class="field-hint">Alfanumérico, máx. 30. Se envía a SUNAT como código de producto del vendedor.</p>
+  </div>
+  <div class="field">
+    <label for="codigoSunat">Código SUNAT</label>
+    <div class="field-inline-actions">
+      <input type="text" id="codigoSunat" name="codigoSunat" value="<%= form.codigoSunat || '' %>" maxlength="32" pattern="[A-Za-z0-9.\-_/]{0,32}" placeholder="10001501" readonly />
+      <button type="button" class="btn-sm btn-edit" id="btnAsignarCodigoSunat">Asignar código</button>
+    </div>
+    <p class="field-hint" id="codigoSunatNombreHint"><%= form.codigoSunatNombre ? form.codigoSunatNombre : 'Código estandarizado UNSPSC (Catálogo N° 25 SUNAT).' %></p>
+  </div>
+
+  <div id="codigoSunatPicker" class="sunat-picker" hidden aria-hidden="true">
+    <div class="sunat-picker-panel" role="dialog" aria-modal="true" aria-labelledby="sunatPickerTitle">
+      <div class="sunat-picker-header">
+        <div>
+          <h3 id="sunatPickerTitle">Asignar código SUNAT</h3>
+          <p class="field-hint">UNSPSC v14_0801 — Catálogo N° 25</p>
+        </div>
+        <button type="button" class="btn-sm btn-clear" id="btnCerrarCodigoSunat">Cerrar</button>
+      </div>
+      <div class="sunat-picker-search">
+        <input type="search" id="codigoSunatBusqueda" placeholder="Filtrar por nombre o código…" autocomplete="off" />
+      </div>
+      <div class="sunat-picker-status muted" id="codigoSunatStatus">Escribe para buscar…</div>
+      <div class="sunat-picker-list" id="codigoSunatResultados"></div>
+    </div>
   </div>
   <div class="field field-full">
     <label for="descripcion">Descripción</label>

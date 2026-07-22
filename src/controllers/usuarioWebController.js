@@ -61,8 +61,16 @@ async function validateUsuarioForm(form) {
     ? companies.find((c) => Number(c.id) === companyId)
     : null;
 
+  // Admin de plataforma: puede no tener empresa ni almacén (solo panel web).
+  if (form.rol === 'ADMIN' && !companyId) {
+    if (form.almacenId) {
+      return 'Un admin sin empresa no puede tener almacén asignado.';
+    }
+    return null;
+  }
+
   if (!companyId || !company) {
-    return 'La empresa es obligatoria.';
+    return 'La empresa es obligatoria (salvo admin de plataforma sin empresa).';
   }
 
   if (!form.almacenId) {
@@ -168,7 +176,7 @@ async function create(req, res, next) {
       companyId,
       estado: form.estado,
       rol: form.rol,
-      almacenId: form.almacenId,
+      almacenId: form.almacenId || null,
     });
 
     return redirectList(res, `Usuario ${form.email} creado correctamente.`);
@@ -250,7 +258,7 @@ async function update(req, res, next) {
       companyId,
       estado: form.estado,
       rol: form.rol,
-      almacenId: form.almacenId,
+      almacenId: form.almacenId || null,
     };
 
     if (nuevaContrasena.length >= 6) {

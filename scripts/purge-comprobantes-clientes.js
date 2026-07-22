@@ -58,13 +58,23 @@ async function main() {
           where: { addressId: { in: addressIds } },
           select: { addressId: true },
         }),
-        prisma.empresaUbicacion.findMany({
-          where: { addressId: { in: addressIds } },
-          select: { addressId: true },
+        prisma.address.findMany({
+          where: {
+            id: { in: addressIds },
+            companyRuc: { not: null },
+            etiqueta: { not: null },
+          },
+          select: { id: true },
         }),
       ]);
-      for (const row of [...companies, ...almacenes, ...ubicaciones]) {
+      for (const row of companies) {
         if (row.addressId) stillUsed.add(row.addressId);
+      }
+      for (const row of almacenes) {
+        if (row.addressId) stillUsed.add(row.addressId);
+      }
+      for (const row of ubicaciones) {
+        if (row.id) stillUsed.add(row.id);
       }
       const orphanIds = addressIds.filter((id) => !stillUsed.has(id));
       if (orphanIds.length > 0) {

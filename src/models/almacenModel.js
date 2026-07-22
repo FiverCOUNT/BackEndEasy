@@ -81,12 +81,19 @@ function buildAddressData(body) {
   };
 }
 
-function parseBody(body) {
+function parseActivo(body, defaultValue = true) {
+  if (body.activo === undefined || body.activo === null || body.activo === '') {
+    return defaultValue;
+  }
+  return body.activo === 'on' || body.activo === 'true' || body.activo === true;
+}
+
+function parseBody(body, { activoDefault = true } = {}) {
   return {
     companyRuc: (body.companyRuc || body.company_ruc || '').trim(),
     codigo: (body.codigo || '').trim(),
     nombre: (body.nombre || '').trim(),
-    activo: body.activo === 'on' || body.activo === 'true' || body.activo === true,
+    activo: parseActivo(body, activoDefault),
   };
 }
 

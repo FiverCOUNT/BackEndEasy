@@ -68,6 +68,76 @@ function unidadLabel(unidad) {
   return UNIDAD_LABEL[String(unidad || 'NIU').toUpperCase()] || String(unidad || 'NIU').toUpperCase();
 }
 
+function unidadMedidaCompleta(unidad) {
+  const cod = String(unidad || 'NIU').trim().toUpperCase() || 'NIU';
+  return `${unidadLabel(cod)} (${cod})`;
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function codigoBienPdf(line) {
+  const codigo = String(line.codigo || '').trim();
+  if (codigo) return codigo;
+  const raw = String(line.catalog_item_id || line.catalogItemId || '').trim();
+  if (!raw || UUID_RE.test(raw)) return '';
+  return raw;
+}
+
+function codigoSunatPdf(line) {
+  return String(line.codigo_sunat || line.codigoSunat || '').trim();
+}
+
+function columnasDetalleSunat(pageW, incluirPrecios = true) {
+  const fijos = [
+    { label: 'N°', w: 18, align: 'left' },
+    { label: 'Bien normalizado', w: 34, align: 'left' },
+    { label: 'Código de Bien', w: 52, align: 'left' },
+    { label: 'Código producto SUNAT', w: 50, align: 'left' },
+    { label: 'Partida arancelaria', w: 38, align: 'left' },
+    { label: 'Código GTIN', w: 36, align: 'left' },
+  ];
+  const fin = [
+    { label: 'Unidad de medida', w: 58, align: 'left' },
+    { label: 'Cantidad', w: 40, align: 'right' },
+  ];
+  const venta = incluirPrecios
+    ? [
+      { label: 'P. Unit.(*)', w: 42, align: 'right' },
+      { label: 'Importe(**)', w: 44, align: 'right' },
+    ]
+    : [];
+  const usado = [...fijos, ...fin, ...venta].reduce((s, c) => s + c.w, 0);
+  const descW = Math.max(72, pageW - usado);
+  return [
+    ...fijos,
+    { label: 'Descripción Detallada', w: descW, align: 'left' },
+    ...fin,
+    ...venta,
+  ];
+}
+
+function celdasDetalleSunat(line, idx, incluirPrecios = true) {
+  const cantidad = toNumber(line.cantidad, 1);
+  const valorUnit = toNumber(line.mto_valor_unitario ?? line.mtoValorUnitario)
+    || toNumber(line.mto_precio_unitario ?? line.mtoPrecioUnitario) / 1.18;
+  const importe = toNumber(line.mto_valor_venta ?? line.mtoValorVenta)
+    || toNumber(line.total ?? line.totalFactura) - toNumber(line.mto_igv ?? line.mtoIgv);
+  const desc = line.descripcion || line.nombre || 'Ítem';
+  const base = [
+    String(idx + 1),
+    'NO',
+    codigoBienPdf(line),
+    codigoSunatPdf(line),
+    '',
+    '',
+    desc,
+    unidadMedidaCompleta(line.unidad),
+    cantidad.toFixed(2),
+  ];
+  if (!incluirPrecios) return base;
+  return [...base, valorUnit.toFixed(4), importe.toFixed(2)];
+}
+
 function labelTipoDocCliente(tipoDoc) {
   return TIPO_DOC_CLIENTE[String(tipoDoc || '1')] || 'DOCUMENTO';
 }
@@ -197,36 +267,29 @@ function generarPdfFormal(invoice) {
     });
     doc.moveDown(0.6);
 
-    // — Tabla detalle —
-    const cols = [
-      { label: 'Cantidad', w: 52, align: 'right' },
-      { label: 'Unidad Medida', w: 68, align: 'left' },
-      { label: 'Descripción', w: pageW - 52 - 68 - 62 - 52 - 62, align: 'left' },
-      { label: 'Valor Unitario(*)', w: 62, align: 'right' },
-      { label: 'Descuento(*)', w: 52, align: 'right' },
-      { label: 'Importe de Venta(**)', w: 62, align: 'right' },
-    ];
+    // — Tabla detalle (formato SUNAT con códigos de producto) —
+    const cols = columnasDetalleSunat(pageW, true);
 
     let tableX = leftX;
     const headerY = doc.y;
-    const headerH = 18;
+    const headerH = 22;
+    doc.fillColor('#ebebeb').rect(leftX, headerY, pageW, headerH).fill();
+    doc.fillColor('#000000');
     doc.rect(leftX, headerY, pageW, headerH).stroke();
-    doc.font('Helvetica-Bold').fontSize(7);
+    doc.font('Helvetica-Bold').fontSize(6.5);
     cols.forEach((col) => {
-      doc.text(col.label, tableX + 2, headerY + 5, { width: col.w - 4, align: col.align });
+      doc.text(col.label, tableX + 2, headerY + 4, { width: col.w - 4, align: col.align, lineGap: 0 });
       tableX += col.w;
     });
 
     let rowY = headerY + headerH;
     const details = invoice.details || [];
-    doc.font('Helvetica').fontSize(7);
+    doc.font('Helvetica').fontSize(6.5);
 
-    details.forEach((line) => {
-      const cantidad = toNumber(line.cantidad, 1);
-      const valorUnit = toNumber(line.mtoValorUnitario) || toNumber(line.mtoPrecioUnitario) / 1.18;
-      const importe = toNumber(line.totalFactura) || toNumber(line.mtoValorVenta) + toNumber(line.mtoIgv);
+    details.forEach((line, idx) => {
       const desc = line.descripcion || line.nombre || 'Ítem';
-      const rowHLine = Math.max(16, Math.ceil(doc.heightOfString(desc, { width: cols[2].w - 4 }) + 8));
+      const descCol = cols.find((c) => c.label.startsWith('Descripción'));
+      const rowHLine = Math.max(16, Math.ceil(doc.heightOfString(desc, { width: (descCol?.w || 80) - 4 }) + 8));
 
       if (rowY + rowHLine > doc.page.height - 160) {
         doc.addPage({ size: 'A4', margin: 36 });
@@ -235,17 +298,10 @@ function generarPdfFormal(invoice) {
 
       doc.rect(leftX, rowY, pageW, rowHLine).stroke();
       tableX = leftX;
-      const cells = [
-        cantidad.toFixed(2),
-        unidadLabel(line.unidad),
-        desc,
-        valorUnit.toFixed(5),
-        '0.00',
-        importe.toFixed(2),
-      ];
-      cells.forEach((cell, idx) => {
-        doc.text(String(cell), tableX + 2, rowY + 4, { width: cols[idx].w - 4, align: cols[idx].align });
-        tableX += cols[idx].w;
+      const cells = celdasDetalleSunat(line, idx, true);
+      cells.forEach((cell, cellIdx) => {
+        doc.text(String(cell), tableX + 2, rowY + 4, { width: cols[cellIdx].w - 4, align: cols[cellIdx].align });
+        tableX += cols[cellIdx].w;
       });
       rowY += rowHLine;
     });

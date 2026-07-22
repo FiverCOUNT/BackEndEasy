@@ -19,13 +19,18 @@ function usaSeriesInventario(item) {
 }
 
 function lineaUsaSeries(item, linea) {
-  return usaSeriesInventario(item) && Boolean(linea.productoSerieId || linea.numeroSerie);
+  // Producto ya marcado con series, o ingreso que trae número de serie (activa series).
+  if (usaSeriesInventario(item)) return true;
+  return Boolean(linea.productoSerieId || linea.numeroSerie);
 }
 
 /** Producto por cantidad (LTR, KGM, NIU sin series): debe mover tabla inventario. */
 function usaInventarioCantidad(item, linea) {
   return item.kind === 'PRODUCT' && !lineaUsaSeries(item, linea);
 }
+
+/** Ingresos/salidas con muchas series: createMany + timeout amplio. */
+const MOVIMIENTO_TX_OPTS = { maxWait: 20_000, timeout: 60_000 };
 
 /** Devolución NC / cliente: solo productos con stock o serie; no servicios. */
 function itemAfectaInventarioDevolucion(item) {
@@ -222,6 +227,9 @@ async function registrarEntrada({
   observaciones = null,
   clienteId = null,
   cliente = null,
+  referenciaTipo = null,
+  referenciaId = null,
+  comprobanteId = null,
 }) {
   const almacen = await prisma.almacen.findFirst({
     where: { id: almacenId, companyRuc },
@@ -288,6 +296,39 @@ async function registrarEntrada({
     }
   }
 
+  // Ingreso proveedor: preparar series nuevas y validar duplicados fuera del tx.
+  const seriesNuevas = [];
+  if (!esDevolucion) {
+    const seenNumeros = new Set();
+    for (const linea of lineasEfectivas) {
+      const item = itemsById.get(linea.catalogItemId);
+      if (!lineaUsaSeries(item, linea)) continue;
+      const numeroSerie = String(linea.numeroSerie || '').trim();
+      if (!numeroSerie) {
+        return { error: 'series_requeridas', catalogItemId: linea.catalogItemId };
+      }
+      if (seenNumeros.has(numeroSerie)) {
+        return { error: 'serie_existente', numeroSerie };
+      }
+      seenNumeros.add(numeroSerie);
+      seriesNuevas.push({
+        serieId: randomUUID(),
+        item,
+        numeroSerie,
+      });
+    }
+
+    if (seriesNuevas.length > 0) {
+      const existentes = await prisma.productoSerie.findMany({
+        where: { companyRuc, numeroSerie: { in: [...seenNumeros] } },
+        select: { numeroSerie: true },
+      });
+      if (existentes.length > 0) {
+        return { error: 'serie_existente', numeroSerie: existentes[0].numeroSerie };
+      }
+    }
+  }
+
   const movimientoId = randomUUID();
   const fecha = toStoredTimestamp();
   const lineasCreate = [];
@@ -295,133 +336,133 @@ async function registrarEntrada({
     await prisma.$transaction(async (tx) => {
       const numero = await nextNumeroEntrada(companyRuc, tx);
 
+      if (!esDevolucion && seriesNuevas.length > 0) {
+        await tx.productoSerie.createMany({
+          data: seriesNuevas.map(({ serieId, item, numeroSerie }) => ({
+            id: serieId,
+            companyRuc,
+            catalogItemId: item.id,
+            numeroSerie,
+            almacenId,
+            estado: 'DISPONIBLE',
+          })),
+        });
+
+        const inventariosData = seriesNuevas
+          .filter(({ item }) => item.kind === 'PRODUCT')
+          .map(({ serieId, item }) => ({
+            id: randomUUID(),
+            companyRuc,
+            catalogItemId: item.id,
+            almacenId,
+            productoSerieId: serieId,
+            cantidad: 1,
+          }));
+        if (inventariosData.length > 0) {
+          await tx.inventario.createMany({ data: inventariosData });
+        }
+
+        const itemsToFlag = new Map();
+        for (const { item } of seriesNuevas) {
+          if (!usaSeriesInventario(item) || !item.manejaStock) {
+            itemsToFlag.set(item.id, true);
+          }
+        }
+        for (const itemId of itemsToFlag.keys()) {
+          await tx.catalogItem.update({
+            where: { id: itemId },
+            data: { manejaSerie: true, manejaStock: true },
+          });
+        }
+      }
+
+      const serieIdByNumero = new Map(
+        seriesNuevas.map(({ numeroSerie, serieId }) => [numeroSerie, serieId]),
+      );
+
       for (const linea of lineasEfectivas) {
         const item = itemsById.get(linea.catalogItemId);
         const ingresaSeries = lineaUsaSeries(item, linea);
         const afectaSaldo = usaInventarioCantidad(item, linea);
 
         if (ingresaSeries) {
-          if (esDevolucion) {
-            let serie;
-            if (linea.productoSerieId) {
-              serie = await tx.productoSerie.findFirst({
-                where: {
-                  id: linea.productoSerieId,
-                  companyRuc,
-                  catalogItemId: item.id,
-                  estado: 'ENTREGADO',
-                },
-              });
-            } else {
-              serie = await tx.productoSerie.findFirst({
-                where: { companyRuc, numeroSerie: linea.numeroSerie, catalogItemId: item.id },
-              });
-              if (serie && serie.estado !== 'ENTREGADO') serie = null;
-            }
-            if (!serie) {
-              const err = new Error('Serie no entregada o no encontrada');
-              err.code = 'serie_no_entregada';
-              err.numeroSerie = linea.productoSerieId || linea.numeroSerie;
-              throw err;
-            }
-            if (!serie.entregaId) {
-              const err = new Error(`La serie ${serie.numeroSerie} no tiene entrega asociada`);
-              err.code = 'serie_no_de_cliente';
-              err.numeroSerie = serie.numeroSerie;
-              throw err;
-            }
-            const entrega = await tx.movimiento.findFirst({
-              where: {
-                id: serie.entregaId,
-                companyRuc,
-                tipo: 'SALIDA',
-                clienteId: resolvedClienteId,
-              },
-            });
-            if (!entrega) {
-              const err = new Error(`La serie ${serie.numeroSerie} no corresponde a este cliente`);
-              err.code = 'serie_no_de_cliente';
-              err.numeroSerie = serie.numeroSerie;
-              throw err;
-            }
-
-            await tx.productoSerie.update({
-              where: { id: serie.id },
-              data: { estado: 'DISPONIBLE', almacenId, entregaId: null },
-            });
-
-            if (item.kind === 'PRODUCT') {
-              await tx.inventario.upsert({
-                where: { productoSerieId: serie.id },
-                create: {
-                  companyRuc,
-                  catalogItemId: item.id,
-                  almacenId,
-                  productoSerieId: serie.id,
-                  cantidad: 1,
-                },
-                update: { catalogItemId: item.id, almacenId, cantidad: 1 },
-              });
-            }
-
-            lineasCreate.push(snapshotLineaFromItem(item, {
-              almacenId,
-              cantidad: 1,
-              productoSerieId: serie.id,
-            }));
-          } else {
-            const numeroSerie = linea.numeroSerie;
-            if (!numeroSerie) {
-              const err = new Error('numero_serie requerido para ingreso con series');
-              err.code = 'series_requeridas';
-              throw err;
-            }
-            const existente = await tx.productoSerie.findFirst({
-              where: { companyRuc, numeroSerie },
-            });
-            if (existente) {
-              const err = new Error(`La serie ${numeroSerie} ya está registrada`);
-              err.code = 'serie_existente';
-              err.numeroSerie = numeroSerie;
-              throw err;
-            }
-
-            const serieId = randomUUID();
-            await tx.productoSerie.create({
-              data: {
-                id: serieId,
-                companyRuc,
-                catalogItemId: item.id,
-                numeroSerie,
-                almacenId,
-                estado: 'DISPONIBLE',
-              },
-            });
-
-            if (item.kind === 'PRODUCT') {
-              await tx.inventario.create({
-                data: {
-                  companyRuc,
-                  catalogItemId: item.id,
-                  almacenId,
-                  productoSerieId: serieId,
-                  cantidad: 1,
-                },
-              });
-            }
-
-            if (!usaSeriesInventario(item)) {
-              await tx.catalogItem.update({
-                where: { id: item.id },
-                data: { manejaSerie: true, manejaStock: true },
-              });
-            }
-
+          if (!esDevolucion) {
+            const serieId = serieIdByNumero.get(linea.numeroSerie);
             lineasCreate.push(snapshotLineaFromItem(
               { ...item, manejaSerie: true, manejaStock: true },
               { almacenId, cantidad: 1, productoSerieId: serieId },
             ));
+            continue;
           }
+
+          let serie;
+          if (linea.productoSerieId) {
+            serie = await tx.productoSerie.findFirst({
+              where: {
+                id: linea.productoSerieId,
+                companyRuc,
+                catalogItemId: item.id,
+                estado: 'ENTREGADO',
+              },
+            });
+          } else {
+            serie = await tx.productoSerie.findFirst({
+              where: { companyRuc, numeroSerie: linea.numeroSerie, catalogItemId: item.id },
+            });
+            if (serie && serie.estado !== 'ENTREGADO') serie = null;
+          }
+          if (!serie) {
+            const err = new Error('Serie no entregada o no encontrada');
+            err.code = 'serie_no_entregada';
+            err.numeroSerie = linea.productoSerieId || linea.numeroSerie;
+            throw err;
+          }
+          if (!serie.entregaId) {
+            const err = new Error(`La serie ${serie.numeroSerie} no tiene entrega asociada`);
+            err.code = 'serie_no_de_cliente';
+            err.numeroSerie = serie.numeroSerie;
+            throw err;
+          }
+          const entrega = await tx.movimiento.findFirst({
+            where: {
+              id: serie.entregaId,
+              companyRuc,
+              tipo: 'SALIDA',
+              clienteId: resolvedClienteId,
+            },
+          });
+          if (!entrega) {
+            const err = new Error(`La serie ${serie.numeroSerie} no corresponde a este cliente`);
+            err.code = 'serie_no_de_cliente';
+            err.numeroSerie = serie.numeroSerie;
+            throw err;
+          }
+
+          await tx.productoSerie.update({
+            where: { id: serie.id },
+            data: { estado: 'DISPONIBLE', almacenId, entregaId: null },
+          });
+
+          if (item.kind === 'PRODUCT') {
+            await tx.inventario.upsert({
+              where: { productoSerieId: serie.id },
+              create: {
+                id: randomUUID(),
+                companyRuc,
+                catalogItemId: item.id,
+                almacenId,
+                productoSerieId: serie.id,
+                cantidad: 1,
+              },
+              update: { catalogItemId: item.id, almacenId, cantidad: 1 },
+            });
+          }
+
+          lineasCreate.push(snapshotLineaFromItem(item, {
+            almacenId,
+            cantidad: 1,
+            productoSerieId: serie.id,
+          }));
         } else if (afectaSaldo) {
           const key = inventarioModel.saldoKey(item.id, almacenId);
           const actualRow = await tx.inventario.findUnique({
@@ -434,6 +475,7 @@ async function registrarEntrada({
           await tx.inventario.upsert({
             where: { saldoKey: key },
             create: {
+              id: randomUUID(),
               companyRuc,
               catalogItemId: item.id,
               almacenId: almacenId,
@@ -474,7 +516,15 @@ async function registrarEntrada({
           tipo: 'ENTRADA',
           fecha,
           observaciones: observaciones?.trim() || null,
-          referenciaTipo: esDevolucion ? 'DEVOLUCION_CLIENTE' : 'INGRESO_MANUAL',
+          referenciaTipo: esDevolucion
+            ? 'DEVOLUCION_CLIENTE'
+            : (String(referenciaTipo || '').trim() || 'INGRESO_MANUAL'),
+          referenciaId: (!esDevolucion && referenciaId)
+            ? String(referenciaId).trim()
+            : null,
+          comprobanteId: (!esDevolucion && comprobanteId)
+            ? String(comprobanteId).trim()
+            : null,
           numero,
           estado: 'DESPACHADA',
           clienteId: esDevolucion ? resolvedClienteId : null,
@@ -483,7 +533,7 @@ async function registrarEntrada({
           },
         },
       });
-    });
+    }, MOVIMIENTO_TX_OPTS);
   } catch (err) {
     if (err.code === 'almacen_not_found') {
       return { error: 'almacen_not_found' };
@@ -509,6 +559,113 @@ async function registrarEntrada({
     include: movimientoInclude,
   });
 
+  // Cerrar compra registrada: líneas → RECIBIDO.
+  const refId = String(referenciaId || '').trim();
+  const refTipo = String(referenciaTipo || '').trim().toUpperCase();
+  if (
+    !esDevolucion
+    && refId
+    && (refTipo === 'COMPRA' || refTipo === 'COMPRA_EN_CAMINO' || refTipo === 'COMPRA_REGISTRADA')
+  ) {
+    try {
+      const compra = await prisma.compra.findFirst({
+        where: { id: refId, companyRuc },
+        select: { id: true, lineasJson: true },
+      });
+      if (compra) {
+        const lineasPrev = Array.isArray(compra.lineasJson) ? compra.lineasJson : [];
+        await prisma.compra.update({
+          where: { id: compra.id },
+          data: {
+            lineasJson: lineasPrev.map((l) => ({ ...l, estado: 'RECIBIDO' })),
+          },
+        });
+      }
+    } catch (markErr) {
+      console.warn('[registrarEntrada] no se pudo marcar compra RECIBIDO:', markErr.message);
+    }
+  }
+
+  return { movimiento: toApiMovimiento(movimiento) };
+}
+
+/**
+ * Entrada pendiente: crea movimiento + líneas de catálogo sin sumar stock.
+ * Usado al registrar una compra cuya mercadería aún no llegó al almacén.
+ */
+async function registrarEntradaEnCamino({
+  companyRuc,
+  almacenId,
+  lineas,
+  observaciones = null,
+  referenciaId = null,
+  referenciaTipo = 'COMPRA_EN_CAMINO',
+}) {
+  const almacen = await prisma.almacen.findFirst({
+    where: { id: almacenId, companyRuc },
+  });
+  if (!almacen) return { error: 'almacen_not_found' };
+
+  const parsedLineas = normalizeIncomingLineas(lineas).filter((l) => l.catalogItemId);
+  if (parsedLineas.length === 0) {
+    return { error: 'lineas_vacias' };
+  }
+
+  const itemIds = [...new Set(parsedLineas.map((l) => l.catalogItemId))];
+  const items = await prisma.catalogItem.findMany({
+    where: { companyRuc, id: { in: itemIds } },
+  });
+  const itemsById = new Map(items.map((i) => [i.id, i]));
+
+  for (const linea of parsedLineas) {
+    const item = itemsById.get(linea.catalogItemId);
+    if (!item) return { error: 'item_not_found', catalogItemId: linea.catalogItemId };
+    if (item.activo === false) {
+      return { error: 'item_inactivo', catalogItemId: linea.catalogItemId };
+    }
+    if (linea.cantidad <= 0) {
+      return { error: 'cantidad_invalida', catalogItemId: linea.catalogItemId };
+    }
+  }
+
+  const movimientoId = randomUUID();
+  const fecha = toStoredTimestamp();
+  try {
+    await prisma.$transaction(async (tx) => {
+      const numero = await nextNumeroEntrada(companyRuc, tx);
+      const lineasCreate = parsedLineas.map((linea) => {
+        const item = itemsById.get(linea.catalogItemId);
+        return snapshotLineaFromItem(item, {
+          almacenId,
+          cantidad: linea.cantidad,
+        });
+      });
+
+      await tx.movimiento.create({
+        data: {
+          id: movimientoId,
+          companyRuc,
+          almacenId,
+          tipo: 'ENTRADA',
+          fecha,
+          observaciones: observaciones?.trim() || null,
+          referenciaTipo,
+          referenciaId: referenciaId || null,
+          numero,
+          estado: 'EN_CAMINO',
+          lineas: { create: lineasCreate },
+        },
+      });
+    }, MOVIMIENTO_TX_OPTS);
+  } catch (err) {
+    console.error('[registrarEntradaEnCamino]', err);
+    throw err;
+  }
+
+  const movimiento = await prisma.movimiento.findUnique({
+    where: { id: movimientoId },
+    include: movimientoInclude,
+  });
   return { movimiento: toApiMovimiento(movimiento) };
 }
 
@@ -771,7 +928,7 @@ async function registrarSalida({
           },
         },
       });
-    });
+    }, MOVIMIENTO_TX_OPTS);
   } catch (err) {
     if (err.code === 'series_no_disponibles') {
       return {
@@ -817,6 +974,7 @@ module.exports = {
   findMany,
   findByCliente,
   registrarEntrada,
+  registrarEntradaEnCamino,
   registrarSalida,
   registrarMovimiento,
 };

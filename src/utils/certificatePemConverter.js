@@ -1,8 +1,47 @@
 const forge = require('node-forge');
 
+function normalizePemText(text) {
+  return String(text || '')
+    .replace(/^\uFEFF/, '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .trim() + '\n';
+}
+
 function isPemBuffer(buffer) {
   const text = buffer.toString('utf8');
-  return text.includes('BEGIN CERTIFICATE') && text.includes('BEGIN') && text.includes('PRIVATE KEY');
+  return text.includes('BEGIN CERTIFICATE') && text.includes('PRIVATE KEY');
+}
+
+/**
+ * Convierte PEM a formato estable para Greenter/OpenSSL 3:
+ * -----BEGIN RSA PRIVATE KEY----- + -----BEGIN CERTIFICATE-----
+ * (sin CRLF; evita error DECODER routines::unsupported al firmar).
+ */
+function normalizePemForSigning(pemText) {
+  const pem = normalizePemText(pemText);
+  const certMatch = pem.match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/);
+  const keyMatch = pem.match(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/);
+  if (!certMatch || !keyMatch) {
+    throw new Error('El certificado PEM debe incluir PRIVATE KEY y CERTIFICATE.');
+  }
+
+  let privateKey;
+  try {
+    privateKey = forge.pki.privateKeyFromPem(keyMatch[0]);
+  } catch (err) {
+    throw new Error(`No se pudo leer la clave privada del PEM: ${err.message || err}`);
+  }
+
+  try {
+    forge.pki.certificateFromPem(certMatch[0]);
+  } catch (err) {
+    throw new Error(`No se pudo leer el certificado del PEM: ${err.message || err}`);
+  }
+
+  return normalizePemText(
+    forge.pki.privateKeyToPem(privateKey) + certMatch[0] + '\n',
+  );
 }
 
 function pfxToPem(buffer, password) {
@@ -23,11 +62,16 @@ function pfxToPem(buffer, password) {
       throw new Error('El archivo .pfx no contiene clave privada y certificado.');
     }
 
-    return forge.pki.privateKeyToPem(keyBag.key) + forge.pki.certificateToPem(certBag.cert);
+    return normalizePemText(
+      forge.pki.privateKeyToPem(keyBag.key) + forge.pki.certificateToPem(certBag.cert),
+    );
   } catch (err) {
     const msg = String(err.message || err);
     if (/password|mac|decrypt|invalid/i.test(msg)) {
       throw new Error('No se pudo abrir el certificado .pfx: contraseña incorrecta o archivo dañado.');
+    }
+    if (/No se pudo leer|PEM debe incluir/.test(msg)) {
+      throw err;
     }
     throw new Error(`No se pudo convertir el certificado .pfx a PEM: ${msg}`);
   }
@@ -35,13 +79,15 @@ function pfxToPem(buffer, password) {
 
 function toPem(buffer, password) {
   if (isPemBuffer(buffer)) {
-    return buffer.toString('utf8');
+    return normalizePemForSigning(buffer.toString('utf8'));
   }
-  return pfxToPem(buffer, password);
+  return normalizePemForSigning(pfxToPem(buffer, password));
 }
 
 module.exports = {
   isPemBuffer,
   pfxToPem,
   toPem,
+  normalizePemText,
+  normalizePemForSigning,
 };

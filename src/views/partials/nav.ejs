@@ -79,4 +79,13 @@
       </div>
     </div>
   </div>
+
+  <% if (typeof adminUser !== 'undefined' && adminUser) { %>
+    <div class="nav-user">
+      <span class="nav-user-email" title="<%= adminUser.email %>"><%= adminUser.email %></span>
+      <form method="POST" action="/logout" class="inline-form">
+        <button type="submit" class="btn-sm btn-logout">Salir</button>
+      </form>
+    </div>
+  <% } %>
 </nav>

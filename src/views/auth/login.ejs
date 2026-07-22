@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> · BackEnd Easy</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body class="login-page">
+  <main class="login-wrap">
+    <section class="card login-card">
+      <div class="login-brand">
+        <h1>BackEnd Easy</h1>
+        <p>Panel de administración</p>
+      </div>
+
+      <% if (error) { %>
+        <div class="flash flash-error" role="alert"><%= error %></div>
+      <% } %>
+
+      <form class="form" method="POST" action="/login" autocomplete="on">
+        <% if (next) { %>
+          <input type="hidden" name="next" value="<%= next %>" />
+        <% } %>
+        <div class="field">
+          <label for="email">Email</label>
+          <input
+            type="email"
+            id="email"
+            name="email"
+            value="<%= email || '' %>"
+            placeholder="admin@tudominio.com"
+            required
+            autofocus
+            autocomplete="username"
+          />
+        </div>
+        <div class="field">
+          <label for="contrasena">Contraseña</label>
+          <input
+            type="password"
+            id="contrasena"
+            name="contrasena"
+            placeholder="Tu contraseña"
+            required
+            autocomplete="current-password"
+          />
+        </div>
+        <button type="submit" class="btn-login">Entrar</button>
+      </form>
+
+      <p class="login-hint">
+        Solo usuarios con rol <strong>ADMIN</strong> pueden entrar al panel.
+        La app móvil sigue usando su propio login JWT.
+      </p>
+    </section>
+  </main>
+</body>
+</html>

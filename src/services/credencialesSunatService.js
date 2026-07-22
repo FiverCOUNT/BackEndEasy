@@ -126,4 +126,5 @@ module.exports = {
   GRE_TEST_DEMO,
   buildForCompany,
   attachToPayload,
+  isProductionEntorno,
 };

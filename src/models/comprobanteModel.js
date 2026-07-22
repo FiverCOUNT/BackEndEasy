@@ -1,13 +1,19 @@
 const { randomUUID } = require('crypto');
 const prisma = require('../config/prisma');
 const clienteModel = require('./clienteModel');
+const companyModel = require('./companyModel');
 const productoSerieModel = require('./productoSerieModel');
 const comprobanteArchivosService = require('../services/comprobanteArchivosService');
 const comprobantePdfService = require('../services/comprobantePdfService');
 const {
+  loadSalidasPorComprobanteIds,
+  loadEntradasPorReferenciaIds,
+} = require('../services/comprobanteInventarioService');
+const {
   toApiTimestamp,
   compareStoredTimestamps,
   toStoredTimestamp,
+  parseStoredTimestamp,
   calendarDayStartMsPe,
   calendarDayEndMsPe,
 } = require('../utils/fechas');
@@ -59,7 +65,62 @@ const INVOICE_INCLUDE = {
   documentoAfectado: {
     select: { id: true, tipoDoc: true, serie: true, correlativo: true },
   },
+  lineInvoices: {
+    orderBy: { orden: 'asc' },
+    include: {
+      invoice2: {
+        select: {
+          id: true,
+          companyRuc: true,
+          tipoDoc: true,
+          serie: true,
+          correlativo: true,
+        },
+      },
+    },
+  },
 };
+
+/** Filas de documentos relacionados vía line_invoice_invoice. */
+function documentosRelacionadosRows(invoice) {
+  const lines = invoice?.lineInvoices || [];
+  return lines
+    .map((line, idx) => {
+      const inv = line?.invoice2;
+      if (!inv) return null;
+      return {
+        invoiceRelacionadoId: inv.id,
+        tipoDoc: inv.tipoDoc,
+        serie: inv.serie,
+        correlativo: inv.correlativo,
+        emisorTipoDoc: '6',
+        emisorNumeroDoc: inv.companyRuc,
+        emisorRazonSocial: null,
+        orden: line.orden ?? idx,
+      };
+    })
+    .filter(Boolean);
+}
+
+async function syncDocumentosRelacionados(tx, invoiceId, docs) {
+  await tx.lineInvoiceInvoice.deleteMany({ where: { invoiceId } });
+  if (!Array.isArray(docs) || !docs.length) return;
+
+  for (let i = 0; i < docs.length; i += 1) {
+    const doc = docs[i];
+    const invoice2Id = String(doc.invoiceRelacionadoId || doc.invoice2Id || '').trim();
+    if (!invoice2Id || invoice2Id === invoiceId) continue;
+
+    await tx.lineInvoiceInvoice.create({
+      data: {
+        id: doc.id || randomUUID(),
+        invoiceId,
+        invoice2Id,
+        orden: doc.orden ?? i,
+      },
+    });
+  }
+}
 
 function round4(value) {
   return Math.round(Number(value) * 10000) / 10000;
@@ -103,6 +164,335 @@ function parseGuiaRemitenteRef(body) {
     serie,
     correlativo,
     id: String(ref.id || '').trim() || null,
+    emisor_tipo_doc: ref.emisor_tipo_doc || ref.emisorTipoDoc || null,
+    emisor_numero_doc: ref.emisor_numero_doc || ref.emisorNumeroDoc || ref.emisor || null,
+    emisor_razon_social: ref.emisor_razon_social || ref.emisorRazonSocial || null,
+  };
+}
+
+function parseDocumentosRelacionadosBody(body) {
+  const raw = body.documentos_relacionados
+    || body.documentosRelacionados
+    || body.facturas
+    || body.facturasVinculadas
+    || [];
+  return Array.isArray(raw) ? raw.filter((ref) => ref && typeof ref === 'object') : [];
+}
+
+/** Normaliza un ítem de adjunto a { url, nombre, content_type, size }. */
+function normalizeAdjuntoItem(a) {
+  if (!a || typeof a !== 'object') return null;
+  const key = String(a.key || a.archivo_key || a.archivoKey || '').trim();
+  const url = String(a.url || a.archivo_url || a.archivoUrl || '').trim() || null;
+  const nombre = String(a.nombre || a.name || a.filename || '').trim() || null;
+  const contentType = String(a.content_type || a.contentType || a.mime || '').trim() || null;
+  const size = Number(a.size);
+  if (!key && !url) return null;
+  return {
+    url: url || undefined,
+    nombre: nombre || undefined,
+    content_type: contentType || undefined,
+    size: Number.isFinite(size) && size > 0 ? size : undefined,
+    ...(key ? { key } : {}),
+  };
+}
+
+/**
+ * Columna única `archivos`: mapa clave → valor para editar/eliminar después.
+ * Acepta body.archivos (objeto) o body.adjuntos (array u objeto).
+ * Clave = key R2 (o id estable). null = no viene en el body.
+ */
+function parseArchivosBody(body) {
+  const raw =
+    body.archivos !== undefined
+      ? body.archivos
+      : body.adjuntos !== undefined
+        ? body.adjuntos
+        : body.attachments !== undefined
+          ? body.attachments
+          : undefined;
+  if (raw === undefined) return null;
+  if (raw === null) return {};
+
+  const map = {};
+  if (Array.isArray(raw)) {
+    for (const a of raw) {
+      const item = normalizeAdjuntoItem(a);
+      if (!item) continue;
+      const id = String(item.key || '').trim() || randomUUID();
+      map[id] = {
+        url: item.url,
+        nombre: item.nombre,
+        content_type: item.content_type,
+        size: item.size,
+      };
+    }
+    return map;
+  }
+  if (typeof raw === 'object') {
+    for (const [k, v] of Object.entries(raw)) {
+      if (v == null) continue;
+      if (typeof v === 'string') {
+        const id = String(k).trim();
+        if (!id) continue;
+        map[id] = v.startsWith('http')
+          ? { url: v }
+          : { key: v };
+        continue;
+      }
+      const item = normalizeAdjuntoItem(typeof v === 'object' ? { key: k, ...v } : null);
+      if (!item) continue;
+      const id = String(k || item.key || '').trim() || randomUUID();
+      map[id] = {
+        url: item.url,
+        nombre: item.nombre,
+        content_type: item.content_type,
+        size: item.size,
+      };
+    }
+    return map;
+  }
+  return {};
+}
+
+/** Lee `archivos` (mapa o array legacy) → lista para API móvil. */
+function archivosJsonToAdjuntosList(archivosJson) {
+  if (!archivosJson) return undefined;
+  if (Array.isArray(archivosJson)) {
+    const list = archivosJson.map(normalizeAdjuntoItem).filter(Boolean);
+    return list.length ? list.map((a) => ({
+      key: a.key || '',
+      url: a.url,
+      nombre: a.nombre,
+      content_type: a.content_type,
+      size: a.size,
+    })) : undefined;
+  }
+  if (typeof archivosJson !== 'object') return undefined;
+  // Legacy CPE (xml/pdf/cdr): no son adjuntos de usuario.
+  if (archivosJson.xml || archivosJson.pdf || archivosJson.cdr_zip || archivosJson.cdr) {
+    return undefined;
+  }
+  const list = [];
+  for (const [k, v] of Object.entries(archivosJson)) {
+    if (v == null) continue;
+    if (typeof v === 'string') {
+      list.push({
+        key: k,
+        url: v.startsWith('http') ? v : undefined,
+        nombre: k.substring(k.lastIndexOf('/') + 1) || k,
+      });
+      continue;
+    }
+    if (typeof v !== 'object') continue;
+    const item = normalizeAdjuntoItem({ key: v.key || k, ...v });
+    if (!item) continue;
+    list.push({
+      key: item.key || k,
+      url: item.url,
+      nombre: item.nombre,
+      content_type: item.content_type,
+      size: item.size,
+    });
+  }
+  return list.length ? list : undefined;
+}
+
+function extractEmisorFromRef(ref, fallback = {}) {
+  const emisorObj = ref.emisor && typeof ref.emisor === 'object' ? ref.emisor : null;
+  const companyObj = ref.company && typeof ref.company === 'object' ? ref.company : null;
+  const tipoDoc = String(
+    ref.emisor_tipo_doc
+    || ref.emisorTipoDoc
+    || emisorObj?.tipo_doc
+    || emisorObj?.tipoDoc
+    || companyObj?.tipo_doc
+    || companyObj?.tipoDoc
+    || fallback.tipoDoc
+    || '6',
+  ).trim() || '6';
+  const numeroDoc = String(
+    ref.emisor_numero_doc
+    || ref.emisorNumeroDoc
+    || ref.emisor
+    || emisorObj?.numero_doc
+    || emisorObj?.numeroDoc
+    || emisorObj?.ruc
+    || emisorObj?.num_doc
+    || companyObj?.numero_doc
+    || companyObj?.numeroDoc
+    || companyObj?.ruc
+    || fallback.numeroDoc
+    || '',
+  ).replace(/\D/g, '');
+  const razonSocial = String(
+    ref.emisor_razon_social
+    || ref.emisorRazonSocial
+    || emisorObj?.razon_social
+    || emisorObj?.razonSocial
+    || emisorObj?.nombre
+    || companyObj?.razon_social
+    || companyObj?.razonSocial
+    || companyObj?.nombre
+    || fallback.razonSocial
+    || '',
+  ).trim() || null;
+  return { tipoDoc, numeroDoc, razonSocial };
+}
+
+/**
+ * Resuelve refs del body a filas line_invoice_invoice.
+ * El CPE debe existir como invoice (emitido o recibido). Si es compra externa
+ * (emisor ≠ nosotros) y aún no está, se registra un stub recibido mínimo.
+ */
+async function resolveDocumentosRelacionados(companyRuc, company, refs, receptorFallback = null) {
+  if (!Array.isArray(refs) || refs.length === 0) {
+    return { docs: [], invoicesInternas: [] };
+  }
+
+  const docs = [];
+  const invoicesInternas = [];
+  const companyFallback = {
+    tipoDoc: '6',
+    numeroDoc: company?.ruc || companyRuc,
+    razonSocial: company?.nombre || null,
+  };
+
+  for (let i = 0; i < refs.length; i += 1) {
+    const ref = refs[i];
+    let linked = await loadFacturaReferencia(companyRuc, ref);
+    if (!linked) {
+      linked = await ensureInvoiceRecibidoDesdeRef(company, ref, receptorFallback);
+    }
+    if (!linked) {
+      const serie = String(ref.serie || '').trim();
+      const correlativo = String(ref.correlativo || ref.numero || '').trim();
+      const etiqueta = ref.id || `${serie}-${correlativo}` || 'desconocido';
+      throw new Error(
+        `Documento relacionado no encontrado en invoices (${etiqueta}). `
+          + 'Debe ser un CPE emitido por tu empresa o una compra recibida (con emisor RUC).',
+      );
+    }
+
+    const explicit = extractEmisorFromRef(ref, {});
+    const emisor = explicit.numeroDoc
+      ? explicit
+      : {
+          tipoDoc: '6',
+          numeroDoc: linked.companyRuc,
+          razonSocial: companyFallback.razonSocial,
+        };
+
+    docs.push({
+      id: randomUUID(),
+      tipoDoc: linked.tipoDoc,
+      serie: linked.serie,
+      correlativo: String(linked.correlativo),
+      emisorTipoDoc: emisor.tipoDoc,
+      emisorNumeroDoc: emisor.numeroDoc || linked.companyRuc,
+      emisorRazonSocial: emisor.razonSocial,
+      invoiceRelacionadoId: linked.id,
+      orden: i,
+    });
+    invoicesInternas.push(linked);
+  }
+
+  return { docs, invoicesInternas };
+}
+
+/**
+ * Stub mínimo de compra recibida: company_ruc=emisor, cliente=nosotros.
+ * Sirve para GRE motivo compra con serie manual sin romper emisor/series.
+ */
+async function ensureInvoiceRecibidoDesdeRef(receptorCompany, ref, receptorFallback = null) {
+  const receptorRuc = String(receptorCompany?.ruc || '').replace(/\D/g, '');
+  const serie = String(ref.serie || '').trim().toUpperCase();
+  let correlativo = String(ref.correlativo || ref.numero || '').trim();
+  if (correlativo.includes('-') && !serie) {
+    const parts = correlativo.split('-');
+    correlativo = parts[parts.length - 1];
+  }
+  correlativo = correlativo.replace(/\D/g, '') || correlativo;
+  const tipoDoc = String(ref.tipo_doc || ref.tipoDoc || '01').trim() || '01';
+  const emisor = extractEmisorFromRef(ref, receptorFallback || {});
+
+  if (!receptorRuc || !serie || !correlativo || !emisor.numeroDoc) return null;
+  if (emisor.numeroDoc === receptorRuc) return null;
+
+  const emisorRuc = emisor.numeroDoc;
+  const existente = await prisma.invoice.findFirst({
+    where: {
+      companyRuc: emisorRuc,
+      tipoDoc,
+      serie,
+      correlativo,
+    },
+    include: {
+      details: { include: { catalogItem: true } },
+      cliente: true,
+    },
+  });
+  if (existente) return existente;
+
+  let seller = await prisma.company.findFirst({ where: { ruc: emisorRuc } });
+  if (!seller) {
+    seller = await prisma.company.create({
+      data: {
+        ruc: emisorRuc,
+        nombre: (emisor.razonSocial || emisorRuc).slice(0, 255),
+        tipoDoc: '6',
+        numeroDoc: emisorRuc,
+        entorno: 'prod',
+        activo: false,
+        isActive: false,
+        tieneCertificado: false,
+      },
+    });
+  }
+
+  let cliente = await clienteModel.findByDocumento(emisorRuc, '6', receptorRuc);
+  if (!cliente) {
+    cliente = await clienteModel.create({
+      companyRuc: emisorRuc,
+      tipoDoc: '6',
+      numeroDoc: receptorRuc,
+      razonSocial: receptorCompany?.nombre || receptorRuc,
+    });
+  }
+
+  const invoiceId = randomUUID();
+  return prisma.invoice.create({
+    data: {
+      id: invoiceId,
+      companyRuc: emisorRuc,
+      tipoDoc,
+      serie,
+      correlativo,
+      fechaEmision: toStoredTimestamp(),
+      tipoMoneda: 'PEN',
+      estado: 'ACEPTADO',
+      sunatEstadoDirecto: 'ACEPTADA',
+      observacion: `Stub GRE · receptor ${receptorRuc}`,
+      clienteId: cliente.id,
+    },
+    include: {
+      details: { include: { catalogItem: true } },
+      cliente: true,
+    },
+  });
+}
+
+function toApiDocumentoRelacionado(row) {
+  if (!row) return null;
+  return {
+    id: row.invoiceRelacionadoId || undefined,
+    tipo_doc: row.tipoDoc,
+    serie: row.serie,
+    correlativo: row.correlativo,
+    emisor_tipo_doc: row.emisorTipoDoc,
+    emisor_numero_doc: row.emisorNumeroDoc,
+    emisor_razon_social: row.emisorRazonSocial || undefined,
+    invoice_relacionado_id: row.invoiceRelacionadoId || undefined,
   };
 }
 
@@ -245,12 +635,25 @@ async function resolveClienteId(companyRuc, receptor) {
 }
 
 async function loadFacturaReferencia(companyRuc, ref) {
-  const id = String(ref.id || '').trim();
+  const receptorRuc = String(companyRuc || '').trim();
+  const include = {
+    details: { include: { catalogItem: true } },
+    cliente: true,
+  };
+
+  const id = String(ref.id || ref.invoice_relacionado_id || ref.invoiceRelacionadoId || '').trim();
   if (id) {
-    return prisma.invoice.findFirst({
-      where: { id, companyRuc },
-      include: { details: { include: { catalogItem: true } }, cliente: true },
+    const byId = await prisma.invoice.findFirst({
+      where: {
+        id,
+        OR: [
+          { companyRuc: receptorRuc },
+          { cliente: { numeroDoc: receptorRuc } },
+        ],
+      },
+      include,
     });
+    if (byId) return byId;
   }
 
   const serie = String(ref.serie || '').trim();
@@ -259,32 +662,37 @@ async function loadFacturaReferencia(companyRuc, ref) {
     const parts = correlativo.split('-');
     correlativo = parts[parts.length - 1];
   }
-
   if (!serie || !correlativo) return null;
 
+  const tipoDoc = String(ref.tipo_doc || ref.tipoDoc || '').trim() || undefined;
+  const emisor = extractEmisorFromRef(ref, {});
+  const emisorRuc = emisor.numeroDoc || null;
+
+  // Recibido: company_ruc = emisor, cliente = nosotros.
+  if (emisorRuc && emisorRuc !== receptorRuc) {
+    const recibida = await prisma.invoice.findFirst({
+      where: {
+        companyRuc: emisorRuc,
+        serie,
+        correlativo,
+        ...(tipoDoc ? { tipoDoc } : {}),
+        cliente: { numeroDoc: receptorRuc },
+      },
+      include,
+    });
+    if (recibida) return recibida;
+  }
+
+  // Emitido por nosotros.
   return prisma.invoice.findFirst({
-    where: { companyRuc, serie, correlativo },
-    include: { details: { include: { catalogItem: true } }, cliente: true },
+    where: {
+      companyRuc: receptorRuc,
+      serie,
+      correlativo,
+      ...(tipoDoc ? { tipoDoc } : {}),
+    },
+    include,
   });
-}
-
-async function loadFacturasVinculadas(companyRuc, facturas) {
-  if (!Array.isArray(facturas) || facturas.length === 0) {
-    throw new Error('Debe vincular al menos una factura a la guía.');
-  }
-
-  const loaded = [];
-  for (const ref of facturas) {
-    const invoice = await loadFacturaReferencia(companyRuc, ref);
-    if (!invoice) {
-      const etiqueta = ref.serie && ref.correlativo
-        ? `${ref.serie}-${ref.correlativo}`
-        : ref.id || 'desconocida';
-      throw new Error(`Factura vinculada no encontrada: ${etiqueta}`);
-    }
-    loaded.push(invoice);
-  }
-  return loaded;
 }
 
 function aggregateDetailsFromFacturas(facturas) {
@@ -352,30 +760,38 @@ function buildEnvioMeta(body, company, cliente) {
     fechaInicioTraslado,
   );
 
-  return {
-    envio: {
-      cod_traslado: envioBody.cod_traslado || envioBody.codTraslado || '01',
-      mod_traslado: envioBody.mod_traslado || envioBody.modTraslado || '02',
-      fecha_traslado: fechaInicioTraslado,
-      fecha_entrega_transportista: fechaEntregaTransportista,
-      peso_total: envioBody.peso_total ?? envioBody.pesoTotal ?? null,
-      und_peso_total: envioBody.und_peso_total || envioBody.undPesoTotal || 'KGM',
-      partida: envioBody.partida || (company?.address
-        ? { ubigeo: company.address.ubigeo, direccion: company.address.direccion }
-        : undefined),
-      llegada: envioBody.llegada || (cliente?.address
-        ? { ubigeo: cliente.address.ubigeo, direccion: cliente.address.direccion }
-        : undefined),
-      transportista: envioBody.transportista || undefined,
-      vehiculo: envioBody.vehiculo || undefined,
-      conductor: envioBody.conductor || undefined,
-      nro_mtc: envioBody.nro_mtc || envioBody.nroMtc || envioBody.transportista?.nro_mtc || undefined,
-      registrar_vehiculos_conductores:
-        envioBody.registrar_vehiculos_conductores
-        ?? envioBody.registrarVehiculosConductores
-        ?? undefined,
-    },
+  const envio = {
+    cod_traslado: envioBody.cod_traslado || envioBody.codTraslado || '01',
+    mod_traslado: envioBody.mod_traslado || envioBody.modTraslado || '02',
+    fecha_traslado: fechaInicioTraslado,
+    fecha_entrega_transportista: fechaEntregaTransportista,
+    peso_total: envioBody.peso_total ?? envioBody.pesoTotal ?? null,
+    und_peso_total: envioBody.und_peso_total || envioBody.undPesoTotal || 'KGM',
+    partida: envioBody.partida || (company?.address
+      ? { ubigeo: company.address.ubigeo, direccion: company.address.direccion }
+      : undefined),
+    llegada: envioBody.llegada || (cliente?.address
+      ? { ubigeo: cliente.address.ubigeo, direccion: cliente.address.direccion }
+      : undefined),
+    transportista: envioBody.transportista || undefined,
+    vehiculo: envioBody.vehiculo || undefined,
+    conductor: envioBody.conductor || undefined,
+    nro_mtc: envioBody.nro_mtc || envioBody.nroMtc || envioBody.transportista?.nro_mtc || undefined,
+    registrar_vehiculos_conductores:
+      envioBody.registrar_vehiculos_conductores
+      ?? envioBody.registrarVehiculosConductores
+      ?? undefined,
   };
+
+  const movimientoId = body.movimiento_id || body.movimientoId || envioBody.movimiento_id || null;
+  const almacenDestinoId = body.almacen_destino_id
+    || body.almacenDestinoId
+    || envioBody.almacen_destino_id
+    || null;
+  if (movimientoId) envio.movimiento_id = movimientoId;
+  if (almacenDestinoId) envio.almacen_destino_id = almacenDestinoId;
+
+  return { envio };
 }
 
 function mapLineasToSaleDetails(lineas, catalogMap) {
@@ -628,10 +1044,14 @@ async function validateNotaCreditoLineas(companyRuc, documentoAfectadoId, saleDe
 }
 
 async function loadCatalogItems(companyRuc, lineas) {
-  const ids = [...new Set(lineas.map((l) => String(l.catalog_item_id || l.catalogItemId || '').trim()))];
-  if (!ids.length || ids.some((id) => !id)) {
-    throw new Error('Cada línea requiere catalog_item_id.');
-  }
+  const ids = [
+    ...new Set(
+      lineas
+        .map((l) => String(l.catalog_item_id || l.catalogItemId || '').trim())
+        .filter(Boolean),
+    ),
+  ];
+  if (ids.length === 0) return new Map();
 
   const items = await prisma.catalogItem.findMany({
     where: { companyRuc, id: { in: ids }, activo: true },
@@ -643,6 +1063,31 @@ async function loadCatalogItems(companyRuc, lineas) {
   }
 
   return map;
+}
+
+/** Línea GRE sin catálogo (compra OCR / bienes libres). */
+function saleDetailDesdeLineaLibre(linea, cantidad) {
+  const descripcion = String(linea.descripcion || linea.nombre || '').trim();
+  if (!descripcion) {
+    throw new Error('Cada línea sin catálogo requiere descripción.');
+  }
+  return {
+    catalogItemId: null,
+    catalogItem: null,
+    descripcion,
+    nombre: descripcion,
+    cantidad,
+    unidad: String(linea.unidad || 'NIU').trim() || 'NIU',
+    mtoValorUnitario: 0,
+    mtoPrecioUnitario: 0,
+    mtoBaseIgv: 0,
+    mtoValorVenta: 0,
+    mtoIgv: 0,
+    totalFactura: 0,
+    porcentajeIgv: 0,
+    tipAfeIgv: '30',
+    productoSerieId: linea.producto_serie_id || linea.productoSerieId || null,
+  };
 }
 
 function toApiSaleDetail(detail) {
@@ -668,6 +1113,17 @@ function toApiSaleDetail(detail) {
   if (detail.productoSerie) {
     row.producto_serie = productoSerieModel.toApi(detail.productoSerie);
   }
+  const codigoDetalle = String(detail.codigo || '').trim();
+  const codigoSunatDetalle = String(detail.codigoSunat || detail.codigo_sunat || '').trim();
+  const cat = detail.catalogItem;
+  const codigoCat = cat ? String(cat.codigo || '').trim() : '';
+  const codigoSunatCat = cat
+    ? String(cat.codigoSunat || cat.codigo_sunat || '').trim()
+    : '';
+  const codigo = codigoDetalle || codigoCat;
+  const codigoSunat = codigoSunatDetalle || codigoSunatCat;
+  if (codigo) row.codigo = codigo;
+  if (codigoSunat) row.codigo_sunat = codigoSunat;
   return row;
 }
 
@@ -728,12 +1184,18 @@ function sanitizeSunatForApi(sunatJson, includePayload = true) {
 function collectFacturaIdsFromGuias(rows) {
   const ids = new Set();
   for (const row of rows) {
-    if (!['09', '31'].includes(row.tipoDoc) || !row.guiaMetaJson) continue;
-    const refs = row.guiaMetaJson.facturas_vinculadas;
-    if (!Array.isArray(refs)) continue;
-    for (const id of refs) {
-      const trimmed = String(id || '').trim();
+    if (!['09', '31'].includes(row.tipoDoc)) continue;
+    for (const doc of documentosRelacionadosRows(row)) {
+      const trimmed = String(doc.invoiceRelacionadoId || '').trim();
       if (trimmed) ids.add(trimmed);
+    }
+    // Legacy: facturas_vinculadas en guia_meta (guias antiguas sin migrar).
+    const refs = row.guiaMetaJson?.facturas_vinculadas;
+    if (Array.isArray(refs)) {
+      for (const id of refs) {
+        const trimmed = String(id || '').trim();
+        if (trimmed) ids.add(trimmed);
+      }
     }
   }
   return [...ids];
@@ -741,33 +1203,72 @@ function collectFacturaIdsFromGuias(rows) {
 
 async function loadFacturaRefMap(companyRuc, facturaIds) {
   if (!facturaIds.length) return new Map();
+  const receptorRuc = String(companyRuc || '').trim();
   const rows = await prisma.invoice.findMany({
-    where: { companyRuc, id: { in: facturaIds } },
-    select: { id: true, tipoDoc: true, serie: true, correlativo: true },
+    where: {
+      id: { in: facturaIds },
+      OR: [
+        { companyRuc: receptorRuc },
+        { cliente: { numeroDoc: receptorRuc } },
+      ],
+    },
+    select: { id: true, tipoDoc: true, serie: true, correlativo: true, companyRuc: true },
   });
   return new Map(rows.map((row) => [row.id, row]));
 }
 
 function buildGuiaApiFields(invoice, facturaMap = new Map()) {
-  if (!['09', '31'].includes(invoice.tipoDoc) || !invoice.guiaMetaJson) return {};
+  if (!['09', '31'].includes(invoice.tipoDoc)) return {};
 
-  const meta = invoice.guiaMetaJson;
+  const meta = invoice.guiaMetaJson && typeof invoice.guiaMetaJson === 'object'
+    ? invoice.guiaMetaJson
+    : {};
   const envio = meta.envio && typeof meta.envio === 'object' ? meta.envio : undefined;
-  const facturas = (Array.isArray(meta.facturas_vinculadas) ? meta.facturas_vinculadas : [])
-    .map((id) => facturaMap.get(String(id || '').trim()))
-    .filter(Boolean)
-    .map((row) => ({
-      id: row.id,
-      tipo_doc: row.tipoDoc,
-      serie: row.serie,
-      correlativo: row.correlativo,
-    }));
+
+  let documentos = documentosRelacionadosRows(invoice)
+    .map((row) => toApiDocumentoRelacionado(row))
+    .filter(Boolean);
+
+  // Compat lectura: facturas_vinculadas / guia_remitente legacy en JSON.
+  if (!documentos.length && Array.isArray(meta.facturas_vinculadas)) {
+    documentos = meta.facturas_vinculadas
+      .map((id) => facturaMap.get(String(id || '').trim()))
+      .filter(Boolean)
+      .map((row) => ({
+        id: row.id,
+        tipo_doc: row.tipoDoc,
+        serie: row.serie,
+        correlativo: row.correlativo,
+        emisor_tipo_doc: '6',
+        emisor_numero_doc: row.companyRuc || invoice.companyRuc,
+      }));
+  }
+  if (!documentos.length && meta.guia_remitente?.serie && meta.guia_remitente?.correlativo) {
+    documentos = [{
+      id: meta.guia_remitente.id || undefined,
+      tipo_doc: meta.guia_remitente.tipo_doc || '09',
+      serie: meta.guia_remitente.serie,
+      correlativo: meta.guia_remitente.correlativo,
+      emisor_tipo_doc: meta.remitente?.tipo_doc || '6',
+      emisor_numero_doc: meta.remitente?.numero_doc || undefined,
+      emisor_razon_social: meta.remitente?.razon_social || undefined,
+    }];
+  }
+
+  const guiaRemitente = documentos.find((d) => d.tipo_doc === '09')
+    || (meta.guia_remitente?.serie ? {
+      tipo_doc: meta.guia_remitente.tipo_doc || '09',
+      serie: meta.guia_remitente.serie,
+      correlativo: meta.guia_remitente.correlativo,
+      id: meta.guia_remitente.id || undefined,
+    } : undefined);
 
   return {
     envio,
-    facturas: facturas.length ? facturas : undefined,
+    facturas: documentos.length ? documentos : undefined,
+    documentos_relacionados: documentos.length ? documentos : undefined,
     remitente: meta.remitente || undefined,
-    guia_remitente: meta.guia_remitente || undefined,
+    guia_remitente: guiaRemitente,
   };
 }
 
@@ -794,16 +1295,39 @@ function toApiCompraInvoice(invoice, sellerCompany, options = {}) {
 function toApiInvoice(invoice, options = {}) {
   if (!invoice) return null;
 
-  const { apiBaseUrl, companyRuc, includeSunatPayload = true, facturaMap = new Map() } = options;
+  const {
+    apiBaseUrl,
+    companyRuc,
+    includeSunatPayload = true,
+    facturaMap = new Map(),
+    salidaByInvoiceId = null,
+    entradaByInvoiceId = null,
+  } = options;
   const estadoEfectivo = resolveEstadoApi(invoice);
   const invoiceForUrls = { ...invoice, estado: estadoEfectivo };
-  const fileUrls = comprobanteArchivosService.resolveFileUrls(invoiceForUrls, apiBaseUrl);
+  const fileUrls = comprobanteArchivosService.resolveFileUrls(invoiceForUrls, apiBaseUrl, {
+    accessCompanyRuc: companyRuc || invoice.companyRuc,
+  });
   const enrichFileUrls = (resolved) => ({
     pdf_url: resolved.pdf_url || invoice.pdfUrl,
     cdr_zip_url: resolved.cdr_zip_url || invoice.cdrZipUrl,
     xml_url: resolved.xml_url || invoice.xmlUrlDirecto,
   });
   const urls = enrichFileUrls(fileUrls);
+
+  const tipoDocStr = String(invoice.tipoDoc || '');
+  const esVentaInventario = ['01', '03'].includes(tipoDocStr);
+  const esNotaCreditoInventario = tipoDocStr === '07';
+  const movimientoSalidaId = esVentaInventario
+    ? (salidaByInvoiceId?.get?.(invoice.id)
+      || options.movimientoSalidaId
+      || null)
+    : null;
+  const movimientoEntradaNcId = esNotaCreditoInventario
+    ? (entradaByInvoiceId?.get?.(invoice.id)
+      || options.movimientoEntradaId
+      || null)
+    : null;
 
   return {
     id: invoice.id,
@@ -843,6 +1367,13 @@ function toApiInvoice(invoice, options = {}) {
     pdf_url: urls.pdf_url,
     cdr_zip_url: urls.cdr_zip_url,
     xml_url: urls.xml_url,
+    adjuntos: archivosJsonToAdjuntosList(invoice.archivosJson),
+    archivos: (() => {
+      const a = invoice.archivosJson;
+      if (!a || typeof a !== 'object' || Array.isArray(a)) return undefined;
+      if (a.xml || a.pdf || a.cdr_zip || a.cdr) return undefined;
+      return Object.keys(a).length ? a : undefined;
+    })(),
     sunat_estado: invoice.sunatEstadoDirecto || invoice.cdrEstado,
     sunat_codigo: invoice.sunatCodigoDirecto,
     sunat_descripcion: invoice.sunatDescripcionDirecto,
@@ -865,6 +1396,18 @@ function toApiInvoice(invoice, options = {}) {
       code: legend.code,
       value: legend.value,
     })),
+    ...(esVentaInventario
+      ? {
+          inventario_estado: movimientoSalidaId ? 'DESCONTADO' : 'PENDIENTE',
+          movimiento_salida_id: movimientoSalidaId || undefined,
+        }
+      : {}),
+    ...(esNotaCreditoInventario
+      ? {
+          inventario_estado: movimientoEntradaNcId ? 'DEVUELTO' : 'PENDIENTE',
+          movimiento_entrada_id: movimientoEntradaNcId || undefined,
+        }
+      : {}),
     ...buildGuiaApiFields(invoice, facturaMap),
   };
 }
@@ -985,21 +1528,69 @@ async function createFromMobileRequest(companyRuc, body) {
   let saleDetails = [];
   let guiaMetaJson = null;
   let almacenId = null;
+  let documentosRelacionadosCreate = [];
 
   if (tipoConfig.tipoDoc === '09') {
-    const facturas = await loadFacturasVinculadas(
-      companyRuc,
-      body.facturas || body.facturasVinculadas || [],
-    );
-    saleDetails = aggregateDetailsFromFacturas(facturas);
+    const docsBody = parseDocumentosRelacionadosBody(body);
+    const tieneDocs = docsBody.length > 0;
     const clienteRow = await prisma.cliente.findFirst({
       where: { companyRuc, tipoDoc: receptor.tipoDoc, numeroDoc: receptor.numeroDoc },
       include: { address: true },
     });
-    guiaMetaJson = {
-      ...buildEnvioMeta(body, company, clienteRow),
-      facturas_vinculadas: facturas.map((f) => f.id),
-    };
+
+    const { docs, invoicesInternas } = await resolveDocumentosRelacionados(
+      companyRuc,
+      company,
+      docsBody,
+      receptor,
+    );
+    documentosRelacionadosCreate = docs;
+
+    const conDetalle = invoicesInternas.filter((inv) => (inv.details || []).length > 0);
+    if (conDetalle.length > 0) {
+      saleDetails = aggregateDetailsFromFacturas(conDetalle);
+      guiaMetaJson = buildEnvioMeta(body, company, clienteRow);
+    } else if (lineas.length > 0) {
+      // Traslado interno, compra/manual externo: bienes desde catálogo o descripción libre.
+      const catalogMap = await loadCatalogItems(companyRuc, lineas);
+      saleDetails = lineas.map((linea) => {
+        const catalogItemId = String(linea.catalog_item_id || linea.catalogItemId || '').trim();
+        const catalogItem = catalogMap.get(catalogItemId);
+        const cantidad = toNumber(linea.cantidad, 1);
+        if (!catalogItem) {
+          return saleDetailDesdeLineaLibre(linea, cantidad);
+        }
+        const calc = calcularLinea(catalogItem, cantidad, null);
+        return {
+          catalogItemId,
+          catalogItem,
+          descripcion: calc.descripcion,
+          nombre: calc.nombre,
+          cantidad: calc.cantidad,
+          unidad: calc.unidad,
+          mtoValorUnitario: 0,
+          mtoPrecioUnitario: 0,
+          mtoBaseIgv: 0,
+          mtoValorVenta: 0,
+          mtoIgv: 0,
+          totalFactura: 0,
+          porcentajeIgv: 0,
+          tipAfeIgv: '30',
+          productoSerieId: linea.producto_serie_id || linea.productoSerieId || null,
+        };
+      });
+      almacenId = String(body.almacen_id || body.almacenId || '').trim() || null;
+      guiaMetaJson = buildEnvioMeta(body, company, clienteRow);
+    } else if (tieneDocs) {
+      throw new Error(
+        'Los documentos relacionados no tienen líneas de bienes utilizables. '
+          + 'Vincula CPE emitidos/recibidos con detalle, o agrega líneas manuales.',
+      );
+    } else {
+      throw new Error(
+        'La GRE remitente requiere documentos relacionados o al menos una línea de bienes (traslado interno).',
+      );
+    }
   } else if (tipoConfig.tipoDoc === '31') {
     if (lineas.length === 0) {
       throw new Error('La GRE transportista requiere al menos una línea de detalle.');
@@ -1040,8 +1631,21 @@ async function createFromMobileRequest(companyRuc, body) {
         numero_doc: remitente.numeroDoc,
         razon_social: remitente.razonSocial,
       },
-      guia_remitente: guiaRemitente,
     };
+    if (guiaRemitente) {
+      const { docs } = await resolveDocumentosRelacionados(
+        companyRuc,
+        company,
+        [{
+          ...guiaRemitente,
+          emisor_tipo_doc: remitente.tipoDoc,
+          emisor_numero_doc: remitente.numeroDoc,
+          emisor_razon_social: remitente.razonSocial,
+        }],
+        remitente,
+      );
+      documentosRelacionadosCreate = docs;
+    }
   } else {
     if (lineas.length === 0) {
       throw new Error('Debe incluir al menos una línea.');
@@ -1090,6 +1694,7 @@ async function createFromMobileRequest(companyRuc, body) {
   }
 
   const invoiceId = randomUUID();
+  const archivosJson = parseArchivosBody(body);
 
   await prisma.$transaction(async (tx) => {
     await tx.invoice.create({
@@ -1117,12 +1722,35 @@ async function createFromMobileRequest(companyRuc, body) {
         documentoAfectadoId,
         estado: 'BORRADOR',
         clienteId,
+        archivosJson:
+          archivosJson && Object.keys(archivosJson).length ? archivosJson : undefined,
         details: {
           create: saleDetails.map(toSaleDetailCreateInput),
         },
       },
     });
+    if (documentosRelacionadosCreate.length) {
+      await syncDocumentosRelacionados(tx, invoiceId, documentosRelacionadosCreate);
+    }
   });
+
+  // Persistir MTC del transportista en la empresa si vino en el envío GRE.
+  if (tipoConfig.tipoDoc === '09' || tipoConfig.tipoDoc === '31') {
+    const nroMtcEnvio =
+      guiaMetaJson?.envio?.nro_mtc ||
+      body?.envio?.nro_mtc ||
+      body?.nro_mtc ||
+      body?.nroMtc ||
+      '';
+    const nroMtc = String(nroMtcEnvio || '').trim();
+    if (nroMtc) {
+      try {
+        await companyModel.updateNroMtcByRuc(companyRuc, nroMtc);
+      } catch (_) {
+        /* no bloquear emisión si falla el update de MTC */
+      }
+    }
+  }
 
   return findByIdForEmission(invoiceId, companyRuc);
 }
@@ -1139,8 +1767,8 @@ async function findAllByCompany(companyRuc, { desde = null, hasta = null, apiBas
     const hastaMs = hasta ? calendarDayEndMsPe(hasta) : null;
 
     filtered = rows.filter((row) => {
-      const ms = Number.parseInt(String(row.fechaEmision || ''), 10);
-      if (!Number.isFinite(ms)) return false;
+      const ms = parseStoredTimestamp(row.fechaEmision);
+      if (ms == null) return false;
       if (desdeMs != null && ms < desdeMs) return false;
       if (hastaMs != null && ms > hastaMs) return false;
       return true;
@@ -1158,9 +1786,26 @@ async function findAllByCompany(companyRuc, { desde = null, hasta = null, apiBas
   });
 
   const facturaMap = await loadFacturaRefMap(companyRuc, collectFacturaIdsFromGuias(filtered));
+  const ventaIds = filtered
+    .filter((row) => ['01', '03'].includes(row.tipoDoc))
+    .map((row) => row.id);
+  const ncIds = filtered
+    .filter((row) => row.tipoDoc === '07')
+    .map((row) => row.id);
+  const [salidaByInvoiceId, entradaByInvoiceId] = await Promise.all([
+    loadSalidasPorComprobanteIds(companyRuc, ventaIds),
+    loadEntradasPorReferenciaIds(companyRuc, ncIds),
+  ]);
 
   return filtered.map((row) =>
-    toApiInvoice(row, { apiBaseUrl, companyRuc, includeSunatPayload: false, facturaMap }),
+    toApiInvoice(row, {
+      apiBaseUrl,
+      companyRuc,
+      includeSunatPayload: false,
+      facturaMap,
+      salidaByInvoiceId,
+      entradaByInvoiceId,
+    }),
   );
 }
 
@@ -1174,7 +1819,7 @@ async function findComprasByCompany(companyRuc, { desde = null, hasta = null, ap
       companyRuc: { not: receptorRuc },
       cliente: { numeroDoc: receptorRuc },
       estado: { in: ['ACEPTADO', 'ENVIADO'] },
-      tipoDoc: { in: ['01', '03', '07', '08'] },
+      tipoDoc: { in: ['01', '03', '07', '08', '09', '31'] },
     },
     include: INVOICE_INCLUDE,
   });
@@ -1185,8 +1830,8 @@ async function findComprasByCompany(companyRuc, { desde = null, hasta = null, ap
     const hastaMs = hasta ? calendarDayEndMsPe(hasta) : null;
 
     filtered = rows.filter((row) => {
-      const ms = Number.parseInt(String(row.fechaEmision || ''), 10);
-      if (!Number.isFinite(ms)) return false;
+      const ms = parseStoredTimestamp(row.fechaEmision);
+      if (ms == null) return false;
       if (desdeMs != null && ms < desdeMs) return false;
       if (hastaMs != null && ms > hastaMs) return false;
       return true;
@@ -1212,13 +1857,41 @@ async function findComprasByCompany(companyRuc, { desde = null, hasta = null, ap
     : [];
   const sellerMap = new Map(sellers.map((s) => [s.ruc, s]));
 
-  return filtered.map((row) =>
-    toApiCompraInvoice(row, sellerMap.get(row.companyRuc), {
+  const invoiceIds = filtered.map((row) => row.id);
+  const entradas = invoiceIds.length
+    ? await prisma.movimiento.findMany({
+        where: {
+          companyRuc: receptorRuc,
+          tipo: 'ENTRADA',
+          OR: [
+            { comprobanteId: { in: invoiceIds } },
+            { referenciaId: { in: invoiceIds } },
+          ],
+        },
+        select: { id: true, comprobanteId: true, referenciaId: true },
+      })
+    : [];
+  const entradaPorInvoice = new Map();
+  for (const mov of entradas) {
+    const key = mov.comprobanteId || mov.referenciaId;
+    if (key) entradaPorInvoice.set(key, mov.id);
+  }
+
+  return filtered.map((row) => {
+    const base = toApiCompraInvoice(row, sellerMap.get(row.companyRuc), {
       apiBaseUrl,
       companyRuc: receptorRuc,
       includeSunatPayload: false,
-    }),
-  );
+    });
+    const entradaId = entradaPorInvoice.get(row.id);
+    if (entradaId) {
+      base.movimiento_entrada_id = entradaId;
+      base.inventario_estado = 'RECIBIDO';
+    } else {
+      base.inventario_estado = base.inventario_estado || null;
+    }
+    return base;
+  });
 }
 
 async function findAll() {
@@ -1247,6 +1920,35 @@ async function findByIdForEmission(id, companyRuc) {
 
   const company = await prisma.company.findFirst({
     where: { ruc: companyRuc },
+    include: { address: true },
+  });
+
+  return { ...invoice, company };
+}
+
+/**
+ * Emisor (company_ruc) o receptor (cliente.numeroDoc) pueden acceder
+ * (PDF / detalle de compras recibidas).
+ */
+async function findByIdForCompanyAccess(id, companyRuc) {
+  const ruc = String(companyRuc || '').trim();
+  if (!ruc) return null;
+
+  const invoice = await prisma.invoice.findFirst({
+    where: {
+      id,
+      OR: [
+        { companyRuc: ruc },
+        { cliente: { numeroDoc: ruc } },
+      ],
+    },
+    include: INVOICE_INCLUDE,
+  });
+  if (!invoice) return null;
+
+  // Company del emisor: el PDF muestra quién facturó.
+  const company = await prisma.company.findFirst({
+    where: { ruc: invoice.companyRuc },
     include: { address: true },
   });
 
@@ -1316,7 +2018,6 @@ async function applyEmisionResult(id, companyRuc, tipoDoc, emisorData, options =
       cdrZipUrl: persisted.cdrZipUrl || undefined,
       xmlUrlDirecto: persisted.xmlUrlDirecto || undefined,
       hash: persisted.hash || undefined,
-      archivosJson: null,
     },
     include: INVOICE_INCLUDE,
   });
@@ -1357,7 +2058,7 @@ async function getArchivoBuffer(invoice, tipo, options = {}) {
       if (saved?.url) {
         await prisma.invoice.update({
           where: { id: invoice.id },
-          data: { pdfUrl: saved.url, archivosJson: null },
+          data: { pdfUrl: saved.url },
         });
       }
     }
@@ -1397,7 +2098,22 @@ async function toApiInvoiceEnriched(invoice, options = {}) {
   if (!invoice) return null;
   const companyRuc = options.companyRuc || invoice.companyRuc;
   const facturaMap = await loadFacturaRefMap(companyRuc, collectFacturaIdsFromGuias([invoice]));
-  return toApiInvoice(invoice, { ...options, companyRuc, facturaMap });
+  let salidaByInvoiceId = options.salidaByInvoiceId || null;
+  let entradaByInvoiceId = options.entradaByInvoiceId || null;
+  const tipo = String(invoice.tipoDoc || '');
+  if (!salidaByInvoiceId && ['01', '03'].includes(tipo)) {
+    salidaByInvoiceId = await loadSalidasPorComprobanteIds(companyRuc, [invoice.id]);
+  }
+  if (!entradaByInvoiceId && tipo === '07') {
+    entradaByInvoiceId = await loadEntradasPorReferenciaIds(companyRuc, [invoice.id]);
+  }
+  return toApiInvoice(invoice, {
+    ...options,
+    companyRuc,
+    facturaMap,
+    salidaByInvoiceId,
+    entradaByInvoiceId,
+  });
 }
 
 async function deleteDraftInvoice(id, companyRuc) {
@@ -1477,29 +2193,72 @@ async function updateRejectedFromMobileRequest(id, companyRuc, body) {
     : {};
   const envioMeta = buildEnvioMeta(body, company, clienteRow);
 
-  let facturasVinculadas = prevMeta.facturas_vinculadas;
-  const facturasBody = body.facturas || body.facturasVinculadas;
-  if (Array.isArray(facturasBody) && facturasBody.length) {
-    const facturas = await loadFacturasVinculadas(companyRuc, facturasBody);
-    facturasVinculadas = facturas.map((f) => f.id);
-  }
-
   const guiaMetaJson = {
-    ...prevMeta,
-    ...envioMeta,
-    facturas_vinculadas: facturasVinculadas,
+    envio: envioMeta.envio,
+    ...(prevMeta.remitente ? { remitente: prevMeta.remitente } : {}),
+    ...(invoice.tipoDoc === '31' && body.remitente
+      ? {
+          remitente: {
+            tipo_doc: parseRemitente(body).tipoDoc,
+            numero_doc: parseRemitente(body).numeroDoc,
+            razon_social: parseRemitente(body).razonSocial,
+          },
+        }
+      : {}),
   };
 
-  const observacion = (body.observaciones || body.observacion || '').trim() || invoice.observacion;
+  const docsBody = parseDocumentosRelacionadosBody(body);
+  const guiaRemitenteBody = invoice.tipoDoc === '31' ? parseGuiaRemitenteRef(body) : null;
+  const refsToResolve = docsBody.length
+    ? docsBody
+    : (guiaRemitenteBody ? [guiaRemitenteBody] : []);
 
-  await prisma.invoice.update({
-    where: { id },
-    data: {
-      guiaMetaJson,
-      observacion,
-      motivoCodigo: String(body.motivo_codigo || body.motivoCodigo || invoice.motivoCodigo || '').trim() || null,
-      motivoNota: (body.motivo_nota || body.motivoNota || invoice.motivoNota || '').trim() || null,
-    },
+  let documentosRelacionadosCreate = null;
+  if (refsToResolve.length) {
+    const receptor = invoice.cliente
+      ? {
+          tipoDoc: invoice.cliente.tipoDoc,
+          numeroDoc: invoice.cliente.numeroDoc,
+          razonSocial: invoice.cliente.razonSocial,
+        }
+      : null;
+    const { docs } = await resolveDocumentosRelacionados(
+      companyRuc,
+      company,
+      refsToResolve,
+      guiaMetaJson.remitente
+        ? {
+            tipoDoc: guiaMetaJson.remitente.tipo_doc,
+            numeroDoc: guiaMetaJson.remitente.numero_doc,
+            razonSocial: guiaMetaJson.remitente.razon_social,
+          }
+        : receptor,
+    );
+    documentosRelacionadosCreate = docs;
+  }
+
+  const observacion = (body.observaciones || body.observacion || '').trim() || invoice.observacion;
+  const archivosJson = parseArchivosBody(body);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.invoice.update({
+      where: { id },
+      data: {
+        guiaMetaJson,
+        observacion,
+        motivoCodigo: String(body.motivo_codigo || body.motivoCodigo || invoice.motivoCodigo || '').trim() || null,
+        motivoNota: (body.motivo_nota || body.motivoNota || invoice.motivoNota || '').trim() || null,
+        ...(archivosJson !== null
+          ? {
+              archivosJson: Object.keys(archivosJson).length ? archivosJson : null,
+            }
+          : {}),
+      },
+    });
+
+    if (documentosRelacionadosCreate !== null) {
+      await syncDocumentosRelacionados(tx, id, documentosRelacionadosCreate);
+    }
   });
 
   return findByIdForEmission(id, companyRuc);
@@ -1510,6 +2269,7 @@ module.exports = {
   findAllByCompany,
   findComprasByCompany,
   findByIdForEmission,
+  findByIdForCompanyAccess,
   findCompany,
   getNextResumenCorrelativo,
   findBoletasPendientesResumen,
@@ -1520,7 +2280,9 @@ module.exports = {
   deleteNoAceptadoInvoice,
   applyEmisionResult,
   toApiInvoice,
+  toApiCompraInvoice,
   toApiInvoiceEnriched,
+  toApiSaleDetail,
   getArchivoBuffer,
   toPublic: toPublicSummary,
   findInvoiceRow,

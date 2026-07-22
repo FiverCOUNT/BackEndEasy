@@ -16,15 +16,12 @@ async function uploadCertificado(companyRuc, file, { password = '' } = {}) {
   }
 
   const ext = path.extname(file.originalname || '').toLowerCase();
-  let uploadBuffer = file.buffer;
-
-  if (ext !== '.pem') {
-    if (!password) {
-      throw new Error('Indica la contraseña del certificado al subir un archivo .pfx o .p12.');
-    }
-    const pem = toPem(file.buffer, password);
-    uploadBuffer = Buffer.from(pem, 'utf8');
+  // Siempre normalizamos a PEM RSA (LF). Un .pem con CRLF/PKCS#8 rompe la firma en EMISOR.
+  if (ext !== '.pem' && !password) {
+    throw new Error('Indica la contraseña del certificado al subir un archivo .pfx o .p12.');
   }
+  const pem = toPem(file.buffer, password);
+  const uploadBuffer = Buffer.from(pem, 'utf8');
 
   const filename = resolveCertFilename(companyRuc, file.originalname);
 

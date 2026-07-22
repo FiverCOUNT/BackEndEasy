@@ -51,7 +51,13 @@ function mergeBoletaConResumen(boletaData, resumenData) {
   };
 }
 
+function quiereAfectarInventario(options = {}) {
+  return options.afectarInventario === true
+    || options.afectar_inventario === true;
+}
+
 async function aplicarInventarioPostEmision(invoiceId, companyRuc, comprobanteApi, options) {
+  if (!quiereAfectarInventario(options)) return null;
   if (!comprobanteApi?.estado) return null;
 
   const invoice = await comprobanteModel.findByIdForEmission(invoiceId, companyRuc);
@@ -117,16 +123,20 @@ async function emitirBoletaConResumen(invoice, options = {}) {
 
 async function emitirComprobanteExistente(invoice, options = {}) {
   const emitOpts = resolveInventarioEmitOptions(invoice, options);
+  const afectarInventario = quiereAfectarInventario(emitOpts);
 
-  const inventarioReserva = await comprobanteInventarioService.registrarSalidaPorComprobante(
-    invoice,
-    emitOpts,
-  );
-  if (inventarioDebeBloquearEmision(inventarioReserva)) {
-    const err = new Error(inventarioReserva.message || 'No hay stock suficiente para esta venta.');
-    err.code = 'inventario';
-    err.inventario = inventarioReserva;
-    throw err;
+  let inventarioReserva = null;
+  if (afectarInventario) {
+    inventarioReserva = await comprobanteInventarioService.registrarSalidaPorComprobante(
+      invoice,
+      emitOpts,
+    );
+    if (inventarioDebeBloquearEmision(inventarioReserva)) {
+      const err = new Error(inventarioReserva.message || 'No hay stock suficiente para esta venta.');
+      err.code = 'inventario';
+      err.inventario = inventarioReserva;
+      throw err;
+    }
   }
 
   let comprobante;
@@ -148,7 +158,7 @@ async function emitirComprobanteExistente(invoice, options = {}) {
       : comprobante;
   }
 
-  if (inventarioReserva.aplicado && !comprobante.inventario) {
+  if (inventarioReserva?.aplicado && !comprobante.inventario) {
     comprobante = { ...comprobante, inventario: inventarioReserva };
   }
   return comprobante;
@@ -194,6 +204,9 @@ async function crearYEmitirDesdeMobile(companyRuc, body, options = {}) {
     ...options,
     almacenId: options.almacenId || body.almacen_id || body.almacenId || null,
     lineasBody: invoice.tipoDoc === '07' ? (body.lineas || body.lineasBody || null) : null,
+    // Inventario es opt-in: por defecto la venta solo se registra/envía a SUNAT.
+    afectarInventario: body.afectar_inventario === true || body.afectarInventario === true
+      || options.afectarInventario === true,
   });
 
   try {

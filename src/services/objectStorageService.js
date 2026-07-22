@@ -1,5 +1,7 @@
-const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+const { randomUUID } = require('crypto');
+const path = require('path');
 const storageConfig = require('../config/storage');
 const { resolveClienteFolderFromInvoice } = require('../utils/clienteStoragePath');
 
@@ -41,10 +43,26 @@ function buildCertificadoKey(companyRuc, filename) {
   return `${getPrefix('certificados')}/${companyRuc}/${safeName}`;
 }
 
+/** adjuntos/{RUC}/{uuid}-{nombreSeguro} */
+function buildAdjuntoKey(companyRuc, filename) {
+  const ruc = String(companyRuc || '').replace(/\D/g, '') || 'sin-ruc';
+  const base = path.basename(String(filename || 'archivo.bin')).replace(/[^\w.\-]+/g, '_').slice(0, 80);
+  const safeName = base || 'archivo.bin';
+  return `${getPrefix('adjuntos')}/${ruc}/${randomUUID()}-${safeName}`;
+}
+
 function isObjectKey(value, prefixName = 'comprobantes') {
   if (typeof value !== 'string') return false;
   const prefix = getPrefix(prefixName);
   return value.startsWith(`${prefix}/`);
+}
+
+function isAdjuntoKeyForCompany(key, companyRuc) {
+  if (typeof key !== 'string') return false;
+  const ruc = String(companyRuc || '').replace(/\D/g, '');
+  if (!ruc) return false;
+  const prefix = `${getPrefix('adjuntos')}/${ruc}/`;
+  return key.startsWith(prefix);
 }
 
 function isHttpUrl(value) {
@@ -149,6 +167,34 @@ async function uploadCertificado(companyRuc, buffer, filename) {
   return uploadBuffer(key, buffer, contentType);
 }
 
+async function uploadAdjunto(companyRuc, buffer, filename, contentType) {
+  const key = buildAdjuntoKey(companyRuc, filename);
+  const uploaded = await uploadBuffer(key, buffer, contentType || 'application/octet-stream');
+  return {
+    key: uploaded.key,
+    url: uploaded.url,
+    nombre: path.basename(String(filename || 'archivo.bin')),
+    content_type: contentType || 'application/octet-stream',
+    size: buffer?.length || 0,
+  };
+}
+
+async function deleteObject(key) {
+  const s3 = getClient();
+  if (!s3 || !key) return false;
+  try {
+    await s3.send(
+      new DeleteObjectCommand({
+        Bucket: storageConfig.r2.bucket,
+        Key: key,
+      }),
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function getPresignedUrl(key, expiresInSeconds = 900) {
   const s3 = getClient();
   if (!s3) {
@@ -188,13 +234,17 @@ module.exports = {
   buildComprobanteKey,
   buildComprobanteKeyForInvoice,
   buildCertificadoKey,
+  buildAdjuntoKey,
   buildKey: buildComprobanteKeyForInvoice,
   buildPublicUrl,
   extractObjectKey,
   resolvePublicUrl,
   assertPublicBaseUrlConfigured,
   isHttpUrl,
+  isAdjuntoKeyForCompany,
   uploadBuffer,
+  uploadAdjunto,
+  deleteObject,
   getObjectBuffer,
   uploadCertificado,
   getPresignedUrl,

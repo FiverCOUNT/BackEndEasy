@@ -18,6 +18,7 @@ const s3Region = process.env.S3_REGION || 'auto';
 
 const prefixComprobantes = normalizePrefix(process.env.S3_PREFIX_COMPROBANTES, 'comprobantes');
 const prefixCertificados = normalizePrefix(process.env.S3_PREFIX_CERTIFICADOS, 'certificados');
+const prefixAdjuntos = normalizePrefix(process.env.S3_PREFIX_ADJUNTOS, 'adjuntos');
 
 const r2Enabled = Boolean(s3Endpoint && s3Bucket && s3AccessKey && s3SecretKey);
 const isProduction = process.env.NODE_ENV === 'production';
@@ -56,6 +57,7 @@ module.exports = {
     prefixes: {
       comprobantes: prefixComprobantes,
       certificados: prefixCertificados,
+      adjuntos: prefixAdjuntos,
     },
   },
 };

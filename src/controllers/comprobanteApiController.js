@@ -111,7 +111,7 @@ async function listSeriesEntregadas(req, res, next) {
 
 async function descargarArchivo(req, res, next) {
   try {
-    const invoice = await comprobanteModel.findByIdForEmission(req.params.id, req.companyRuc);
+    const invoice = await comprobanteModel.findByIdForCompanyAccess(req.params.id, req.companyRuc);
     if (!invoice) {
       return res.status(404).json({ success: false, message: 'Comprobante no encontrado' });
     }
@@ -300,15 +300,85 @@ async function eliminar(req, res, next) {
       req.params.id,
       req.companyRuc,
     );
+    const stockMsg = result.inventario?.revertido
+      ? ' Stock devuelto al almacén.'
+      : '';
     return res.json({
       success: true,
-      message: `Comprobante ${result.serie}-${result.correlativo} eliminado`,
+      message: `Comprobante ${result.serie}-${result.correlativo} eliminado.${stockMsg}`,
       id: result.id,
+      inventario: result.inventario || undefined,
     });
   } catch (err) {
     if (err.status) {
       return res.status(err.status).json({ success: false, message: err.message });
     }
+    next(err);
+  }
+}
+
+/** Descuenta stock de una factura/boleta ya emitida (sin pantalla intermedia). */
+async function restarAlmacen(req, res, next) {
+  try {
+    const comprobanteInventarioService = require('../services/comprobanteInventarioService');
+    const invoice = await comprobanteModel.findByIdForEmission(req.params.id, req.companyRuc);
+    if (!invoice) {
+      return res.status(404).json({ success: false, message: 'Comprobante no encontrado' });
+    }
+    if (!['01', '03'].includes(String(invoice.tipoDoc || ''))) {
+      return res.status(400).json({
+        success: false,
+        message: 'Solo se puede restar almacén en facturas y boletas de venta.',
+      });
+    }
+    if (!['ACEPTADO', 'ENVIADO'].includes(String(invoice.estado || ''))) {
+      return res.status(400).json({
+        success: false,
+        message: 'El comprobante debe estar aceptado o enviado por SUNAT.',
+      });
+    }
+
+    const almacenId =
+      readAlmacenFromBody(req)
+      || normalizeAlmacenId(invoice.almacenId)
+      || normalizeAlmacenId(req.userAlmacenId);
+
+    const result = await comprobanteInventarioService.registrarSalidaPorComprobante(invoice, {
+      almacenId,
+    });
+
+    if (!result.aplicado) {
+      if (result.motivo === 'ya_registrado') {
+        const comprobante = await comprobanteModel.toApiInvoiceEnriched(invoice, serializeOptions(req));
+        return res.json({
+          success: true,
+          message: 'El stock de este comprobante ya estaba descontado.',
+          movimiento_salida_id: result.movimiento_id,
+          comprobante,
+        });
+      }
+      const status = ['stock_insuficiente', 'series_no_disponibles'].includes(result.motivo)
+        ? 409
+        : 400;
+      return res.status(status).json({
+        success: false,
+        message: result.message || `No se pudo descontar: ${result.motivo}`,
+        motivo: result.motivo,
+      });
+    }
+
+    const comprobante = await comprobanteModel.toApiInvoiceEnriched(invoice, {
+      ...serializeOptions(req),
+      movimientoSalidaId: result.movimiento_id,
+    });
+    return res.status(201).json({
+      success: true,
+      message: 'Stock descontado del almacén',
+      movimiento_salida_id: result.movimiento_id,
+      movimiento: result.movimiento,
+      comprobante,
+    });
+  } catch (err) {
     next(err);
   }
 }
@@ -326,4 +396,5 @@ module.exports = {
   registrarGreEvento,
   comunicarGreBaja,
   eliminar,
+  restarAlmacen,
 };

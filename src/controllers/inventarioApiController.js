@@ -300,6 +300,12 @@ async function ejecutarRegistroMovimiento(req, res, next, { tipoFijo = null, con
     if (tipo === 'ENTRADA') {
       params.clienteId = (req.body.cliente_id || req.body.clienteId || '').trim() || null;
       params.cliente = req.body.cliente || null;
+      params.referenciaTipo =
+        (req.body.referencia_tipo || req.body.referenciaTipo || '').trim() || null;
+      params.referenciaId =
+        (req.body.referencia_id || req.body.referenciaId || '').trim() || null;
+      params.comprobanteId =
+        (req.body.comprobante_id || req.body.comprobanteId || '').trim() || null;
     }
 
     if (tipo === 'SALIDA') {

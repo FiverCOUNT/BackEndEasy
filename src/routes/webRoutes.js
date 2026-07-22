@@ -1,5 +1,6 @@
 const express = require('express');
 const homeController = require('../controllers/homeController');
+const webAuthController = require('../controllers/webAuthController');
 const usuarioWebController = require('../controllers/usuarioWebController');
 const companyWebController = require('../controllers/companyWebController');
 const comprobanteWebController = require('../controllers/comprobanteWebController');
@@ -7,9 +8,22 @@ const clienteWebController = require('../controllers/clienteWebController');
 const catalogItemWebController = require('../controllers/catalogItemWebController');
 const almacenWebController = require('../controllers/almacenWebController');
 const configuracionWebController = require('../controllers/configuracionWebController');
+const terminosWebController = require('../controllers/terminosWebController');
 const uploadCertificado = require('../middleware/uploadCertificado');
+const { requireWebAdmin, redirectIfWebAdmin } = require('../middleware/webAuth');
 
 const router = express.Router();
+
+router.get('/login', redirectIfWebAdmin, webAuthController.showLogin);
+router.post('/login', redirectIfWebAdmin, webAuthController.login);
+router.post('/logout', requireWebAdmin, webAuthController.logout);
+
+/** Páginas públicas (apps / Play Store): no requieren sesión. */
+router.get('/terminosycondiciones', terminosWebController.index);
+router.get('/terminosycondiciones/', terminosWebController.index);
+router.get('/terminosycondiciones/:app', terminosWebController.show);
+
+router.use(requireWebAdmin);
 
 router.get('/', homeController.index);
 
@@ -41,6 +55,7 @@ router.post('/almacenes/:id/desactivar', almacenWebController.deactivate);
 router.post('/almacenes/:id/eliminar', almacenWebController.destroy);
 
 router.get('/catalogo', catalogItemWebController.list);
+router.get('/catalogo/codigos-sunat', catalogItemWebController.searchCodigosSunat);
 router.get('/catalogo/crear', catalogItemWebController.showCreateForm);
 router.post('/catalogo', catalogItemWebController.create);
 router.get('/catalogo/:id/editar', catalogItemWebController.showEditForm);

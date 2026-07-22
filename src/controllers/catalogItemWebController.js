@@ -1,5 +1,6 @@
 const prisma = require('../config/prisma');
 const catalogItemModel = require('../models/catalogItemModel');
+const codigoProductoSunatModel = require('../models/codigoProductoSunatModel');
 const { parseListQuery, buildPageMeta } = require('../utils/pagination');
 
 const UNIDADES = ['NIU', 'MTR', 'KGM', 'LTR', 'ZZ'];
@@ -27,6 +28,8 @@ function formFromBody(body) {
   return {
     companyRuc: parsed.companyRuc,
     kind: parsed.kind,
+    codigo: parsed.codigo || '',
+    codigoSunat: parsed.codigoSunat || '',
     nombre: parsed.nombre,
     descripcion: parsed.descripcion || '',
     unidad: parsed.unidad,
@@ -45,6 +48,8 @@ function formFromItem(item) {
   return {
     companyRuc: p.companyRuc,
     kind: p.kind,
+    codigo: p.codigo || '',
+    codigoSunat: p.codigoSunat || '',
     nombre: p.nombre,
     descripcion: p.descripcion || '',
     unidad: p.unidad,
@@ -102,7 +107,7 @@ async function list(req, res, next) {
       kinds: catalogItemModel.KINDS,
       flash: parseFlash(req),
       searchAction: '/catalogo',
-      searchPlaceholder: 'Buscar por nombre, descripción o RUC…',
+      searchPlaceholder: 'Buscar por nombre, código, código SUNAT o RUC…',
     });
   } catch (err) {
     next(err);
@@ -225,6 +230,24 @@ async function deactivate(req, res, next) {
   }
 }
 
+async function searchCodigosSunat(req, res, next) {
+  try {
+    const { q, page, pageSize, skip } = parseListQuery({
+      ...req.query,
+      limit: req.query.limit || 40,
+    });
+    const { total, items } = await codigoProductoSunatModel.findPaginated({
+      q,
+      page,
+      pageSize,
+      skip,
+    });
+    res.json({ success: true, items, total, page, pageSize });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function destroy(req, res, next) {
   try {
     const item = await catalogItemModel.findById(req.params.id);
@@ -245,6 +268,24 @@ async function destroy(req, res, next) {
   }
 }
 
+async function searchCodigosSunat(req, res, next) {
+  try {
+    const { q, page, pageSize, skip } = parseListQuery({
+      ...req.query,
+      limit: req.query.limit || 40,
+    });
+    const { total, items } = await codigoProductoSunatModel.findPaginated({
+      q,
+      page,
+      pageSize,
+      skip,
+    });
+    res.json({ success: true, items, total, page, pageSize });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   list,
   showCreateForm,
@@ -254,4 +295,5 @@ module.exports = {
   activate,
   deactivate,
   destroy,
+  searchCodigosSunat,
 };

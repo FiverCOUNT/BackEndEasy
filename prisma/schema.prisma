@@ -68,6 +68,8 @@ model Company {
   tieneWebhook             Boolean? @map("tiene_webhook")
   creadoEn                 String?  @map("creado_en") @db.VarChar(30)
   seriesConfigJson         Json?    @map("series_config")
+  /// Número de Registro MTC (empresas de transporte / GRE pública). Ej: 1588035CNG
+  nroMtc                   String?  @map("nro_mtc") @db.VarChar(40)
 
   usuarios Usuario[]
 
@@ -104,6 +106,10 @@ model SaleDetail {
   id                String   @id @default(uuid()) @db.VarChar(36)
   invoiceId         String?  @map("invoice_id") @db.VarChar(36)
   catalogItemId     String?  @map("catalog_item_id") @db.VarChar(64)
+  /// Código del vendedor / interno en el CPE (no confundir con UNSPSC).
+  codigo            String?  @db.VarChar(64)
+  /// Código producto SUNAT (UNSPSC Cat. 25) del CPE.
+  codigoSunat       String?  @map("codigo_sunat") @db.VarChar(32)
   descripcion       String?  @db.VarChar(500)
   nombre            String?  @db.VarChar(255)
   cantidad          Decimal  @db.Decimal(14, 4)
@@ -125,6 +131,7 @@ model SaleDetail {
   @@index([invoiceId])
   @@index([productoSerieId])
   @@index([catalogItemId])
+  @@index([codigoSunat])
   @@index([estado])
   @@map("sale_details")
 }
@@ -167,6 +174,7 @@ enum MovimientoTipo {
 
 enum MovimientoEstado {
   BORRADOR
+  EN_CAMINO
   DESPACHADA
   ANULADA
 }
@@ -244,6 +252,8 @@ model CatalogItem {
   companyRuc      String          @map("company_ruc") @db.VarChar(11)
   kind            CatalogItemKind
   codigo          String?  @db.VarChar(64)
+  /// Código estandarizado SUNAT (p. ej. UNSPSC / clasificador de bienes y servicios).
+  codigoSunat     String?  @map("codigo_sunat") @db.VarChar(32)
   nombre          String   @db.VarChar(255)
   descripcion     String?  @db.VarChar(500)
   unidad          String   @db.VarChar(10)
@@ -326,34 +336,48 @@ model Cliente {
 }
 
 model Address {
-  id           String  @id @default(uuid()) @db.VarChar(36)
-  ubigeo       String? @db.VarChar(6)
-  departamento String? @db.VarChar(100)
-  provincia    String? @db.VarChar(100)
-  distrito     String? @db.VarChar(100)
-  urbanizacion String? @db.VarChar(100)
-  direccion    String? @db.VarChar(500)
-  codLocal     String? @default("0000") @map("cod_local") @db.VarChar(4)
+  id           String    @id @default(uuid()) @db.VarChar(36)
+  ubigeo       String?   @db.VarChar(6)
+  departamento String?   @db.VarChar(100)
+  provincia    String?   @db.VarChar(100)
+  distrito     String?   @db.VarChar(100)
+  urbanizacion String?   @db.VarChar(100)
+  direccion    String?   @db.VarChar(500)
+  codLocal     String?   @default("0000") @map("cod_local") @db.VarChar(4)
+  /// Si está seteado: ubicación GRE reutilizable de la empresa (antes empresa_ubicaciones).
+  companyRuc   String?   @map("company_ruc") @db.VarChar(11)
+  etiqueta     String?   @db.VarChar(120)
+  creadoEn     DateTime? @default(now()) @map("creado_en")
 
   company Company?
   cliente Cliente?
   almacen Almacen?
-  empresaUbicacion EmpresaUbicacion?
 
+  @@index([companyRuc])
   @@map("addresses")
 }
 
-/// Ubicaciones GRE (partida/destino) guardadas por empresa.
-model EmpresaUbicacion {
-  id         String   @id @default(uuid()) @db.VarChar(36)
-  companyRuc String   @map("company_ruc") @db.VarChar(11)
-  etiqueta   String   @db.VarChar(120)
-  addressId  String   @unique @map("address_id") @db.VarChar(36)
-  address    Address  @relation(fields: [addressId], references: [id], onDelete: Cascade)
-  creadoEn   DateTime @default(now()) @map("creado_en")
+/// Vehículo — tabla sola, sin relaciones.
+/// permisos: lista JSON [{ "tipo": "TUCE", "numero": "15M..." }, ...]
+model Vehiculo {
+  id       String @id @default(uuid()) @db.VarChar(36)
+  placa    String @unique @db.VarChar(15)
+  permisos Json   @default("[]")
 
-  @@index([companyRuc])
-  @@map("empresa_ubicaciones")
+  @@map("vehiculos")
+}
+
+/// Conductor — tabla sola, sin relaciones.
+model Conductor {
+  id               String  @id @default(uuid()) @db.VarChar(36)
+  tipoDoc          String  @default("1") @map("tipo_doc") @db.VarChar(2)
+  numeroDoc        String  @map("numero_doc") @db.VarChar(20)
+  nombresCompletos String  @map("nombres_completos") @db.VarChar(255)
+  licencia         String? @db.VarChar(40)
+
+  @@unique([tipoDoc, numeroDoc])
+  @@index([numeroDoc])
+  @@map("conductores")
 }
 
 model Almacen {
@@ -401,7 +425,7 @@ model Invoice {
   mtoImpVenta             Decimal?          @map("mto_imp_venta") @db.Decimal(14, 4)
   /// Almacén de salida al emitir factura/boleta (inventario post-venta).
   almacenId               String?           @map("almacen_id") @db.VarChar(36)
-  /// Solo guías 09/31: envío, remitente, facturas vinculadas, GRE remitente ref.
+  /// Solo guías 09/31: envío (ubicaciones partida/llegada + transporte). Docs relacionados van en tabla aparte.
   guiaMetaJson            Json?             @map("guia_meta")
   motivoCodigo            String?           @map("motivo_codigo") @db.VarChar(10)
   motivoNota              String?           @map("motivo_nota") @db.VarChar(255)
@@ -411,6 +435,7 @@ model Invoice {
   pdfUrl                  String?           @map("pdf_url") @db.VarChar(500)
   cdrZipUrl               String?           @map("cdr_zip_url") @db.VarChar(500)
   xmlUrlDirecto           String?           @map("xml_url") @db.VarChar(500)
+  /// Adjuntos de usuario (clave → { url, nombre, content_type, size }). Clave = key R2.
   archivosJson            Json?             @map("archivos")
   sunatEstadoDirecto      String?           @map("sunat_estado") @db.VarChar(50)
   sunatCodigoDirecto      String?           @map("sunat_codigo") @db.VarChar(20)
@@ -430,6 +455,9 @@ model Invoice {
   productoSeries          ProductoSerie[]
   movimientosComprobante  Movimiento[]      @relation("MovimientoComprobante")
   movimientosGuiaRemision Movimiento[]      @relation("MovimientoGuiaRemision")
+  /// GRE / CPE → CPEs relacionados (emitidos o recibidos).
+  lineInvoices         LineInvoiceInvoice[] @relation("LineInvoicePrincipal")
+  referenciadoEnLineas LineInvoiceInvoice[] @relation("LineInvoiceRelacionado")
 
   @@unique([companyRuc, tipoDoc, serie, correlativo])
   @@index([companyRuc])
@@ -438,6 +466,55 @@ model Invoice {
   @@index([clienteId])
   @@index([almacenId])
   @@map("invoices")
+}
+
+/// Enlace invoice ↔ invoice relacionado (p. ej. GRE → factura emitida/recibida).
+model LineInvoiceInvoice {
+  id         String   @id @db.VarChar(36)
+  /// Documento principal (p. ej. la GRE).
+  invoiceId  String   @map("invoice_id") @db.VarChar(36)
+  /// CPE relacionado (emitido por ti o recibido de un proveedor).
+  invoice2Id String   @map("invoice2_id") @db.VarChar(36)
+  orden      Int      @default(0)
+  creadoEn   DateTime @default(now()) @map("creado_en")
+
+  invoice  Invoice @relation("LineInvoicePrincipal", fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoice2 Invoice @relation("LineInvoiceRelacionado", fields: [invoice2Id], references: [id], onDelete: Cascade)
+
+  @@unique([invoiceId, invoice2Id], map: "line_inv_inv_unique")
+  @@index([invoiceId], map: "line_inv_inv_invoice_idx")
+  @@index([invoice2Id], map: "line_inv_inv_invoice2_idx")
+  @@map("line_invoice_invoice")
+}
+
+/// Compras registradas por la empresa (p. ej. OCR de factura del proveedor).
+/// Distintas de invoices emitidos en la plataforma; alimentan GRE motivo 02.
+model Compra {
+  id                    String   @id @db.VarChar(36)
+  companyRuc            String   @map("company_ruc") @db.VarChar(11)
+  tipoDoc               String   @default("01") @map("tipo_doc") @db.VarChar(4)
+  serie                 String   @db.VarChar(10)
+  correlativo           String   @db.VarChar(20)
+  fechaEmision          String?  @map("fecha_emision") @db.VarChar(30)
+  tipoMoneda            String   @default("PEN") @map("tipo_moneda") @db.VarChar(3)
+  proveedorTipoDoc      String   @default("6") @map("proveedor_tipo_doc") @db.VarChar(2)
+  proveedorNumeroDoc    String   @map("proveedor_numero_doc") @db.VarChar(15)
+  proveedorRazonSocial  String   @map("proveedor_razon_social") @db.VarChar(255)
+  subTotal              Decimal? @map("sub_total") @db.Decimal(14, 4)
+  mtoIgv                Decimal? @map("mto_igv") @db.Decimal(14, 4)
+  mtoImpVenta           Decimal? @map("mto_imp_venta") @db.Decimal(14, 4)
+  /// Líneas: [{ descripcion, cantidad, unidad, precio_unitario, codigo? }]
+  lineasJson            Json     @map("lineas")
+  origen                String   @default("OCR") @db.VarChar(20)
+  imagenUrl             String?  @map("imagen_url") @db.VarChar(500)
+  observacion           String?  @db.Text
+  creadoEn              DateTime @default(now()) @map("creado_en")
+  actualizadoEn         DateTime @updatedAt @map("actualizado_en")
+
+  @@unique([companyRuc, tipoDoc, serie, correlativo, proveedorNumeroDoc])
+  @@index([companyRuc])
+  @@index([proveedorNumeroDoc])
+  @@map("compras")
 }
 
 /// Configuración global de la app móvil (una sola fila, id = 1).
@@ -468,4 +545,13 @@ model Configuracion {
   actualizadoEn           String? @map("actualizado_en") @db.VarChar(30)
 
   @@map("configuracion")
+}
+
+/// Catálogo N° 25 SUNAT — códigos UNSPSC v14_0801 (español).
+model CodigoProductoSunat {
+  codigo String @id @db.VarChar(8)
+  nombre String @db.VarChar(255)
+
+  @@index([nombre])
+  @@map("codigo_producto_sunat")
 }

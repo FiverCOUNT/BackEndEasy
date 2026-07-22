@@ -1,0 +1,730 @@
+{
+  "sha": "9c6aa09bddf816876349f5ff4c1ae82ef4cf581e",
+  "url": "https://api.github.com/repos/thegreenter/demo/git/trees/9c6aa09bddf816876349f5ff4c1ae82ef4cf581e",
+  "tree": [
+    {
+      "path": ".dockerignore",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "45b4517a0a6b54ee47847f50df28195fa4d78c52",
+      "size": 54,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/45b4517a0a6b54ee47847f50df28195fa4d78c52"
+    },
+    {
+      "path": ".github",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "ec0b01c1b20a56b27a99bcfb3a2a7e62aca94137",
+      "url": "https://api.github.com/repos/thegreenter/demo/git/trees/ec0b01c1b20a56b27a99bcfb3a2a7e62aca94137"
+    },
+    {
+      "path": ".github/workflows",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "05c2aa975922b3f58df8310d93c51a6d808f2e09",
+      "url": "https://api.github.com/repos/thegreenter/demo/git/trees/05c2aa975922b3f58df8310d93c51a6d808f2e09"
+    },
+    {
+      "path": ".github/workflows/php.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "28180cae6e456bec2400f31c4f48206b6d6d7917",
+      "size": 892,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/28180cae6e456bec2400f31c4f48206b6d6d7917"
+    },
+    {
+      "path": ".gitignore",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "86794eda057387593a6450d430a3668cbf9286de",
+      "size": 32,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/86794eda057387593a6450d430a3668cbf9286de"
+    },
+    {
+      "path": "Dockerfile",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3050a06bf527bf21b6434060c5c802e0da5ba004",
+      "size": 1026,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/3050a06bf527bf21b6434060c5c802e0da5ba004"
+    },
+    {
+      "path": "LICENSE",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ceea95e36c9c63bbb273ab8b28bf04bd5bbb1aaf",
+      "size": 1073,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/ceea95e36c9c63bbb273ab8b28bf04bd5bbb1aaf"
+    },
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0a4783ae23b8e19891e3824c6ada52bc6b21560e",
+      "size": 1429,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/0a4783ae23b8e19891e3824c6ada52bc6b21560e"
+    },
+    {
+      "path": "assets",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "57f7f25bedd22bf8abf319edaaadb0c47fb7a962",
+      "url": "https://api.github.com/repos/thegreenter/demo/git/trees/57f7f25bedd22bf8abf319edaaadb0c47fb7a962"
+    },
+    {
+      "path": "assets/demo.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4bf0906aa5923b9becd04262afc98859dcae519f",
+      "size": 3566,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/4bf0906aa5923b9becd04262afc98859dcae519f"
+    },
+    {
+      "path": "assets/style.css",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b2425da1d346b3453af669f850fc8af9833cd592",
+      "size": 1098,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/b2425da1d346b3453af669f850fc8af9833cd592"
+    },
+    {
+      "path": "composer.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9ba0844438595963a90597fb74b7afd47f87489b",
+      "size": 1115,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/9ba0844438595963a90597fb74b7afd47f87489b"
+    },
+    {
+      "path": "composer.lock",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f7efc063ceffb5db683de676e80902df0a2b296e",
+      "size": 67067,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/f7efc063ceffb5db683de676e80902df0a2b296e"
+    },
+    {
+      "path": "composer",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "6e23f50515c991b09cc0b6fa605d82096160b948",
+      "url": "https://api.github.com/repos/thegreenter/demo/git/trees/6e23f50515c991b09cc0b6fa605d82096160b948"
+    },
+    {
+      "path": "composer/ClearCache.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "feb5b63566fc08ceb61f2fa46a9699e00b9de08b",
+      "size": 745,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/feb5b63566fc08ceb61f2fa46a9699e00b9de08b"
+    },
+    {
+      "path": "composer/PostInstall.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2b6725cc75cf43092640e07d9c7974f3688ebe02",
+      "size": 2926,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/2b6725cc75cf43092640e07d9c7974f3688ebe02"
+    },
+    {
+      "path": "docker",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "74205f74a4ed3cd11af661ee55270452b265d604",
+      "url": "https://api.github.com/repos/thegreenter/demo/git/trees/74205f74a4ed3cd11af661ee55270452b265d604"
+    },
+    {
+      "path": "docker/config",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "e1ec961aed4580466ac2372281d9e09d7e9d2620",
+      "url": "https://api.github.com/repos/thegreenter/demo/git/trees/e1ec961aed4580466ac2372281d9e09d7e9d2620"
+    },
+    {
+      "path": "docker/config/opcache.ini",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a88085746cb1febb6b5bf4a60ae6b6a7b40199b3",
+      "size": 191,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/a88085746cb1febb6b5bf4a60ae6b6a7b40199b3"
+    },
+    {
+      "path": "docs.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ca9eca9c2737aacef9f17413be9780fb759ce2e0",
+      "size": 5493,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/ca9eca9c2737aacef9f17413be9780fb759ce2e0"
+    },
+    {
+      "path": "examples",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "9549dbc3439c6a7d8682320b8648f07f3527f92c",
+      "url": "https://api.github.com/repos/thegreenter/demo/git/trees/9549dbc3439c6a7d8682320b8648f07f3527f92c"
+    },
+    {
+      "path": "examples/boleta-icbper.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "54a4672861c5b1d3f0923ed9752d24f640261c97",
+      "size": 2402,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/54a4672861c5b1d3f0923ed9752d24f640261c97"
+    },
+    {
+      "path": "examples/boleta.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a8fec7d3f21f769894006384696ecedefb324e09",
+      "size": 1816,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/a8fec7d3f21f769894006384696ecedefb324e09"
+    },
+    {
+      "path": "examples/comunicacion-baja.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "cdeb81138331ba01e3d1aea509280a7c8a1a0ff1",
+      "size": 1466,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/cdeb81138331ba01e3d1aea509280a7c8a1a0ff1"
+    },
+    {
+      "path": "examples/factura-anticipo.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d377af87bc398789491c2c55dbb2b4a5020498e9",
+      "size": 2447,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/d377af87bc398789491c2c55dbb2b4a5020498e9"
+    },
+    {
+      "path": "examples/factura-beatose.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a4106a9fcec2bd66b3ad03463c5fcf1b87da77c3",
+      "size": 2036,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/a4106a9fcec2bd66b3ad03463c5fcf1b87da77c3"
+    },
+    {
+      "path": "examples/factura-compleja.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "752c4ad3a97b2d87c016d4c21ab4213f75ecbd64",
+      "size": 3806,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/752c4ad3a97b2d87c016d4c21ab4213f75ecbd64"
+    },
+    {
+      "path": "examples/factura-contingencia.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "8db2f25dab1e49939f330a3113e20c3ab9f80d83",
+      "size": 1799,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/8db2f25dab1e49939f330a3113e20c3ab9f80d83"
+    },
+    {
+      "path": "examples/factura-credito.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c583fc1a4281ea94737c5e89910bfb8de4776f75",
+      "size": 2295,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/c583fc1a4281ea94737c5e89910bfb8de4776f75"
+    },
+    {
+      "path": "examples/factura-descuento-global.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "fb27493c23331d40fe5d502f8b47bd070f7e459a",
+      "size": 2505,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/fb27493c23331d40fe5d502f8b47bd070f7e459a"
+    },
+    {
+      "path": "examples/factura-descuento-linea.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e5f165ef74849409732131f9ff548c5b3c91d23a",
+      "size": 2684,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/e5f165ef74849409732131f9ff548c5b3c91d23a"
+    },
+    {
+      "path": "examples/factura-descuento-nobase.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7f744e8ff9fde85721b53321d0f3cac65da712b1",
+      "size": 2657,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/7f744e8ff9fde85721b53321d0f3cac65da712b1"
+    },
+    {
+      "path": "examples/factura-detraccion.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "726ce97ee6a6905fa84d813c7f3daf2a5395f6b3",
+      "size": 2380,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/726ce97ee6a6905fa84d813c7f3daf2a5395f6b3"
+    },
+    {
+      "path": "examples/factura-exonerado.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6bf828ea37470f486c3863876799cd6fc7979c58",
+      "size": 1765,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/6bf828ea37470f486c3863876799cd6fc7979c58"
+    },
+    {
+      "path": "examples/factura-exportacion.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2cbe8ecb363f3434ae6881362229aac187df8843",
+      "size": 2025,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/2cbe8ecb363f3434ae6881362229aac187df8843"
+    },
+    {
+      "path": "examples/factura-gratuita.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2c1b01c4c5e9d14f17409aa05377bb12f6737244",
+      "size": 1865,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/2c1b01c4c5e9d14f17409aa05377bb12f6737244"
+    },
+    {
+      "path": "examples/factura-icbper-gratuita.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4fc2e185c27214a5b6146795510af2355d51ebb6",
+      "size": 2447,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/4fc2e185c27214a5b6146795510af2355d51ebb6"
+    },
+    {
+      "path": "examples/factura-icbper.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "94541883c4b3e161f4934c2418a169a6e9456971",
+      "size": 2343,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/94541883c4b3e161f4934c2418a169a6e9456971"
+    },
+    {
+      "path": "examples/factura-inafecta.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "095d3f12006e623b236505036b7f8330b8c9b224",
+      "size": 1762,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/095d3f12006e623b236505036b7f8330b8c9b224"
+    },
+    {
+      "path": "examples/factura-isc.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "77c681755d73fef4cb9a8d442d0cc6d2b1eb925e",
+      "size": 2367,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/77c681755d73fef4cb9a8d442d0cc6d2b1eb925e"
+    },
+    {
+      "path": "examples/factura-ivap.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0ac8669d9b23dce63bc64030cb4db90163f96070",
+      "size": 2063,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/0ac8669d9b23dce63bc64030cb4db90163f96070"
+    },
+    {
+      "path": "examples/factura-percepcion.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "886597ab300fc985e82175b490228442a09dba1d",
+      "size": 2154,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/886597ab300fc985e82175b490228442a09dba1d"
+    },
+    {
+      "path": "examples/factura-rel-guia-remision.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "61a21f272d56c6c17f6742e35cb9fb2bef9a264b",
+      "size": 2111,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/61a21f272d56c6c17f6742e35cb9fb2bef9a264b"
+    },
+    {
+      "path": "examples/factura-retencion.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f709a176eaa6659b86a715a53e51e6ab2aba2ed9",
+      "size": 2081,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/f709a176eaa6659b86a715a53e51e6ab2aba2ed9"
+    },
+    {
+      "path": "examples/factura.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "34f935d30fd32fefee4a097510f0606a2ae598aa",
+      "size": 2461,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/34f935d30fd32fefee4a097510f0606a2ae598aa"
+    },
+    {
+      "path": "examples/guia-extra-atributos.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "59cbedd1ff8a986b6e1cf5400ae08a83858a2a5e",
+      "size": 2615,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/59cbedd1ff8a986b6e1cf5400ae08a83858a2a5e"
+    },
+    {
+      "path": "examples/guia-misma-empresa.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "aa9227d063b55a9c09f55dfc414c3dadb68b4c59",
+      "size": 2186,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/aa9227d063b55a9c09f55dfc414c3dadb68b4c59"
+    },
+    {
+      "path": "examples/guia-remision.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b40434102b7282e25e1a9f3df83d71a298a9c803",
+      "size": 2161,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/b40434102b7282e25e1a9f3df83d71a298a9c803"
+    },
+    {
+      "path": "examples/guia-transporteM1L.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "959290466f634c2b8d625a680f372b3312d61459",
+      "size": 2018,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/959290466f634c2b8d625a680f372b3312d61459"
+    },
+    {
+      "path": "examples/guia-transportePrivado.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9fa0fd9a14295d4f0167675195c0edd5a3a94d72",
+      "size": 2405,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/9fa0fd9a14295d4f0167675195c0edd5a3a94d72"
+    },
+    {
+      "path": "examples/nota-credito-boleta.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7b0fe88cfc646436f3073ac3a4a90a2762ed7ec3",
+      "size": 2225,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/7b0fe88cfc646436f3073ac3a4a90a2762ed7ec3"
+    },
+    {
+      "path": "examples/nota-credito-forma-pago.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b2c93cde1bd78e38e09657834add0250b4c71d97",
+      "size": 2633,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/b2c93cde1bd78e38e09657834add0250b4c71d97"
+    },
+    {
+      "path": "examples/nota-credito.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b02008cd6e2aacdc02b46c4d83fb9079fb7b1f5a",
+      "size": 2325,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/b02008cd6e2aacdc02b46c4d83fb9079fb7b1f5a"
+    },
+    {
+      "path": "examples/nota-debito.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b9a0ce3ccd87f25462972fc30877eec4ae264466",
+      "size": 2079,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/b9a0ce3ccd87f25462972fc30877eec4ae264466"
+    },
+    {
+      "path": "examples/pages",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "50b6ce0cde710054b9bb84c610a98c0ecd3e8967",
+      "url": "https://api.github.com/repos/thegreenter/demo/git/trees/50b6ce0cde710054b9bb84c610a98c0ecd3e8967"
+    },
+    {
+      "path": "examples/pages/cdr-viewer.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "527ecdc76656ec078ab80e9b6d13b4117ca2e910",
+      "size": 905,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/527ecdc76656ec078ab80e9b6d13b4117ca2e910"
+    },
+    {
+      "path": "examples/pages/status-cdr.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7ea7b89a6af36570a46e49a6be1425b3c80a5866",
+      "size": 10136,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/7ea7b89a6af36570a46e49a6be1425b3c80a5866"
+    },
+    {
+      "path": "examples/percepcion.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9ca51d620eceed9aa31b4593c53c87c46e594e9b",
+      "size": 1714,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/9ca51d620eceed9aa31b4593c53c87c46e594e9b"
+    },
+    {
+      "path": "examples/report",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "ac5bfe8a2355ba8bcc9062106515d9c32a2ec0e5",
+      "url": "https://api.github.com/repos/thegreenter/demo/git/trees/ac5bfe8a2355ba8bcc9062106515d9c32a2ec0e5"
+    },
+    {
+      "path": "examples/report/boleta.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "506ea3b8147b6ea7545129d437a445faec95c29a",
+      "size": 1222,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/506ea3b8147b6ea7545129d437a445faec95c29a"
+    },
+    {
+      "path": "examples/report/despatch.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d41c30f2994f01d3dc1843c53f62717a308691d8",
+      "size": 345,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/d41c30f2994f01d3dc1843c53f62717a308691d8"
+    },
+    {
+      "path": "examples/report/factura.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "744b0d122cd732872c4332de7138d348a6c6f428",
+      "size": 360,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/744b0d122cd732872c4332de7138d348a6c6f428"
+    },
+    {
+      "path": "examples/report/icbper.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1011bb8b4cce9627f75c3ce4517022dc8ccabf1a",
+      "size": 372,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/1011bb8b4cce9627f75c3ce4517022dc8ccabf1a"
+    },
+    {
+      "path": "examples/report/nota-credito.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "8915bfc4353eed8d9daa2e92f847cc6c5611be6f",
+      "size": 330,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/8915bfc4353eed8d9daa2e92f847cc6c5611be6f"
+    },
+    {
+      "path": "examples/report/nota-debito.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "86373ac6a7ac944d9db38e73dfdf50210ca7c9ba",
+      "size": 1325,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/86373ac6a7ac944d9db38e73dfdf50210ca7c9ba"
+    },
+    {
+      "path": "examples/report/percepcion.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c9586dc2d2cfea3a5c231ab925834acca5f90f20",
+      "size": 348,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/c9586dc2d2cfea3a5c231ab925834acca5f90f20"
+    },
+    {
+      "path": "examples/report/retencion.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b13f03af004a5b36da9ba54ef8de8e99adf8b55d",
+      "size": 347,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/b13f03af004a5b36da9ba54ef8de8e99adf8b55d"
+    },
+    {
+      "path": "examples/report/reversion.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b13f03af004a5b36da9ba54ef8de8e99adf8b55d",
+      "size": 347,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/b13f03af004a5b36da9ba54ef8de8e99adf8b55d"
+    },
+    {
+      "path": "examples/report/summary.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a8d2376484f65af07b1ff7355a980dff77fcf405",
+      "size": 344,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/a8d2376484f65af07b1ff7355a980dff77fcf405"
+    },
+    {
+      "path": "examples/report/voided.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2f4010337b93d92f07feb820771d6e846c22a090",
+      "size": 343,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/2f4010337b93d92f07feb820771d6e846c22a090"
+    },
+    {
+      "path": "examples/resumen-contingencia.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "662a3d9f0575478b26d4abab525b95d52b57bc08",
+      "size": 1394,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/662a3d9f0575478b26d4abab525b95d52b57bc08"
+    },
+    {
+      "path": "examples/resumen-usd.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "398c6a101cec5c9b62ccdd2ef9447f7a1ce8b1bb",
+      "size": 1439,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/398c6a101cec5c9b62ccdd2ef9447f7a1ce8b1bb"
+    },
+    {
+      "path": "examples/resumen.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4c2d625917acc81217344a6e28734733317847bc",
+      "size": 2535,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/4c2d625917acc81217344a6e28734733317847bc"
+    },
+    {
+      "path": "examples/retencion.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "36616615c6a846c8a93a5e5a1adba2d47c9b15f9",
+      "size": 1698,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/36616615c6a846c8a93a5e5a1adba2d47c9b15f9"
+    },
+    {
+      "path": "examples/reversion.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "61326b09ea15310f182ff872c3d06dafdd265821",
+      "size": 1421,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/61326b09ea15310f182ff872c3d06dafdd265821"
+    },
+    {
+      "path": "examples/scripts",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "7bf32437b545846b00110ef0baa201be5c2b23bd",
+      "url": "https://api.github.com/repos/thegreenter/demo/git/trees/7bf32437b545846b00110ef0baa201be5c2b23bd"
+    },
+    {
+      "path": "examples/scripts/leer-cdr-file.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0fd7ab26a86f8e4980b330206d78eea94d1e91f1",
+      "size": 890,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/0fd7ab26a86f8e4980b330206d78eea94d1e91f1"
+    },
+    {
+      "path": "greenter.ico",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b8b45e579a7c5d7f050838a1ffcb3d96775e78ad",
+      "size": 179093,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/b8b45e579a7c5d7f050838a1ffcb3d96775e78ad"
+    },
+    {
+      "path": "index.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3c0e3363414b68d9f147a01aa6cee92a91ea4d51",
+      "size": 2906,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/3c0e3363414b68d9f147a01aa6cee92a91ea4d51"
+    },
+    {
+      "path": "phpstan.neon",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e951e2343916f6d59c7cf4de7f0fbf7d7c74f9f4",
+      "size": 225,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/e951e2343916f6d59c7cf4de7f0fbf7d7c74f9f4"
+    },
+    {
+      "path": "resources",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "8f3e775e54fba3c0f3fe15103e9a1b4077f89f76",
+      "url": "https://api.github.com/repos/thegreenter/demo/git/trees/8f3e775e54fba3c0f3fe15103e9a1b4077f89f76"
+    },
+    {
+      "path": "resources/cert.pem",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c322090d2fbf067f145a25ea0d1babd938138c84",
+      "size": 5248,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/c322090d2fbf067f145a25ea0d1babd938138c84"
+    },
+    {
+      "path": "resources/footer.html",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "990ed734729fc7f2e5a017d15e77976e4dbb9a09",
+      "size": 322,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/990ed734729fc7f2e5a017d15e77976e4dbb9a09"
+    },
+    {
+      "path": "resources/greenter-icon.svg",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "400ef2c9898a1b6b63e438bcaafb6fd70b0d7ac7",
+      "size": 1150,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/400ef2c9898a1b6b63e438bcaafb6fd70b0d7ac7"
+    },
+    {
+      "path": "resources/logo.png",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ef3cbbeb8b1b6b210d206baa8c51f4fd6ecb3077",
+      "size": 6114,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/ef3cbbeb8b1b6b210d206baa8c51f4fd6ecb3077"
+    },
+    {
+      "path": "src",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "be43e32dbbd7c7431f36aab7b6b99d2c3e6d96b8",
+      "url": "https://api.github.com/repos/thegreenter/demo/git/trees/be43e32dbbd7c7431f36aab7b6b99d2c3e6d96b8"
+    },
+    {
+      "path": "src/Util.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "05fe18060a72aa542b899f28790e8f3997961d77",
+      "size": 7322,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/05fe18060a72aa542b899f28790e8f3997961d77"
+    },
+    {
+      "path": "views",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "fbf5188bec8b9852642cd68bfafb9ba248bfebb6",
+      "url": "https://api.github.com/repos/thegreenter/demo/git/trees/fbf5188bec8b9852642cd68bfafb9ba248bfebb6"
+    },
+    {
+      "path": "views/footer.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "dc2894200cd79cdc57ed2bd8c8b995d4b465bd88",
+      "size": 278,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/dc2894200cd79cdc57ed2bd8c8b995d4b465bd88"
+    },
+    {
+      "path": "views/head.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a773fbeb6fbd5c4734b7a3a45207a0aa1d89ada9",
+      "size": 491,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/a773fbeb6fbd5c4734b7a3a45207a0aa1d89ada9"
+    },
+    {
+      "path": "views/response.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e46dd3fb36aa3a85425e50ff725a7dbe19211c3f",
+      "size": 1482,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/e46dd3fb36aa3a85425e50ff725a7dbe19211c3f"
+    },
+    {
+      "path": "views/top.php",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e2815b30ddd1b93b66d9e5a8332da34fc6cee5cc",
+      "size": 2334,
+      "url": "https://api.github.com/repos/thegreenter/demo/git/blobs/e2815b30ddd1b93b66d9e5a8332da34fc6cee5cc"
+    }
+  ],
+  "truncated": false
+}

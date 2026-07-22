@@ -142,6 +142,25 @@
 </fieldset>
 
 <fieldset class="fieldset">
+  <legend>Transporte / MTC</legend>
+  <div class="form-grid">
+    <div class="field">
+      <label for="nroMtc">Número de Registro MTC</label>
+      <input
+        type="text"
+        id="nroMtc"
+        name="nroMtc"
+        value="<%= form.nroMtc || '' %>"
+        maxlength="40"
+        placeholder="1588035CNG"
+        autocomplete="off"
+      />
+      <p class="field-hint">Obligatorio para empresas de transporte (GRE modalidad pública). Se usa como <code>nro_mtc</code> del transportista.</p>
+    </div>
+  </div>
+</fieldset>
+
+<fieldset class="fieldset">
   <legend>SUNAT / SOL</legend>
   <div class="form-grid">
     <div class="field">

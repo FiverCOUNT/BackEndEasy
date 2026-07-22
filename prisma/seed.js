@@ -185,6 +185,18 @@ async function main() {
 
   console.log('Insertando usuario...');
   const contrasenaHash = await bcrypt.hash('demo123', 10);
+
+  // Admin de plataforma (panel web, sin empresa).
+  await prisma.usuario.create({
+    data: {
+      email: 'admin@factapp.local',
+      contrasena: await bcrypt.hash('Admin123!', 10),
+      lastUpdated: now,
+      estado: 'ACTIVO',
+      rol: 'ADMIN',
+    },
+  });
+
   await prisma.usuario.create({
     data: {
       email: 'demo@empresademo.pe',
