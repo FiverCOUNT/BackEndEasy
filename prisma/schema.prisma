@@ -259,6 +259,8 @@ model CatalogItem {
   precioCompra    Decimal? @map("precio_compra") @db.Decimal(14, 4)
   /// YYYY-MM-DD. Solo productos que vencen; null en el resto.
   fechaVencimiento String? @map("fecha_vencimiento") @db.VarChar(10)
+  /// Código de lote del producto. Vacío si no aplica.
+  lote            String?  @db.VarChar(64)
   afectacionIgv   String   @default("10") @map("afectacion_igv") @db.VarChar(4)
   activo          Boolean  @default(true)
   manejaStock     Boolean  @default(false) @map("maneja_stock")

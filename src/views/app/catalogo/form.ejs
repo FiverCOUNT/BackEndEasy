@@ -76,6 +76,10 @@
           <span>Precio de compra</span>
           <input type="number" name="precioCompra" value="<%= form.precioCompra || '' %>" min="0" step="0.01" placeholder="Opcional" />
         </label>
+        <label class="ios-field" id="loteWrap">
+          <span>Lote</span>
+          <input type="text" name="lote" value="<%= form.lote || '' %>" maxlength="64" placeholder="Ej. L-2026-014" />
+        </label>
         <label class="ios-field" id="fechaVenceWrap">
           <span>Fecha de vencimiento</span>
           <input type="date" name="fechaVencimiento" value="<%= form.fechaVencimiento || '' %>" />
@@ -154,6 +158,6 @@
   </div>
 
   <%- include('../../partials/app-tabbar', { active: active }) %>
-  <script src="/js/app-catalogo.js?v=precio-vence"></script>
+  <script src="/js/app-catalogo.js?v=lote"></script>
 </body>
 </html>

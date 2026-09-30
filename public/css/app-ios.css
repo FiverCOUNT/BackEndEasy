@@ -1659,6 +1659,12 @@ a.ios-selected-card-change {
 }
 .ios-catalog-title strong { font-size: 16px; font-weight: 600; }
 .ios-catalog-sub { font-size: 12px; color: var(--ios-muted); margin-top: 2px; }
+.ios-catalog-lote {
+  margin-top: 2px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #007AFF;
+}
 .ios-catalog-stock { font-size: 12px; color: var(--ios-navy); margin-top: 4px; font-weight: 500; }
 .ios-catalog-right {
   display: flex;

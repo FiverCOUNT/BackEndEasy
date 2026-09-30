@@ -32,6 +32,7 @@ function toApi(item) {
     precio_unitario: toNumber(item.precioUnitario) ?? 0,
     precio_compra: toNumber(item.precioCompra),
     fecha_vencimiento: item.fechaVencimiento || null,
+    lote: item.lote || null,
     afectacion_igv: item.afectacionIgv,
     activo: item.activo !== false,
     maneja_stock: Boolean(item.manejaStock),
@@ -51,6 +52,7 @@ function toPublic(item) {
     precioUnitario: api.precio_unitario,
     precioCompra: api.precio_compra,
     fechaVencimiento: api.fecha_vencimiento,
+    lote: api.lote,
     afectacionIgv: api.afectacion_igv,
     manejaStock: api.maneja_stock,
     manejaSerie: api.maneja_serie,
@@ -96,6 +98,12 @@ function parsePrecioOpcional(value) {
   return n;
 }
 
+function parseLote(body) {
+  if (body.lote === undefined) return undefined;
+  const s = String(body.lote ?? '').trim().slice(0, 64);
+  return s || null;
+}
+
 function parseFecha(value) {
   const s = String(value ?? '').trim().slice(0, 10);
   if (!s) return null;
@@ -129,6 +137,7 @@ function parseBody(body) {
     fechaVencimiento: isProduct
       ? parseFecha(body.fechaVencimiento ?? body.fecha_vencimiento)
       : null,
+    lote: isProduct ? parseLote(body) : null,
     afectacionIgv: (body.afectacionIgv || body.afectacion_igv || '10').trim(),
     activo: parseBool(body.activo, true),
     manejaStock:
@@ -347,6 +356,7 @@ async function create(body, id = randomUUID()) {
       precioUnitario: data.precioUnitario,
       precioCompra: data.precioCompra,
       fechaVencimiento: data.fechaVencimiento,
+      lote: data.lote || null,
       afectacionIgv: data.afectacionIgv,
       activo: data.activo,
       manejaStock,
@@ -432,6 +442,7 @@ async function update(id, body) {
       precioUnitario: data.precioUnitario,
       precioCompra: data.precioCompra,
       fechaVencimiento: data.fechaVencimiento,
+      ...(data.lote !== undefined ? { lote: data.lote } : {}),
       afectacionIgv: data.afectacionIgv,
       activo: data.activo,
       manejaStock,

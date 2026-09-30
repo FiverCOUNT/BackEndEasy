@@ -100,6 +100,10 @@
                       <% if (compra != null && compra !== '') { %>
                         <br><span class="muted">Compra <%= Number(compra).toFixed(2) %></span>
                       <% } %>
+                      <% var lote = it.lote || ''; %>
+                      <% if (lote) { %>
+                        <br><span class="muted">Lote <%= lote %></span>
+                      <% } %>
                       <% var vence = it.fechaVencimiento || it.fecha_vencimiento; %>
                       <% if (vence) { %>
                         <br><span class="muted">Vence <%= vence %></span>

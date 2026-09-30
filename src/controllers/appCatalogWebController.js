@@ -39,6 +39,7 @@ function formFromBody(body, companyRuc) {
     fechaVencimiento: parsed.kind === 'SERVICE'
       ? ''
       : (parsed.fechaVencimiento || String(body.fechaVencimiento || body.fecha_vencimiento || '').trim().slice(0, 10)),
+    lote: parsed.kind === 'SERVICE' ? '' : (parsed.lote || ''),
     afectacionIgv: parsed.afectacionIgv || '10',
     activo: parsed.activo,
     manejaStock: parsed.manejaStock,
@@ -61,6 +62,7 @@ function formFromItem(item) {
     precioUnitario: String(p.precioUnitario ?? 0),
     precioCompra: p.precioCompra != null ? String(p.precioCompra) : '',
     fechaVencimiento: p.fechaVencimiento || '',
+    lote: p.lote || '',
     afectacionIgv: p.afectacionIgv || '10',
     activo: p.activo,
     manejaStock: p.manejaStock,
@@ -174,6 +176,7 @@ async function list(req, res, next) {
           ? formatMoney(it.precioCompra ?? it.precio_compra)
           : null,
         venceLabel: formatVence(it.fechaVencimiento || it.fecha_vencimiento),
+        loteLabel: String(it.lote || '').trim() || null,
       })),
       total,
       q,
@@ -207,6 +210,7 @@ async function showCreateForm(req, res, next) {
         precioUnitario: '',
         precioCompra: '',
         fechaVencimiento: '',
+        lote: '',
         codigo: '',
         codigoSunat: '',
         codigoSunatNombre: '',
