@@ -8,6 +8,7 @@ const {
   resolveAlmacenFromBody,
   resolveAlmacenFromQuery,
 } = require('../utils/almacenAccess');
+const { parseMobileListQuery, sendMobilePage } = require('../utils/pagination');
 
 async function list(req, res, next) {
   try {
@@ -156,26 +157,59 @@ async function listMovimientos(req, res, next) {
     const tipo = (req.query.tipo || '').trim().toUpperCase() || null;
     const clienteId =
       (req.query.cliente_id || req.query.clienteId || '').trim() || null;
+    const { page, pageSize, skip } = parseMobileListQuery(req.query);
 
     if (req.userRol !== 'ADMIN' && !req.userAlmacenId) {
-      return res.json([]);
+      return sendMobilePage(res, { items: [], total: 0, page, pageSize });
     }
 
     const almacenId = resolveAlmacenFromQuery(req, { required: false });
 
-    const items = clienteId
+    const result = clienteId
       ? await movimientoModel.findByCliente({
           companyRuc: req.companyRuc,
           clienteId,
           almacenId,
+          skip,
+          take: pageSize,
         })
       : await movimientoModel.findMany({
           companyRuc: req.companyRuc,
           tipo,
           almacenId,
+          skip,
+          take: pageSize,
         });
 
-    res.json(items);
+    return sendMobilePage(res, {
+      items: result.items,
+      total: result.total,
+      page,
+      pageSize,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function getMovimientoById(req, res, next) {
+  try {
+    const id = String(req.params.id || '').trim();
+    if (!id) {
+      return res.status(400).json({ success: false, message: 'ID de movimiento requerido' });
+    }
+    const row = await movimientoModel.findById(id, req.companyRuc);
+    if (!row) {
+      return res.status(404).json({ success: false, message: 'Movimiento no encontrado' });
+    }
+    if (
+      req.userRol !== 'ADMIN' &&
+      row.almacen_id !== normalizeAlmacenId(req.userAlmacenId) &&
+      row.almacen_destino_id !== normalizeAlmacenId(req.userAlmacenId)
+    ) {
+      return res.status(403).json({ success: false, message: 'No puede consultar este movimiento' });
+    }
+    res.json(row);
   } catch (err) {
     next(err);
   }
@@ -295,6 +329,7 @@ async function ejecutarRegistroMovimiento(req, res, next, { tipoFijo = null, con
       almacenId,
       lineas,
       observaciones,
+      usuarioId: req.userId ?? null,
     };
 
     if (tipo === 'ENTRADA') {
@@ -312,6 +347,12 @@ async function ejecutarRegistroMovimiento(req, res, next, { tipoFijo = null, con
       params.almacenDestinoId = normalizeAlmacenId(
         req.body.almacen_destino_id ?? req.body.almacenDestinoId,
       );
+      if (params.almacenDestinoId && req.userRol !== 'ADMIN') {
+        return res.status(403).json({
+          success: false,
+          message: 'Solo un administrador puede trasladar entre almacenes',
+        });
+      }
       if (params.almacenDestinoId && params.almacenDestinoId === almacenId) {
         return res.status(400).json({
           success: false,
@@ -425,19 +466,28 @@ async function listDevolucionesPendientes(req, res, next) {
 
 async function listSalidas(req, res, next) {
   try {
+    const { page, pageSize, skip } = parseMobileListQuery(req.query);
+
     if (req.userRol !== 'ADMIN' && !req.userAlmacenId) {
-      return res.json([]);
+      return sendMobilePage(res, { items: [], total: 0, page, pageSize });
     }
 
     const almacenId = resolveAlmacenFromQuery(req, { required: false });
 
-    const items = await movimientoModel.findMany({
+    const result = await movimientoModel.findMany({
       companyRuc: req.companyRuc,
       tipo: 'SALIDA',
       almacenId,
+      skip,
+      take: pageSize,
     });
 
-    res.json(items);
+    return sendMobilePage(res, {
+      items: result.items,
+      total: result.total,
+      page,
+      pageSize,
+    });
   } catch (err) {
     next(err);
   }
@@ -449,6 +499,7 @@ module.exports = {
   setSaldo,
   adjustSaldo,
   listMovimientos,
+  getMovimientoById,
   registrarMovimiento,
   registrarEntrada,
   registrarSalida,

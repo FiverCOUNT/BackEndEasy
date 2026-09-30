@@ -56,30 +56,35 @@ function normalizeIncomingLineas(rawLineas) {
     const numeroSerie = String(
       raw.numero_serie || raw.numeroSerie || raw.producto_serie?.numeroSerie || '',
     ).trim();
+    const almacenId = String(raw.almacen_id || raw.almacenId || '').trim();
     const legacyIds = normalizeStringArray(raw.serie_ids || raw.serieIds);
     const legacyNumeros = normalizeStringArray(raw.series || raw.numeros_serie || raw.numerosSerie);
+    const base = {
+      catalogItemId,
+      almacenId: almacenId || undefined,
+    };
 
     if (productoSerieId) {
-      out.push({ catalogItemId, cantidad: cantidad || 1, productoSerieId, numeroSerie: '' });
+      out.push({ ...base, cantidad: cantidad || 1, productoSerieId, numeroSerie: '' });
       continue;
     }
     if (numeroSerie) {
-      out.push({ catalogItemId, cantidad: 1, productoSerieId: '', numeroSerie });
+      out.push({ ...base, cantidad: 1, productoSerieId: '', numeroSerie });
       continue;
     }
     if (legacyIds.length > 0) {
       for (const id of legacyIds) {
-        out.push({ catalogItemId, cantidad: 1, productoSerieId: id, numeroSerie: '' });
+        out.push({ ...base, cantidad: 1, productoSerieId: id, numeroSerie: '' });
       }
       continue;
     }
     if (legacyNumeros.length > 0) {
       for (const num of legacyNumeros) {
-        out.push({ catalogItemId, cantidad: 1, productoSerieId: '', numeroSerie: num });
+        out.push({ ...base, cantidad: 1, productoSerieId: '', numeroSerie: num });
       }
       continue;
     }
-    out.push({ catalogItemId, cantidad, productoSerieId: '', numeroSerie: '' });
+    out.push({ ...base, cantidad, productoSerieId: '', numeroSerie: '' });
   }
   return out;
 }
@@ -87,7 +92,7 @@ function normalizeIncomingLineas(rawLineas) {
 function toApiLinea(linea) {
   return {
     linea_id: linea.lineaId,
-    id: linea.externalId,
+    id: linea.lineaId,
     catalog_item_id: linea.catalogItemId,
     nombre: linea.nombre,
     codigo: linea.codigo,
@@ -97,7 +102,7 @@ function toApiLinea(linea) {
     afectacion_igv: linea.afectacionIgv,
     kind: linea.kind,
     maneja_stock: linea.manejaStock,
-    maneja_serie: linea.manejaSerie,
+    maneja_serie: Boolean(linea.manejaSerie || linea.catalogItem?.manejaSerie),
     cantidad: toNumber(linea.cantidad),
     almacen_id: linea.almacenId,
     producto_serie_id: linea.productoSerieId,
@@ -111,6 +116,22 @@ function toApiCliente(cliente) {
     tipo_doc: cliente.tipoDoc,
     numero_doc: cliente.numeroDoc,
     razon_social: cliente.razonSocial,
+  };
+}
+
+function toApiUsuario(usuario) {
+  if (!usuario) return undefined;
+  const email = String(usuario.email || '').trim();
+  if (!email) return undefined;
+  const local = email.split('@')[0] || email;
+  const nombre = local
+    .replace(/[._-]+/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+    .trim();
+  return {
+    id: usuario.id,
+    email,
+    nombre: nombre || email,
   };
 }
 
@@ -133,17 +154,25 @@ function toApiMovimiento(row) {
     fecha_despacho: toApiTimestamp(row.fechaDespacho),
     cliente_id: row.clienteId || undefined,
     cliente: toApiCliente(row.cliente),
+    usuario_id: row.usuarioId ?? undefined,
+    usuario: toApiUsuario(row.usuario),
     lineas: (row.lineas || []).map(toApiLinea),
   };
 }
 
 const movimientoInclude = {
   lineas: {
-    include: { productoSerie: true },
+    include: {
+      productoSerie: true,
+      catalogItem: { select: { id: true, manejaSerie: true } },
+    },
     orderBy: { lineaId: 'asc' },
   },
   cliente: {
     select: { tipoDoc: true, numeroDoc: true, razonSocial: true },
+  },
+  usuario: {
+    select: { id: true, email: true },
   },
 };
 function snapshotLineaFromItem(item, { almacenId, cantidad, productoSerieId }) {
@@ -177,28 +206,118 @@ async function nextNumeroSalida(companyRuc, tx) {
   const count = await client.movimiento.count({
     where: { companyRuc, tipo: 'SALIDA' },
   });
-  return `ENT-${String(count + 1).padStart(4, '0')}`;
+  return `SAL-${String(count + 1).padStart(4, '0')}`;
 }
 
-async function findMany({ companyRuc, tipo = null, almacenId = null }) {
+function buildMovimientoWhere({
+  companyRuc,
+  tipo = null,
+  almacenId = null,
+  usuarioId = null,
+  referenciaTipo = null,
+  soloTraslado = false,
+  sinGuia = false,
+}) {
   const where = { companyRuc };
   if (tipo) where.tipo = tipo;
-  if (almacenId) where.almacenId = almacenId;
+  if (almacenId) {
+    where.AND = [
+      ...(where.AND || []),
+      { OR: [{ almacenId }, { almacenDestinoId: almacenId }] },
+    ];
+  }
+  if (usuarioId != null && Number.isFinite(Number(usuarioId))) {
+    where.usuarioId = Number(usuarioId);
+  }
+  if (referenciaTipo) where.referenciaTipo = String(referenciaTipo).trim();
+  if (soloTraslado) {
+    where.OR = [
+      { referenciaTipo: 'TRASLADO' },
+      { almacenDestinoId: { not: null } },
+    ];
+  }
+  if (sinGuia) {
+    where.guiaRemisionId = null;
+  }
+  return where;
+}
 
-  const rows = await prisma.movimiento.findMany({
-    where,
+async function findById(id, companyRuc) {
+  const movimientoId = String(id || '').trim();
+  const ruc = String(companyRuc || '').trim();
+  if (!movimientoId || !ruc) return null;
+  const row = await prisma.movimiento.findFirst({
+    where: { id: movimientoId, companyRuc: ruc },
     include: movimientoInclude,
   });
+  return toApiMovimiento(row);
+}
 
-  rows.sort((a, b) => compareStoredTimestamps(b.fecha, a.fecha));
+async function findMany({
+  companyRuc,
+  tipo = null,
+  almacenId = null,
+  usuarioId = null,
+  referenciaTipo = null,
+  soloTraslado = false,
+  sinGuia = false,
+  skip = null,
+  take = null,
+}) {
+  const where = buildMovimientoWhere({
+    companyRuc,
+    tipo,
+    almacenId,
+    usuarioId,
+    referenciaTipo,
+    soloTraslado,
+    sinGuia,
+  });
+  const paginated = Number.isFinite(skip) && Number.isFinite(take);
 
-  return rows.map(toApiMovimiento);
+  if (!paginated) {
+    const rows = await prisma.movimiento.findMany({
+      where,
+      include: movimientoInclude,
+      orderBy: { fecha: 'desc' },
+    });
+    rows.sort((a, b) => compareStoredTimestamps(b.fecha, a.fecha));
+    return rows.map(toApiMovimiento);
+  }
+
+  const [total, rows] = await Promise.all([
+    prisma.movimiento.count({ where }),
+    prisma.movimiento.findMany({
+      where,
+      include: movimientoInclude,
+      orderBy: { fecha: 'desc' },
+      skip,
+      take,
+    }),
+  ]);
+
+  const items = rows
+    .slice()
+    .sort((a, b) => compareStoredTimestamps(b.fecha, a.fecha))
+    .map(toApiMovimiento);
+
+  return { items, total };
 }
 
 /** Entregas (salida a cliente) y devoluciones registradas para un cliente. */
-async function findByCliente({ companyRuc, clienteId, almacenId = null }) {
+async function findByCliente({
+  companyRuc,
+  clienteId,
+  almacenId = null,
+  skip = null,
+  take = null,
+}) {
   const id = (clienteId || '').trim();
-  if (!id) return [];
+  if (!id) {
+    return Number.isFinite(skip) && Number.isFinite(take)
+      ? { items: [], total: 0 }
+      : [];
+  }
 
   const where = {
     companyRuc,
@@ -210,14 +329,34 @@ async function findByCliente({ companyRuc, clienteId, almacenId = null }) {
   };
   if (almacenId) where.almacenId = almacenId;
 
-  const rows = await prisma.movimiento.findMany({
-    where,
-    include: movimientoInclude,
-  });
+  const paginated = Number.isFinite(skip) && Number.isFinite(take);
+  if (!paginated) {
+    const rows = await prisma.movimiento.findMany({
+      where,
+      include: movimientoInclude,
+      orderBy: { fecha: 'desc' },
+    });
+    rows.sort((a, b) => compareStoredTimestamps(b.fecha, a.fecha));
+    return rows.map(toApiMovimiento);
+  }
 
-  rows.sort((a, b) => compareStoredTimestamps(b.fecha, a.fecha));
+  const [total, rows] = await Promise.all([
+    prisma.movimiento.count({ where }),
+    prisma.movimiento.findMany({
+      where,
+      include: movimientoInclude,
+      orderBy: { fecha: 'desc' },
+      skip,
+      take,
+    }),
+  ]);
 
-  return rows.map(toApiMovimiento);
+  const items = rows
+    .slice()
+    .sort((a, b) => compareStoredTimestamps(b.fecha, a.fecha))
+    .map(toApiMovimiento);
+
+  return { items, total };
 }
 
 async function registrarEntrada({
@@ -230,6 +369,7 @@ async function registrarEntrada({
   referenciaTipo = null,
   referenciaId = null,
   comprobanteId = null,
+  usuarioId = null,
 }) {
   const almacen = await prisma.almacen.findFirst({
     where: { id: almacenId, companyRuc },
@@ -238,12 +378,15 @@ async function registrarEntrada({
 
   let resolvedClienteId = null;
   let esDevolucion = false;
+  const refTipoNorm = String(referenciaTipo || '').trim().toUpperCase();
+  const esRegresoSalida = refTipoNorm === 'REGRESO_SALIDA';
+  const ingresoDesdeCliente = refTipoNorm === 'INGRESO_CLIENTE';
 
-  const quiereDevolucion = Boolean(
+  const quiereDevolucion = !ingresoDesdeCliente && Boolean(
     (clienteId || '').trim() || (cliente && typeof cliente === 'object'),
   );
 
-  if (quiereDevolucion) {
+  if (quiereDevolucion || ingresoDesdeCliente) {
     const resolved = await clienteModel.resolveForSalida({
       companyRuc,
       clienteId,
@@ -252,8 +395,10 @@ async function registrarEntrada({
     if (resolved.error) return { error: resolved.error };
     if (!resolved.clienteId) return { error: 'cliente_requerido' };
     resolvedClienteId = resolved.clienteId;
-    esDevolucion = true;
+    esDevolucion = quiereDevolucion;
   }
+
+  const esRegreso = esDevolucion || esRegresoSalida;
 
   const parsedLineas = normalizeIncomingLineas(lineas).filter((l) => l.catalogItemId);
   if (parsedLineas.length === 0) {
@@ -267,7 +412,7 @@ async function registrarEntrada({
   const itemsById = new Map(items.map((i) => [i.id, i]));
 
   let lineasEfectivas = parsedLineas;
-  if (esDevolucion) {
+  if (esRegreso) {
     lineasEfectivas = parsedLineas.filter((linea) => {
       const item = itemsById.get(linea.catalogItemId);
       return item && itemAfectaInventarioDevolucion(item);
@@ -298,7 +443,7 @@ async function registrarEntrada({
 
   // Ingreso proveedor: preparar series nuevas y validar duplicados fuera del tx.
   const seriesNuevas = [];
-  if (!esDevolucion) {
+  if (!esRegreso) {
     const seenNumeros = new Set();
     for (const linea of lineasEfectivas) {
       const item = itemsById.get(linea.catalogItemId);
@@ -386,7 +531,7 @@ async function registrarEntrada({
         const afectaSaldo = usaInventarioCantidad(item, linea);
 
         if (ingresaSeries) {
-          if (!esDevolucion) {
+          if (!esRegreso) {
             const serieId = serieIdByNumero.get(linea.numeroSerie);
             lineasCreate.push(snapshotLineaFromItem(
               { ...item, manejaSerie: true, manejaStock: true },
@@ -402,15 +547,18 @@ async function registrarEntrada({
                 id: linea.productoSerieId,
                 companyRuc,
                 catalogItemId: item.id,
-                estado: 'ENTREGADO',
               },
             });
           } else {
             serie = await tx.productoSerie.findFirst({
               where: { companyRuc, numeroSerie: linea.numeroSerie, catalogItemId: item.id },
             });
-            if (serie && serie.estado !== 'ENTREGADO') serie = null;
           }
+          if (serie?.estado === 'DISPONIBLE') {
+            // Ya está en almacén (nunca salió o ya se devolvió antes).
+            continue;
+          }
+          if (serie && serie.estado !== 'ENTREGADO') serie = null;
           if (!serie) {
             const err = new Error('Serie no entregada o no encontrada');
             err.code = 'serie_no_entregada';
@@ -423,17 +571,25 @@ async function registrarEntrada({
             err.numeroSerie = serie.numeroSerie;
             throw err;
           }
-          const entrega = await tx.movimiento.findFirst({
-            where: {
-              id: serie.entregaId,
-              companyRuc,
-              tipo: 'SALIDA',
-              clienteId: resolvedClienteId,
-            },
-          });
-          if (!entrega) {
-            const err = new Error(`La serie ${serie.numeroSerie} no corresponde a este cliente`);
-            err.code = 'serie_no_de_cliente';
+
+          if (esDevolucion) {
+            const entrega = await tx.movimiento.findFirst({
+              where: {
+                id: serie.entregaId,
+                companyRuc,
+                tipo: 'SALIDA',
+                clienteId: resolvedClienteId,
+              },
+            });
+            if (!entrega) {
+              const err = new Error(`La serie ${serie.numeroSerie} no corresponde a este cliente`);
+              err.code = 'serie_no_de_cliente';
+              err.numeroSerie = serie.numeroSerie;
+              throw err;
+            }
+          } else if (String(serie.entregaId) !== String(referenciaId || '').trim()) {
+            const err = new Error(`La serie ${serie.numeroSerie} no pertenece a esta salida`);
+            err.code = 'serie_no_de_salida';
             err.numeroSerie = serie.numeroSerie;
             throw err;
           }
@@ -508,6 +664,12 @@ async function registrarEntrada({
         }
       }
 
+      if (esRegreso && lineasCreate.length === 0) {
+        const err = new Error('Nada por regresar');
+        err.code = 'nada_por_regresar';
+        throw err;
+      }
+
       await tx.movimiento.create({
         data: {
           id: movimientoId,
@@ -518,16 +680,23 @@ async function registrarEntrada({
           observaciones: observaciones?.trim() || null,
           referenciaTipo: esDevolucion
             ? 'DEVOLUCION_CLIENTE'
-            : (String(referenciaTipo || '').trim() || 'INGRESO_MANUAL'),
-          referenciaId: (!esDevolucion && referenciaId)
-            ? String(referenciaId).trim()
-            : null,
-          comprobanteId: (!esDevolucion && comprobanteId)
-            ? String(comprobanteId).trim()
-            : null,
+            : (ingresoDesdeCliente
+              ? 'INGRESO_CLIENTE'
+              : (String(referenciaTipo || '').trim() || 'INGRESO_MANUAL')),
+          referenciaId: (() => {
+            const id = String(
+              referenciaId || (esDevolucion ? comprobanteId : '') || '',
+            ).trim();
+            return id || null;
+          })(),
+          comprobanteId: (() => {
+            const id = String(comprobanteId || '').trim();
+            return id || null;
+          })(),
           numero,
           estado: 'DESPACHADA',
-          clienteId: esDevolucion ? resolvedClienteId : null,
+          clienteId: resolvedClienteId,
+          usuarioId: usuarioId ?? null,
           lineas: {
             create: lineasCreate,
           },
@@ -547,6 +716,12 @@ async function registrarEntrada({
     if (err.code === 'serie_no_de_cliente') {
       return { error: 'serie_no_de_cliente', numeroSerie: err.numeroSerie };
     }
+    if (err.code === 'serie_no_de_salida') {
+      return { error: 'serie_no_de_salida', numeroSerie: err.numeroSerie };
+    }
+    if (err.code === 'nada_por_regresar') {
+      return { error: 'nada_por_regresar' };
+    }
     if (err.code === 'P2002') {
       return { error: 'serie_existente' };
     }
@@ -565,7 +740,12 @@ async function registrarEntrada({
   if (
     !esDevolucion
     && refId
-    && (refTipo === 'COMPRA' || refTipo === 'COMPRA_EN_CAMINO' || refTipo === 'COMPRA_REGISTRADA')
+    && (
+      refTipo === 'COMPRA'
+      || refTipo === 'COMPRA_EN_CAMINO'
+      || refTipo === 'COMPRA_REGISTRADA'
+      || refTipo === 'COMPRA_RECIBIDA'
+    )
   ) {
     try {
       const compra = await prisma.compra.findFirst({
@@ -600,6 +780,7 @@ async function registrarEntradaEnCamino({
   observaciones = null,
   referenciaId = null,
   referenciaTipo = 'COMPRA_EN_CAMINO',
+  usuarioId = null,
 }) {
   const almacen = await prisma.almacen.findFirst({
     where: { id: almacenId, companyRuc },
@@ -653,6 +834,7 @@ async function registrarEntradaEnCamino({
           referenciaId: referenciaId || null,
           numero,
           estado: 'EN_CAMINO',
+          usuarioId: usuarioId ?? null,
           lineas: { create: lineasCreate },
         },
       });
@@ -670,34 +852,54 @@ async function registrarEntradaEnCamino({
 }
 
 async function resolverSerieSalida(tx, { companyRuc, almacenId, catalogItemId, linea }) {
+  const almLinea = String(linea.almacenId || almacenId || '').trim() || null;
+
   if (linea.productoSerieId) {
-    const serie = await tx.productoSerie.findFirst({
-      where: {
-        id: linea.productoSerieId,
-        companyRuc,
-        catalogItemId,
-        almacenId,
-        estado: 'DISPONIBLE',
-      },
-    });
+    const baseWhere = {
+      id: linea.productoSerieId,
+      companyRuc,
+      catalogItemId,
+      estado: 'DISPONIBLE',
+    };
+    let serie = null;
+    if (almLinea) {
+      serie = await tx.productoSerie.findFirst({
+        where: { ...baseWhere, almacenId: almLinea },
+      });
+    }
+    // Fallback: la serie puede estar en el almacén propio aunque el header del CPE difiera.
     if (!serie) {
+      serie = await tx.productoSerie.findFirst({ where: baseWhere });
+    }
+    if (!serie) {
+      const existente = await tx.productoSerie.findFirst({
+        where: { id: linea.productoSerieId, companyRuc },
+        select: { numeroSerie: true, estado: true, almacenId: true },
+      });
       const err = new Error('Serie no disponible en el almacén');
       err.code = 'series_no_disponibles';
+      err.numeroSerie = existente?.numeroSerie || undefined;
       throw err;
     }
     return serie;
   }
 
   if (linea.numeroSerie) {
-    const serie = await tx.productoSerie.findFirst({
-      where: {
-        companyRuc,
-        catalogItemId,
-        almacenId,
-        numeroSerie: linea.numeroSerie,
-        estado: 'DISPONIBLE',
-      },
-    });
+    const baseWhere = {
+      companyRuc,
+      catalogItemId,
+      numeroSerie: linea.numeroSerie,
+      estado: 'DISPONIBLE',
+    };
+    let serie = null;
+    if (almLinea) {
+      serie = await tx.productoSerie.findFirst({
+        where: { ...baseWhere, almacenId: almLinea },
+      });
+    }
+    if (!serie) {
+      serie = await tx.productoSerie.findFirst({ where: baseWhere });
+    }
     if (!serie) {
       const err = new Error(`Serie ${linea.numeroSerie} no disponible en el almacén`);
       err.code = 'series_no_disponibles';
@@ -722,6 +924,7 @@ async function registrarSalida({
   observaciones = null,
   clienteId = null,
   cliente = null,
+  usuarioId = null,
 }) {
   const esTraslado = Boolean(almacenDestinoId);
 
@@ -795,7 +998,8 @@ async function registrarSalida({
     } else if (linea.cantidad <= 0) {
       return { error: 'cantidad_invalida', catalogItemId: linea.catalogItemId };
     } else if (usaInventarioCantidad(item, linea)) {
-      const actual = await inventarioModel.getCantidadEnAlmacen(linea.catalogItemId, almacenId);
+      const almStock = String(linea.almacenId || almacenId || '').trim() || almacenId;
+      const actual = await inventarioModel.getCantidadEnAlmacen(linea.catalogItemId, almStock);
       if (actual < linea.cantidad) {
         return {
           error: 'stock_insuficiente',
@@ -817,14 +1021,16 @@ async function registrarSalida({
       for (const linea of parsedLineas) {
         const item = itemsById.get(linea.catalogItemId);
         const usaSeries = lineaUsaSeries(item, linea);
+        const almLinea = String(linea.almacenId || almacenId || '').trim() || almacenId;
 
         if (usaSeries) {
           const serie = await resolverSerieSalida(tx, {
             companyRuc,
-            almacenId,
+            almacenId: almLinea,
             catalogItemId: item.id,
             linea,
           });
+          const almSerie = serie.almacenId || almLinea;
 
           if (esTraslado) {
             await tx.productoSerie.update({
@@ -844,12 +1050,12 @@ async function registrarSalida({
           }
 
           lineasCreate.push(snapshotLineaFromItem(item, {
-            almacenId,
+            almacenId: almSerie,
             cantidad: 1,
             productoSerieId: serie.id,
           }));
         } else if (usaInventarioCantidad(item, linea)) {
-          const key = inventarioModel.saldoKey(item.id, almacenId);
+          const key = inventarioModel.saldoKey(item.id, almLinea);
           const actualRow = await tx.inventario.findUnique({
             where: { saldoKey: key },
             select: { cantidad: true },
@@ -902,9 +1108,9 @@ async function registrarSalida({
             });
           }
 
-          lineasCreate.push(snapshotLineaFromItem(item, { almacenId, cantidad: linea.cantidad }));
+          lineasCreate.push(snapshotLineaFromItem(item, { almacenId: almLinea, cantidad: linea.cantidad }));
         } else {
-          lineasCreate.push(snapshotLineaFromItem(item, { almacenId, cantidad: linea.cantidad }));
+          lineasCreate.push(snapshotLineaFromItem(item, { almacenId: almLinea, cantidad: linea.cantidad }));
         }
       }
 
@@ -917,13 +1123,18 @@ async function registrarSalida({
           tipo: 'SALIDA',
           fecha,
           observaciones: observaciones?.trim() || null,
-          referenciaTipo: esTraslado ? 'TRASLADO' : 'SALIDA_MANUAL',
+          referenciaTipo: esTraslado
+            ? 'TRASLADO'
+            : (comprobanteId ? 'VENTA' : (guiaRemisionId ? 'GUIA_REMISION' : 'SALIDA_MANUAL')),
           numero,
           estado: 'DESPACHADA',
           comprobanteId: comprobanteId || null,
           guiaRemisionId: guiaRemisionId || null,
           fechaDespacho: fecha,
           clienteId: esTraslado ? null : resolvedClienteId,
+          usuarioId: usuarioId != null && Number.isFinite(Number(usuarioId))
+            ? Number(usuarioId)
+            : null,
           lineas: {            create: lineasCreate,
           },
         },
@@ -968,13 +1179,144 @@ async function registrarMovimiento({ companyRuc, tipo, ...params }) {
   return { error: 'tipo_invalido' };
 }
 
+async function vincularGuiaRemision({ companyRuc, movimientoIds = [], guiaRemisionId }) {
+  const ruc = String(companyRuc || '').trim();
+  const guiaId = String(guiaRemisionId || '').trim();
+  const ids = [...new Set((movimientoIds || []).map((id) => String(id || '').trim()).filter(Boolean))];
+  if (!ruc || !guiaId || !ids.length) {
+    return { vinculados: 0 };
+  }
+
+  const result = await prisma.movimiento.updateMany({
+    where: {
+      companyRuc: ruc,
+      id: { in: ids },
+      tipo: 'SALIDA',
+      OR: [
+        { referenciaTipo: 'TRASLADO' },
+        { almacenDestinoId: { not: null } },
+      ],
+    },
+    data: {
+      guiaRemisionId: guiaId,
+      referenciaTipo: 'TRASLADO',
+    },
+  });
+
+  return { vinculados: result.count };
+}
+
+/**
+ * Revierte una SALIDA creando un ENTRADA (devolución / regreso a almacén).
+ * Restaura series ENTREGADO → DISPONIBLE y suma stock por cantidad.
+ */
+async function regresarSalida({
+  companyRuc,
+  salidaId,
+  usuarioId = null,
+  observaciones = null,
+  almacenId = null,
+}) {
+  const id = String(salidaId || '').trim();
+  if (!id) return { error: 'not_found' };
+
+  const salida = await prisma.movimiento.findFirst({
+    where: { id, companyRuc },
+    include: {
+      lineas: {
+        include: {
+          productoSerie: { select: { id: true, numeroSerie: true, estado: true } },
+        },
+        orderBy: { lineaId: 'asc' },
+      },
+    },
+  });
+  if (!salida) return { error: 'not_found' };
+  if (salida.tipo !== 'SALIDA') return { error: 'no_es_salida' };
+  if (String(salida.estado || '').toUpperCase() === 'ANULADA') {
+    return { error: 'anulada' };
+  }
+  if (salida.almacenDestinoId) return { error: 'es_traslado' };
+  if (!salida.almacenId) return { error: 'almacen_not_found' };
+
+  const destinoId = String(almacenId || salida.almacenId || '').trim();
+  if (!destinoId) return { error: 'almacen_not_found' };
+
+  const destino = await prisma.almacen.findFirst({
+    where: { id: destinoId, companyRuc },
+    select: { id: true, activo: true },
+  });
+  if (!destino) return { error: 'almacen_not_found' };
+  if (destino.activo === false) return { error: 'almacen_inactivo' };
+
+  const ya = await prisma.movimiento.findFirst({
+    where: {
+      companyRuc,
+      tipo: 'ENTRADA',
+      estado: { not: 'ANULADA' },
+      referenciaId: salida.id,
+      referenciaTipo: { in: ['DEVOLUCION_CLIENTE', 'REGRESO_SALIDA'] },
+    },
+    select: { id: true, numero: true },
+  });
+  if (ya) {
+    return {
+      error: 'ya_regresado',
+      movimientoId: ya.id,
+      numero: ya.numero,
+    };
+  }
+
+  const lineas = [];
+  for (const l of salida.lineas || []) {
+    const catalogItemId = l.catalogItemId;
+    if (!catalogItemId) continue;
+    if (l.productoSerieId) {
+      lineas.push({
+        catalogItemId,
+        cantidad: 1,
+        productoSerieId: l.productoSerieId,
+        numeroSerie: l.productoSerie?.numeroSerie || undefined,
+        almacenId: destinoId,
+      });
+      continue;
+    }
+    const cantidad = toNumber(l.cantidad);
+    if (cantidad <= 0) continue;
+    lineas.push({
+      catalogItemId,
+      cantidad,
+      almacenId: destinoId,
+    });
+  }
+  if (!lineas.length) return { error: 'lineas_vacias' };
+
+  const numeroSalida = salida.numero || salida.id;
+  const obs = String(observaciones || '').trim()
+    || `Regreso de salida ${numeroSalida}`;
+
+  return registrarEntrada({
+    companyRuc,
+    almacenId: destinoId,
+    lineas,
+    clienteId: salida.clienteId || null,
+    referenciaTipo: salida.clienteId ? 'DEVOLUCION_CLIENTE' : 'REGRESO_SALIDA',
+    referenciaId: salida.id,
+    observaciones: obs,
+    usuarioId,
+  });
+}
+
 module.exports = {
   toApiMovimiento,
   toApiLinea,
+  findById,
   findMany,
   findByCliente,
   registrarEntrada,
   registrarEntradaEnCamino,
   registrarSalida,
   registrarMovimiento,
+  regresarSalida,
+  vincularGuiaRemision,
 };

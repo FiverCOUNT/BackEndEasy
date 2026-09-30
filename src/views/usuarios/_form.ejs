@@ -45,7 +45,7 @@
     <% }); %>
   </select>
   <span class="field-hint" id="rol-hint">
-    ADMIN sin empresa = acceso solo al panel web. ADMIN/USUARIO con empresa = app móvil.
+    SUPER_ADMIN = solo panel /admin (plataforma). ADMIN/USUARIO con empresa = app móvil.
   </span>
 </div>
 
@@ -61,7 +61,7 @@
 <div class="field">
   <label for="companyId">Empresa</label>
   <select id="companyId" name="companyId">
-    <option value="">— Sin empresa (admin plataforma) —</option>
+    <option value="">— Sin empresa (solo SUPER_ADMIN) —</option>
     <% companies.forEach(function(c) { %>
       <option
         value="<%= String(c.id) %>"
@@ -72,7 +72,7 @@
       </option>
     <% }); %>
   </select>
-  <span class="field-hint" id="company-hint">Obligatoria para usuarios de app. Opcional solo para ADMIN del panel.</span>
+  <span class="field-hint" id="company-hint">Obligatoria para ADMIN/USUARIO de app. Vacía solo para SUPER_ADMIN.</span>
 </div>
 
 <div class="field" id="almacen-field">
@@ -116,15 +116,18 @@
   function rebuildAlmacenOptions() {
     var ruc = selectedCompanyRuc();
     var hasCompany = Boolean(ruc);
-    var isPlatformAdmin = rol.value === 'ADMIN' && !hasCompany;
+    var isPlatformAdmin = rol.value === 'SUPER_ADMIN';
+    var propios = allAlmacenes.filter(function (item) { return item.companyRuc === ruc; });
 
     almacenField.style.display = hasCompany ? '' : 'none';
-    almacen.required = hasCompany && !isPlatformAdmin;
-    company.required = rol.value !== 'ADMIN';
+    almacen.required = hasCompany && !isPlatformAdmin && propios.length > 0;
+    company.required = rol.value !== 'SUPER_ADMIN';
     if (companyHint) {
-      companyHint.textContent = rol.value === 'ADMIN'
-        ? 'Opcional para ADMIN del panel. Si eliges empresa, también usa la app.'
-        : 'Obligatoria. Define la empresa del usuario en la app.';
+      companyHint.textContent = rol.value === 'SUPER_ADMIN'
+        ? 'SUPER_ADMIN no usa empresa: solo gestiona el panel /admin.'
+        : (propios.length
+          ? 'Obligatoria. Define la empresa del usuario en la app.'
+          : 'Esta base todavía no tiene almacenes para esa empresa. Puedes guardar el usuario sin almacén.');
     }
 
     var previous = almacen.value || selectedAlmacenId || '';
@@ -135,14 +138,12 @@
       return;
     }
 
-    allAlmacenes
-      .filter(function (item) { return item.companyRuc === ruc; })
-      .forEach(function (item) {
-        var opt = document.createElement('option');
-        opt.value = item.id;
-        opt.textContent = almacenLabel(item);
-        almacen.appendChild(opt);
-      });
+    propios.forEach(function (item) {
+      var opt = document.createElement('option');
+      opt.value = item.id;
+      opt.textContent = almacenLabel(item);
+      almacen.appendChild(opt);
+    });
 
     if (previous && almacen.querySelector('option[value="' + previous + '"]')) {
       almacen.value = previous;

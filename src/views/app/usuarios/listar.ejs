@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> · Easy</title>
+  <link rel="stylesheet" href="/css/app-ios.css" />
+</head>
+<body class="ios-app">
+  <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
+  <main class="ios-main">
+    <header class="ios-top">
+      <div>
+        <p class="ios-eyebrow">Ajustes</p>
+        <h1>Gestión de usuarios</h1>
+      </div>
+      <a class="ios-fab-link" href="<%= appBase %>/usuarios/crear" title="Añadir">+</a>
+    </header>
+
+    <% if (flash) { %>
+      <div class="ios-flash <%= flash.type === 'error' ? 'is-error' : 'is-ok' %>"><%= flash.text %></div>
+    <% } %>
+
+    <form class="ios-filters" method="GET">
+      <div class="ios-search-row">
+        <div class="ios-search">
+          <input type="search" name="q" value="<%= q || '' %>" placeholder="Email, rol o almacén…" />
+        </div>
+        <button type="submit" class="ios-btn-secondary" style="flex-shrink:0;white-space:nowrap">Buscar</button>
+      </div>
+    </form>
+
+    <div class="ios-list" style="margin-top:12px">
+      <% if (!(items || []).length) { %>
+        <section class="ios-form-card ios-ajustes-empty">
+          <span>👤</span>
+          <p>Aún no hay usuarios en esta empresa. Añade un administrador o un usuario de almacén.</p>
+          <a class="ios-btn-primary" href="<%= appBase %>/usuarios/crear" style="margin-top:12px;display:inline-flex">Añadir usuario</a>
+        </section>
+      <% } %>
+      <% (items || []).forEach(function(u) {
+        var esAdmin = u.rol === 'ADMIN';
+        var activo = u.estado === 'ACTIVO';
+        var iconBg = esAdmin ? '#E3F2FD' : '#E8F5E9';
+        var iconColor = esAdmin ? '#1565C0' : '#2E7D32';
+        var icon = esAdmin ? '★' : '👤';
+        var sub = (esAdmin ? 'Administrador' : 'Usuario')
+          + (u.almacen_nombre ? (' · ' + u.almacen_nombre) : (esAdmin ? ' · Sin almacén' : ''))
+          + (activo ? '' : ' · ' + (u.estado || 'Inactivo'));
+      %>
+        <a class="ios-row" href="<%= appBase %>/usuarios/<%= u.id %>/editar">
+          <span class="ios-row-icon" style="background:<%= iconBg %>;color:<%= iconColor %>"><%= icon %></span>
+          <span class="ios-row-text">
+            <strong><%= u.nombre || u.email %></strong>
+            <small><%= u.email %><% if (sub) { %> · <%= sub %><% } %></small>
+          </span>
+          <span class="ios-chevron">›</span>
+        </a>
+      <% }) %>
+    </div>
+
+    <p style="margin:16px 0 8px">
+      <a class="ios-back" href="<%= appBase %>/ajustes">← Volver a Ajustes</a>
+    </p>
+  </main>
+  <%- include('../../partials/app-tabbar', { active: active, appBase: appBase }) %>
+</body>
+</html>

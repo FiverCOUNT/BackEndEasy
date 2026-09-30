@@ -59,15 +59,12 @@
     <div class="field field-check">
       <label><input type="checkbox" name="activo" <%= form.activo ? 'checked' : '' %> /> Activa</label>
     </div>
-    <div class="field field-check">
-      <label><input type="checkbox" name="isActive" <%= form.isActive ? 'checked' : '' %> /> isActive</label>
-    </div>
   </div>
 </fieldset>
 
 <fieldset class="fieldset">
   <legend>Series y correlativos SUNAT</legend>
-  <p class="field-hint field-full">Define la serie (4 caracteres, ej. F001), el número inicial y cuántos dígitos lleva el correlativo por tipo de comprobante. SUNAT exige serie de 4 caracteres en el nombre del ZIP enviado. El siguiente documento será el mayor correlativo emitido + 1, o el inicial si aún no hay comprobantes.</p>
+  <p class="field-hint field-full">Define la serie (4 caracteres, ej. F001), el <strong>último correlativo ya usado</strong> y cuántos dígitos lleva. Pon <strong>0</strong> para que el primero sea 1. El siguiente documento será el mayor entre (último usado en config) y (mayor ya emitido en esa serie), más 1. SUNAT exige serie de 4 caracteres en el ZIP.</p>
   <div class="form-grid">
     <div class="field field-full"><strong>Factura (01)</strong></div>
     <div class="field">
@@ -75,8 +72,8 @@
       <input type="text" id="serie_01" name="serie_01" value="<%= form.serie_01 %>" maxlength="4" minlength="4" pattern="[A-Za-z0-9]{4}" placeholder="F001" />
     </div>
     <div class="field">
-      <label for="correlativo_inicio_01">Correlativo inicial</label>
-      <input type="number" id="correlativo_inicio_01" name="correlativo_inicio_01" value="<%= form.correlativo_inicio_01 %>" min="1" step="1" />
+      <label for="correlativo_inicio_01">Último usado (0 = empieza en 1)</label>
+      <input type="number" id="correlativo_inicio_01" name="correlativo_inicio_01" value="<%= form.correlativo_inicio_01 %>" min="0" step="1" />
     </div>
     <div class="field">
       <label for="correlativo_digitos_01">Dígitos correlativo</label>
@@ -89,8 +86,8 @@
       <input type="text" id="serie_03" name="serie_03" value="<%= form.serie_03 %>" maxlength="4" minlength="4" pattern="[A-Za-z0-9]{4}" placeholder="B001" />
     </div>
     <div class="field">
-      <label for="correlativo_inicio_03">Correlativo inicial</label>
-      <input type="number" id="correlativo_inicio_03" name="correlativo_inicio_03" value="<%= form.correlativo_inicio_03 %>" min="1" step="1" />
+      <label for="correlativo_inicio_03">Último usado (0 = empieza en 1)</label>
+      <input type="number" id="correlativo_inicio_03" name="correlativo_inicio_03" value="<%= form.correlativo_inicio_03 %>" min="0" step="1" />
     </div>
     <div class="field">
       <label for="correlativo_digitos_03">Dígitos correlativo</label>
@@ -103,8 +100,8 @@
       <input type="text" id="serie_07" name="serie_07" value="<%= form.serie_07 %>" maxlength="4" minlength="4" pattern="[A-Za-z0-9]{4}" placeholder="FC01" />
     </div>
     <div class="field">
-      <label for="correlativo_inicio_07">Correlativo inicial</label>
-      <input type="number" id="correlativo_inicio_07" name="correlativo_inicio_07" value="<%= form.correlativo_inicio_07 %>" min="1" step="1" />
+      <label for="correlativo_inicio_07">Último usado (0 = empieza en 1)</label>
+      <input type="number" id="correlativo_inicio_07" name="correlativo_inicio_07" value="<%= form.correlativo_inicio_07 %>" min="0" step="1" />
     </div>
     <div class="field">
       <label for="correlativo_digitos_07">Dígitos correlativo</label>
@@ -117,26 +114,40 @@
       <input type="text" id="serie_08" name="serie_08" value="<%= form.serie_08 %>" maxlength="4" minlength="4" pattern="[A-Za-z0-9]{4}" placeholder="FD01" />
     </div>
     <div class="field">
-      <label for="correlativo_inicio_08">Correlativo inicial</label>
-      <input type="number" id="correlativo_inicio_08" name="correlativo_inicio_08" value="<%= form.correlativo_inicio_08 %>" min="1" step="1" />
+      <label for="correlativo_inicio_08">Último usado (0 = empieza en 1)</label>
+      <input type="number" id="correlativo_inicio_08" name="correlativo_inicio_08" value="<%= form.correlativo_inicio_08 %>" min="0" step="1" />
     </div>
     <div class="field">
       <label for="correlativo_digitos_08">Dígitos correlativo</label>
       <input type="number" id="correlativo_digitos_08" name="correlativo_digitos_08" value="<%= form.correlativo_digitos_08 %>" min="1" max="20" step="1" placeholder="8" />
     </div>
 
-    <div class="field field-full"><strong>Guía remisión (09)</strong></div>
+    <div class="field field-full"><strong>Guía remisión remitente (09)</strong></div>
     <div class="field">
       <label for="serie_09">Serie</label>
       <input type="text" id="serie_09" name="serie_09" value="<%= form.serie_09 %>" maxlength="4" minlength="4" pattern="[A-Za-z0-9]{4}" placeholder="T001" />
     </div>
     <div class="field">
-      <label for="correlativo_inicio_09">Correlativo inicial</label>
-      <input type="number" id="correlativo_inicio_09" name="correlativo_inicio_09" value="<%= form.correlativo_inicio_09 %>" min="1" step="1" />
+      <label for="correlativo_inicio_09">Último usado (0 = empieza en 1)</label>
+      <input type="number" id="correlativo_inicio_09" name="correlativo_inicio_09" value="<%= form.correlativo_inicio_09 %>" min="0" step="1" />
     </div>
     <div class="field">
       <label for="correlativo_digitos_09">Dígitos correlativo</label>
       <input type="number" id="correlativo_digitos_09" name="correlativo_digitos_09" value="<%= form.correlativo_digitos_09 %>" min="1" max="20" step="1" placeholder="8" />
+    </div>
+
+    <div class="field field-full"><strong>Guía remisión transportista (31)</strong></div>
+    <div class="field">
+      <label for="serie_31">Serie</label>
+      <input type="text" id="serie_31" name="serie_31" value="<%= form.serie_31 %>" maxlength="4" minlength="4" pattern="[A-Za-z0-9]{4}" placeholder="V001" />
+    </div>
+    <div class="field">
+      <label for="correlativo_inicio_31">Último usado (0 = empieza en 1)</label>
+      <input type="number" id="correlativo_inicio_31" name="correlativo_inicio_31" value="<%= form.correlativo_inicio_31 %>" min="0" step="1" />
+    </div>
+    <div class="field">
+      <label for="correlativo_digitos_31">Dígitos correlativo</label>
+      <input type="number" id="correlativo_digitos_31" name="correlativo_digitos_31" value="<%= form.correlativo_digitos_31 %>" min="1" max="20" step="1" placeholder="8" />
     </div>
   </div>
 </fieldset>

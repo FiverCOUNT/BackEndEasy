@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title><%= title %></title>
-  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/style.css?v=20260926panel" />
 </head>
 <body>
   <header class="header">
@@ -25,37 +25,37 @@
         <h2>Panel de administración</h2>
         <p class="api-hint">Selecciona un módulo del menú lateral o desde aquí:</p>
         <div class="dashboard-grid">
-          <a href="/usuarios" class="dashboard-card dashboard-card--usuarios">
+          <a href="<%= adminBase %>/usuarios" class="dashboard-card dashboard-card--usuarios">
             <span class="dashboard-icon" aria-hidden="true">👤</span>
             <h3>Usuarios</h3>
             <p>Cuentas, estados y acceso al sistema</p>
           </a>
-          <a href="/companies" class="dashboard-card dashboard-card--companies">
+          <a href="<%= adminBase %>/companies" class="dashboard-card dashboard-card--companies">
             <span class="dashboard-icon" aria-hidden="true">🏢</span>
             <h3>Empresas</h3>
             <p>CRUD de empresas y configuración</p>
           </a>
-          <a href="/almacenes" class="dashboard-card dashboard-card--almacenes">
+          <a href="<%= adminBase %>/almacenes" class="dashboard-card dashboard-card--almacenes">
             <span class="dashboard-icon" aria-hidden="true">🏭</span>
             <h3>Almacenes</h3>
             <p>Bodegas y puntos de inventario por empresa</p>
           </a>
-          <a href="/catalogo" class="dashboard-card dashboard-card--catalogo">
+          <a href="<%= adminBase %>/catalogo" class="dashboard-card dashboard-card--catalogo">
             <span class="dashboard-icon" aria-hidden="true">📦</span>
             <h3>Catálogo</h3>
             <p>Productos y servicios por empresa</p>
           </a>
-          <a href="/comprobantes" class="dashboard-card dashboard-card--comprobantes">
+          <a href="<%= adminBase %>/comprobantes" class="dashboard-card dashboard-card--comprobantes">
             <span class="dashboard-icon" aria-hidden="true">📄</span>
             <h3>Comprobantes</h3>
             <p>Facturas, boletas y documentos SUNAT</p>
           </a>
-          <a href="/clientes" class="dashboard-card dashboard-card--clientes">
+          <a href="<%= adminBase %>/clientes" class="dashboard-card dashboard-card--clientes">
             <span class="dashboard-icon" aria-hidden="true">👥</span>
             <h3>Clientes</h3>
             <p>Clientes por empresa (RUC)</p>
           </a>
-          <a href="/configuracion" class="dashboard-card dashboard-card--configuracion">
+          <a href="<%= adminBase %>/configuracion" class="dashboard-card dashboard-card--configuracion">
             <span class="dashboard-icon" aria-hidden="true">⚙️</span>
             <h3>App móvil</h3>
             <p>Soporte, versiones y mantenimiento</p>

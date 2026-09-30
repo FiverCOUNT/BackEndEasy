@@ -19,6 +19,10 @@ const s3Region = process.env.S3_REGION || 'auto';
 const prefixComprobantes = normalizePrefix(process.env.S3_PREFIX_COMPROBANTES, 'comprobantes');
 const prefixCertificados = normalizePrefix(process.env.S3_PREFIX_CERTIFICADOS, 'certificados');
 const prefixAdjuntos = normalizePrefix(process.env.S3_PREFIX_ADJUNTOS, 'adjuntos');
+const prefixConfiguracion = normalizePrefix(process.env.S3_PREFIX_CONFIGURACION, 'configuracion');
+const prefixLogos = normalizePrefix(process.env.S3_PREFIX_LOGOS, 'logos');
+const logosRoot = path.join(__dirname, '../../storage/configuracion');
+const companyLogosRoot = path.join(__dirname, '../../storage/logos');
 
 const r2Enabled = Boolean(s3Endpoint && s3Bucket && s3AccessKey && s3SecretKey);
 const isProduction = process.env.NODE_ENV === 'production';
@@ -42,7 +46,11 @@ function warnR2PublicUrlMissing() {
 
 module.exports = {
   comprobantesRoot,
+  logosRoot,
+  companyLogosRoot,
   comprobantesPublicPath: '/storage/comprobantes',
+  logosPublicPath: '/storage/configuracion',
+  companyLogosPublicPath: '/storage/logos',
   isProduction,
   assertR2ProductionConfig,
   warnR2PublicUrlMissing,
@@ -58,6 +66,8 @@ module.exports = {
       comprobantes: prefixComprobantes,
       certificados: prefixCertificados,
       adjuntos: prefixAdjuntos,
+      configuracion: prefixConfiguracion,
+      logos: prefixLogos,
     },
   },
 };

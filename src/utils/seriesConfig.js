@@ -3,8 +3,8 @@ const TIPO_DOC_LABEL = {
   '03': 'Boleta',
   '07': 'Nota crédito',
   '08': 'Nota débito',
-  '09': 'Guía remisión',
-  '31': 'GRE transportista',
+  '09': 'Guía remisión remitente',
+  '31': 'Guía remisión transportista',
 };
 
 const COD_TO_TIPO = {
@@ -16,17 +16,19 @@ const COD_TO_TIPO = {
   '31': 'GUIA_TRANSPORTISTA',
 };
 
+/** correlativoInicio = último número ya usado (0 = el siguiente será 1). */
 const TIPO_CONFIG = {
-  FACTURA: { tipoDoc: '01', serie: 'F001', correlativoInicio: 1 },
-  BOLETA: { tipoDoc: '03', serie: 'B001', correlativoInicio: 1 },
-  NOTA_CREDITO: { tipoDoc: '07', serie: 'FC01', correlativoInicio: 1 },
-  NOTA_DEBITO: { tipoDoc: '08', serie: 'FD01', correlativoInicio: 1 },
-  GUIA_EMISION: { tipoDoc: '09', serie: 'T001', correlativoInicio: 1 },
-  GUIA_TRANSPORTISTA: { tipoDoc: '31', serie: 'V001', correlativoInicio: 1 },
+  FACTURA: { tipoDoc: '01', serie: 'F001', correlativoInicio: 0 },
+  BOLETA: { tipoDoc: '03', serie: 'B001', correlativoInicio: 0 },
+  NOTA_CREDITO: { tipoDoc: '07', serie: 'FC01', correlativoInicio: 0 },
+  NOTA_DEBITO: { tipoDoc: '08', serie: 'FD01', correlativoInicio: 0 },
+  GUIA_EMISION: { tipoDoc: '09', serie: 'T001', correlativoInicio: 0 },
+  GUIA_TRANSPORTISTA: { tipoDoc: '31', serie: 'V001', correlativoInicio: 0 },
 };
 
 const EMITIBLE_TIPO_DOCS = ['01', '03', '07', '08', '09'];
 const ALL_SERIE_TIPO_DOCS = [...EMITIBLE_TIPO_DOCS, '31'];
+const SERIES_FORM_TIPO_DOCS = ALL_SERIE_TIPO_DOCS;
 const DEFAULT_CORRELATIVO_DIGITOS = 8;
 const MIN_CORRELATIVO_DIGITOS = 1;
 const MAX_CORRELATIVO_DIGITOS = 20;
@@ -55,7 +57,7 @@ function validateSeriesConfig(seriesConfig) {
   const map = normalizeStoredSeriesConfig(seriesConfig);
   const errors = [];
 
-  for (const tipoDoc of EMITIBLE_TIPO_DOCS) {
+  for (const tipoDoc of SERIES_FORM_TIPO_DOCS) {
     const error = validateSerieSunat(map[tipoDoc].serie, tipoDoc);
     if (error) errors.push(error);
   }
@@ -80,14 +82,20 @@ function formatCorrelativo(number, width = DEFAULT_CORRELATIVO_DIGITOS) {
   return String(n).padStart(digits, '0');
 }
 
+function normalizeCorrelativoInicio(value, fallback = 0) {
+  const n = Number.parseInt(String(value ?? ''), 10);
+  if (!Number.isFinite(n) || n < 0) return fallback;
+  return n;
+}
+
 function defaultSeriesConfig() {
   return {
-    '01': { serie: 'F001', correlativo_inicio: 1, correlativo_digitos: DEFAULT_CORRELATIVO_DIGITOS },
-    '03': { serie: 'B001', correlativo_inicio: 1, correlativo_digitos: DEFAULT_CORRELATIVO_DIGITOS },
-    '07': { serie: 'FC01', correlativo_inicio: 1, correlativo_digitos: DEFAULT_CORRELATIVO_DIGITOS },
-    '08': { serie: 'FD01', correlativo_inicio: 1, correlativo_digitos: DEFAULT_CORRELATIVO_DIGITOS },
-    '09': { serie: 'T001', correlativo_inicio: 1, correlativo_digitos: DEFAULT_CORRELATIVO_DIGITOS },
-    '31': { serie: 'V001', correlativo_inicio: 1, correlativo_digitos: DEFAULT_CORRELATIVO_DIGITOS },
+    '01': { serie: 'F001', correlativo_inicio: 0, correlativo_digitos: DEFAULT_CORRELATIVO_DIGITOS },
+    '03': { serie: 'B001', correlativo_inicio: 0, correlativo_digitos: DEFAULT_CORRELATIVO_DIGITOS },
+    '07': { serie: 'FC01', correlativo_inicio: 0, correlativo_digitos: DEFAULT_CORRELATIVO_DIGITOS },
+    '08': { serie: 'FD01', correlativo_inicio: 0, correlativo_digitos: DEFAULT_CORRELATIVO_DIGITOS },
+    '09': { serie: 'T001', correlativo_inicio: 0, correlativo_digitos: DEFAULT_CORRELATIVO_DIGITOS },
+    '31': { serie: 'V001', correlativo_inicio: 0, correlativo_digitos: DEFAULT_CORRELATIVO_DIGITOS },
   };
 }
 
@@ -102,9 +110,9 @@ function normalizeStoredSeriesConfig(raw) {
     if (!entry || typeof entry !== 'object') continue;
 
     const serie = normalizeSerie(entry.serie || entry.serie_doc, defaults[tipoDoc].serie);
-    const inicio = Number.parseInt(
-      String(entry.correlativo_inicio ?? entry.correlativoInicio ?? defaults[tipoDoc].correlativo_inicio),
-      10,
+    const inicio = normalizeCorrelativoInicio(
+      entry.correlativo_inicio ?? entry.correlativoInicio,
+      defaults[tipoDoc].correlativo_inicio,
     );
     const digitos = normalizeCorrelativoDigitos(
       entry.correlativo_digitos ?? entry.correlativoDigitos,
@@ -113,7 +121,7 @@ function normalizeStoredSeriesConfig(raw) {
 
     merged[tipoDoc] = {
       serie: serie || defaults[tipoDoc].serie,
-      correlativo_inicio: Number.isFinite(inicio) && inicio >= 1 ? inicio : 1,
+      correlativo_inicio: inicio,
       correlativo_digitos: digitos,
     };
   }
@@ -133,7 +141,7 @@ function resolveTipoConfig(tipoRaw, company = null) {
   return {
     tipoDoc: base.tipoDoc,
     serie: stored.serie || base.serie,
-    correlativoInicio: stored.correlativo_inicio ?? base.correlativoInicio ?? 1,
+    correlativoInicio: stored.correlativo_inicio ?? base.correlativoInicio ?? 0,
     correlativoDigitos: stored.correlativo_digitos ?? DEFAULT_CORRELATIVO_DIGITOS,
   };
 }
@@ -142,32 +150,34 @@ function buildSeriesConfigFromBody(body) {
   const config = {};
   const defaults = defaultSeriesConfig();
 
-  for (const tipoDoc of EMITIBLE_TIPO_DOCS) {
+  for (const tipoDoc of SERIES_FORM_TIPO_DOCS) {
     const serie = String(body[`serie_${tipoDoc}`] || '').trim();
     const inicioRaw = String(body[`correlativo_inicio_${tipoDoc}`] || '').trim();
     const digitosRaw = String(body[`correlativo_digitos_${tipoDoc}`] || '').trim();
-    const parsedInicio = Number.parseInt(inicioRaw, 10);
 
     if (!serie && !inicioRaw && !digitosRaw) continue;
 
     config[tipoDoc] = {
       serie: normalizeSerie(serie, defaults[tipoDoc].serie),
-      correlativo_inicio:
-        Number.isFinite(parsedInicio) && parsedInicio >= 1 ? parsedInicio : defaults[tipoDoc].correlativo_inicio,
+      correlativo_inicio: inicioRaw
+        ? normalizeCorrelativoInicio(inicioRaw, defaults[tipoDoc].correlativo_inicio)
+        : defaults[tipoDoc].correlativo_inicio,
       correlativo_digitos: digitosRaw
         ? normalizeCorrelativoDigitos(digitosRaw, defaults[tipoDoc].correlativo_digitos)
         : defaults[tipoDoc].correlativo_digitos,
     };
   }
 
-  return Object.keys(config).length ? normalizeStoredSeriesConfig(config) : null;
+  return Object.keys(config).length
+    ? { ...normalizeStoredSeriesConfig(config), _correlativoSemantics: 'last_used' }
+    : null;
 }
 
 function seriesConfigToFormFields(seriesConfigJson) {
   const map = normalizeStoredSeriesConfig(seriesConfigJson);
   const form = {};
 
-  for (const tipoDoc of EMITIBLE_TIPO_DOCS) {
+  for (const tipoDoc of SERIES_FORM_TIPO_DOCS) {
     form[`serie_${tipoDoc}`] = map[tipoDoc].serie;
     form[`correlativo_inicio_${tipoDoc}`] = String(map[tipoDoc].correlativo_inicio);
     form[`correlativo_digitos_${tipoDoc}`] = String(map[tipoDoc].correlativo_digitos);
@@ -181,6 +191,8 @@ module.exports = {
   COD_TO_TIPO,
   TIPO_CONFIG,
   EMITIBLE_TIPO_DOCS,
+  ALL_SERIE_TIPO_DOCS,
+  SERIES_FORM_TIPO_DOCS,
   DEFAULT_CORRELATIVO_DIGITOS,
   MIN_CORRELATIVO_DIGITOS,
   MAX_CORRELATIVO_DIGITOS,
@@ -188,6 +200,7 @@ module.exports = {
   validateSerieSunat,
   validateSeriesConfig,
   parseCorrelativoNumber,
+  normalizeCorrelativoInicio,
   normalizeCorrelativoDigitos,
   formatCorrelativo,
   defaultSeriesConfig,

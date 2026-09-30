@@ -1,15 +1,22 @@
-const prisma = require('../config/prisma');
 const catalogItemModel = require('../models/catalogItemModel');
 const codigoProductoSunatModel = require('../models/codigoProductoSunatModel');
+const prisma = require('../config/prisma');
 const { parseListQuery, buildPageMeta } = require('../utils/pagination');
+const { adminPath } = require('../config/adminPanel');
+const { runWithEntorno } = require('../config/prisma');
 
 const UNIDADES = ['NIU', 'MTR', 'KGM', 'LTR', 'ZZ'];
 
-async function loadCompanies() {
-  return prisma.company.findMany({
-    select: { ruc: true, nombre: true },
-    orderBy: { nombre: 'asc' },
-  });
+function panelEntorno(res) {
+  return res.locals.adminEntorno === 'beta' ? 'beta' : 'prod';
+}
+
+async function loadCompanies(entorno) {
+  return runWithEntorno(entorno, () =>
+    prisma.company.findMany({
+      select: { id: true, nombre: true, ruc: true },
+      orderBy: { nombre: 'asc' },
+    }));
 }
 
 function parseFlash(req) {
@@ -18,9 +25,13 @@ function parseFlash(req) {
   return { text: msg, type: tipo === 'error' ? 'error' : 'success' };
 }
 
-function redirectList(res, message, type = 'success') {
+function redirectList(res, message, type = 'success', entorno) {
   const q = new URLSearchParams({ msg: message, tipo: type });
-  return res.redirect(`/catalogo?${q.toString()}`);
+  const db = entorno === 'beta' || entorno === 'prod'
+    ? entorno
+    : (res.locals.adminEntorno === 'beta' ? 'beta' : 'prod');
+  q.set('entorno', db);
+  return res.redirect(`${adminPath('/catalogo')}?${q.toString()}`);
 }
 
 function formFromBody(body) {
@@ -34,6 +45,10 @@ function formFromBody(body) {
     descripcion: parsed.descripcion || '',
     unidad: parsed.unidad,
     precioUnitario: String(parsed.precioUnitario ?? 0),
+    precioCompra: parsed.precioCompra != null ? String(parsed.precioCompra) : '',
+    fechaVencimiento: parsed.kind === 'SERVICE'
+      ? ''
+      : (parsed.fechaVencimiento || String(body.fechaVencimiento || body.fecha_vencimiento || '').trim().slice(0, 10)),
     afectacionIgv: parsed.afectacionIgv,
     activo: parsed.activo,
     manejaStock: parsed.manejaStock,
@@ -54,6 +69,8 @@ function formFromItem(item) {
     descripcion: p.descripcion || '',
     unidad: p.unidad,
     precioUnitario: String(p.precioUnitario ?? 0),
+    precioCompra: p.precioCompra != null ? String(p.precioCompra) : '',
+    fechaVencimiento: p.fechaVencimiento || '',
     afectacionIgv: p.afectacionIgv,
     activo: p.activo,
     manejaStock: p.manejaStock,
@@ -69,30 +86,30 @@ async function list(req, res, next) {
     const kind = (req.query.kind || '').toUpperCase();
     const companyRuc = (req.query.company || '').trim();
 
-    const { total, items } = await catalogItemModel.findPaginated({
-      q,
-      kind: catalogItemModel.KINDS.includes(kind) ? kind : '',
-      companyRuc,
-      page,
-      pageSize,
-      skip,
-    });
+    const kindFilter = catalogItemModel.KINDS.includes(kind) ? kind : '';
+    const entorno = panelEntorno(res);
+    const [{ total, items }, companies] = await Promise.all([
+      runWithEntorno(entorno, () =>
+        catalogItemModel.findPaginated({
+          q, kind: kindFilter, companyRuc, page, pageSize, skip,
+        })),
+      loadCompanies(entorno),
+    ]);
 
     const pagination = buildPageMeta({
       total,
       page,
       pageSize,
-      basePath: '/catalogo',
+      basePath: adminPath('/catalogo'),
       query: {
         q,
         kind: kind || undefined,
         company: companyRuc || undefined,
+        entorno,
         msg: req.query.msg,
         tipo: req.query.tipo,
       },
     });
-
-    const companies = await loadCompanies();
 
     res.render('catalogo/listar', {
       title: 'Catálogo',
@@ -100,13 +117,14 @@ async function list(req, res, next) {
       total,
       q,
       kind,
+      entorno,
       companyRuc,
       pageSize,
       pagination,
       companies,
       kinds: catalogItemModel.KINDS,
       flash: parseFlash(req),
-      searchAction: '/catalogo',
+      searchAction: adminPath('/catalogo'),
       searchPlaceholder: 'Buscar por nombre, código, código SUNAT o RUC…',
     });
   } catch (err) {
@@ -116,7 +134,7 @@ async function list(req, res, next) {
 
 async function showCreateForm(req, res, next) {
   try {
-    const companies = await loadCompanies();
+    const companies = await loadCompanies(panelEntorno(res));
     res.render('catalogo/crear', {
       title: 'Nuevo ítem',
       error: null,
@@ -133,7 +151,8 @@ async function showCreateForm(req, res, next) {
 
 async function create(req, res, next) {
   try {
-    const companies = await loadCompanies();
+    const entorno = panelEntorno(res);
+    const companies = await loadCompanies(entorno);
     const form = formFromBody(req.body);
 
     const renderError = (error) =>
@@ -149,9 +168,12 @@ async function create(req, res, next) {
 
     if (!form.companyRuc) return renderError('Selecciona una empresa (RUC).');
     if (!form.nombre) return renderError('El nombre es obligatorio.');
+    if (!companies.some((c) => c.ruc === form.companyRuc)) {
+      return renderError('La empresa seleccionada no existe en esta base.');
+    }
 
-    await catalogItemModel.create(req.body);
-    return redirectList(res, `Ítem «${form.nombre}» creado.`);
+    await runWithEntorno(entorno, () => catalogItemModel.create(req.body));
+    return redirectList(res, `Ítem «${form.nombre}» creado.`, 'success', entorno);
   } catch (err) {
     next(err);
   }
@@ -159,10 +181,11 @@ async function create(req, res, next) {
 
 async function showEditForm(req, res, next) {
   try {
-    const item = await catalogItemModel.findById(req.params.id);
-    if (!item) return redirectList(res, 'Ítem no encontrado', 'error');
+    const entorno = panelEntorno(res);
+    const item = await runWithEntorno(entorno, () => catalogItemModel.findById(req.params.id));
+    if (!item) return redirectList(res, 'Ítem no encontrado', 'error', entorno);
 
-    const companies = await loadCompanies();
+    const companies = await loadCompanies(entorno);
     res.render('catalogo/editar', {
       title: 'Editar ítem',
       error: null,
@@ -180,10 +203,11 @@ async function showEditForm(req, res, next) {
 
 async function update(req, res, next) {
   try {
-    const item = await catalogItemModel.findById(req.params.id);
-    if (!item) return redirectList(res, 'Ítem no encontrado', 'error');
+    const entorno = panelEntorno(res);
+    const item = await runWithEntorno(entorno, () => catalogItemModel.findById(req.params.id));
+    if (!item) return redirectList(res, 'Ítem no encontrado', 'error', entorno);
 
-    const companies = await loadCompanies();
+    const companies = await loadCompanies(entorno);
     const form = formFromBody(req.body);
 
     const renderError = (error) =>
@@ -200,9 +224,12 @@ async function update(req, res, next) {
 
     if (!form.companyRuc) return renderError('Selecciona una empresa (RUC).');
     if (!form.nombre) return renderError('El nombre es obligatorio.');
+    if (!companies.some((c) => c.ruc === form.companyRuc)) {
+      return renderError('La empresa seleccionada no existe en esta base.');
+    }
 
-    await catalogItemModel.update(item.id, req.body);
-    return redirectList(res, `Ítem «${form.nombre}» actualizado.`);
+    await runWithEntorno(entorno, () => catalogItemModel.update(item.id, req.body));
+    return redirectList(res, `Ítem «${form.nombre}» actualizado.`, 'success', entorno);
   } catch (err) {
     next(err);
   }
@@ -210,10 +237,11 @@ async function update(req, res, next) {
 
 async function activate(req, res, next) {
   try {
-    const item = await catalogItemModel.findById(req.params.id);
-    if (!item) return redirectList(res, 'Ítem no encontrado', 'error');
-    await catalogItemModel.setActive(item.id, true);
-    return redirectList(res, `«${item.nombre}» activado.`);
+    const entorno = panelEntorno(res);
+    const item = await runWithEntorno(entorno, () => catalogItemModel.findById(req.params.id));
+    if (!item) return redirectList(res, 'Ítem no encontrado', 'error', entorno);
+    await runWithEntorno(entorno, () => catalogItemModel.setActive(item.id, true));
+    return redirectList(res, `«${item.nombre}» activado.`, 'success', entorno);
   } catch (err) {
     next(err);
   }
@@ -221,10 +249,11 @@ async function activate(req, res, next) {
 
 async function deactivate(req, res, next) {
   try {
-    const item = await catalogItemModel.findById(req.params.id);
-    if (!item) return redirectList(res, 'Ítem no encontrado', 'error');
-    await catalogItemModel.setActive(item.id, false);
-    return redirectList(res, `«${item.nombre}» desactivado.`);
+    const entorno = panelEntorno(res);
+    const item = await runWithEntorno(entorno, () => catalogItemModel.findById(req.params.id));
+    if (!item) return redirectList(res, 'Ítem no encontrado', 'error', entorno);
+    await runWithEntorno(entorno, () => catalogItemModel.setActive(item.id, false));
+    return redirectList(res, `«${item.nombre}» desactivado.`, 'success', entorno);
   } catch (err) {
     next(err);
   }
@@ -236,12 +265,13 @@ async function searchCodigosSunat(req, res, next) {
       ...req.query,
       limit: req.query.limit || 40,
     });
-    const { total, items } = await codigoProductoSunatModel.findPaginated({
-      q,
-      page,
-      pageSize,
-      skip,
-    });
+    const { total, items } = await runWithEntorno('prod', () =>
+      codigoProductoSunatModel.findPaginated({
+        q,
+        page,
+        pageSize,
+        skip,
+      }));
     res.json({ success: true, items, total, page, pageSize });
   } catch (err) {
     next(err);
@@ -250,37 +280,21 @@ async function searchCodigosSunat(req, res, next) {
 
 async function destroy(req, res, next) {
   try {
-    const item = await catalogItemModel.findById(req.params.id);
-    if (!item) return redirectList(res, 'Ítem no encontrado', 'error');
+    const entorno = panelEntorno(res);
+    const item = await runWithEntorno(entorno, () => catalogItemModel.findById(req.params.id));
+    if (!item) return redirectList(res, 'Ítem no encontrado', 'error', entorno);
 
-    const result = await catalogItemModel.remove(item.id);
+    const result = await runWithEntorno(entorno, () => catalogItemModel.remove(item.id));
     if (result.error === 'has_relations') {
       return redirectList(
         res,
         'No se puede eliminar: tiene ventas, series o movimientos vinculados',
         'error',
+        entorno,
       );
     }
 
-    return redirectList(res, `«${item.nombre}» eliminado.`);
-  } catch (err) {
-    next(err);
-  }
-}
-
-async function searchCodigosSunat(req, res, next) {
-  try {
-    const { q, page, pageSize, skip } = parseListQuery({
-      ...req.query,
-      limit: req.query.limit || 40,
-    });
-    const { total, items } = await codigoProductoSunatModel.findPaginated({
-      q,
-      page,
-      pageSize,
-      skip,
-    });
-    res.json({ success: true, items, total, page, pageSize });
+    return redirectList(res, `«${item.nombre}» eliminado.`, 'success', entorno);
   } catch (err) {
     next(err);
   }

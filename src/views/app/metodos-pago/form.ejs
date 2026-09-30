@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> · Easy</title>
+  <link rel="stylesheet" href="/css/app-ios.css" />
+</head>
+<body class="ios-app">
+  <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
+  <main class="ios-main">
+    <header class="ios-top">
+      <div>
+        <p class="ios-eyebrow">Métodos de pago</p>
+        <h1><%= mode === 'editar' ? 'Editar' : 'Nuevo método' %></h1>
+      </div>
+      <a class="ios-back" href="<%= appBase %>/metodos-pago">Volver</a>
+    </header>
+
+    <% if (error) { %>
+      <div class="ios-flash is-error"><%= error %></div>
+    <% } %>
+
+    <%
+      var tipoActual = form.tipo || 'YAPE';
+      var sinValor = false;
+      (tipos || []).forEach(function(t) {
+        if (t.value === tipoActual && t.sinValor) sinValor = true;
+      });
+    %>
+
+    <form
+      class="ios-form"
+      method="POST"
+      action="<%= mode === 'editar' ? (appBase + '/metodos-pago/' + form.id) : (appBase + '/metodos-pago') %>"
+      id="formMetodoPago"
+    >
+      <section class="ios-form-card">
+        <label class="ios-field">
+          <span>Nombre *</span>
+          <input
+            type="text"
+            name="nombre"
+            value="<%= form.nombre || '' %>"
+            required
+            maxlength="120"
+            placeholder="Ej. Yape principal, Efectivo, BCP CCI"
+            autocomplete="off"
+          />
+        </label>
+        <label class="ios-field">
+          <span>Tipo *</span>
+          <select name="tipo" id="metodoTipo" required>
+            <% (tipos || []).forEach(function(t) { %>
+              <option
+                value="<%= t.value %>"
+                data-sin-valor="<%= t.sinValor ? '1' : '0' %>"
+                <%= form.tipo === t.value ? 'selected' : '' %>
+              ><%= t.label %></option>
+            <% }) %>
+          </select>
+        </label>
+        <label class="ios-field" id="valorFieldWrap" <%= sinValor ? 'hidden' : '' %>>
+          <span>Valor (celular o CCI) *</span>
+          <input
+            type="text"
+            name="valor"
+            id="metodoValor"
+            value="<%= form.valor || '' %>"
+            <%= sinValor ? '' : 'required' %>
+            maxlength="80"
+            placeholder="999888777 o 00219100…"
+            inputmode="numeric"
+            autocomplete="off"
+          />
+        </label>
+        <p id="valorHintEfectivo" class="ios-muted" style="margin:0;font-size:12px;<%= sinValor ? '' : 'display:none' %>">
+          Efectivo no requiere celular ni CCI.
+        </p>
+        <% if (mode === 'editar') { %>
+          <label class="ios-check" style="margin-top:8px">
+            <input type="checkbox" name="activo" value="1" <%= form.activo !== false ? 'checked' : '' %> />
+            <span>Activo (visible al emitir)</span>
+          </label>
+        <% } %>
+      </section>
+
+      <div class="ios-form-actions">
+        <button type="submit" class="ios-btn-primary">
+          <%= mode === 'editar' ? 'Guardar cambios' : 'Crear método' %>
+        </button>
+      </div>
+    </form>
+
+    <% if (mode === 'editar' && form.activo !== false) { %>
+      <form method="POST" action="<%= appBase %>/metodos-pago/<%= form.id %>/desactivar" style="margin-top:12px">
+        <button type="submit" class="ios-btn-ghost" style="color:#C62828;width:100%" onclick="return confirm('¿Desactivar este método de pago?')">
+          Desactivar método
+        </button>
+      </form>
+    <% } %>
+  </main>
+  <%- include('../../partials/app-tabbar', { active: active, appBase: appBase }) %>
+  <script>
+    (function () {
+      var sel = document.getElementById('metodoTipo');
+      var wrap = document.getElementById('valorFieldWrap');
+      var input = document.getElementById('metodoValor');
+      var hint = document.getElementById('valorHintEfectivo');
+      function sync() {
+        var opt = sel && sel.options[sel.selectedIndex];
+        var sin = opt && opt.getAttribute('data-sin-valor') === '1';
+        if (wrap) wrap.hidden = sin;
+        if (hint) hint.style.display = sin ? '' : 'none';
+        if (input) {
+          if (sin) {
+            input.removeAttribute('required');
+            input.value = '';
+          } else {
+            input.setAttribute('required', 'required');
+          }
+        }
+      }
+      sel && sel.addEventListener('change', sync);
+      sync();
+    })();
+  </script>
+</body>
+</html>

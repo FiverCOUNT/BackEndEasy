@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> · Easy</title>
+  <link rel="stylesheet" href="/css/app-ios.css" />
+</head>
+<body class="ios-app">
+  <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
+  <main class="ios-main">
+    <header class="ios-top">
+      <div>
+        <p class="ios-eyebrow">Serie <%= serie %> · GRE remitente</p>
+        <h1 id="pasoTitulo">Motivo SUNAT</h1>
+      </div>
+      <a class="ios-back" href="<%= appBase %>/emitir/guia">Volver</a>
+    </header>
+
+    <% if (error) { %>
+      <div class="ios-flash is-error"><%= error %></div>
+    <% } %>
+
+    <div class="ios-wizard-steps" id="wizardSteps">
+      <% pasos.forEach(function(p) { %>
+        <button type="button" class="ios-wizard-dot <%= p.id === 1 ? 'is-on' : '' %>" data-goto="<%= p.id %>" title="<%= p.titulo %>">
+          <span><%= p.id %></span>
+          <small><%= p.corto %></small>
+        </button>
+      <% }) %>
+    </div>
+
+    <form class="ios-form" method="POST" action="<%= appBase %>/emitir/GUIA_EMISION" id="greRemitenteForm"
+      data-company-ruc="<%= companyRuc %>"
+      data-company-nombre="<%= companyNombre || '' %>"
+      data-docs-api="<%= appBase %>/emitir/documentos-afectados"
+      data-doc-lineas-api="<%= appBase %>/emitir/documento-afectado"
+      data-movimientos-api="<%= appBase %>/emitir/movimientos-traslado"
+      data-envio-api="<%= appBase %>/ordenes/direcciones-envio"
+      data-vehiculos-api="<%= appBase %>/emitir/vehiculos"
+      data-conductores-api="<%= appBase %>/emitir/conductores"
+      data-transportistas-api="<%= appBase %>/emitir/transportistas"
+    >
+      <!-- 1 Motivo -->
+      <section class="ios-wizard-pane is-on" data-step="1">
+        <p class="ios-muted">Catálogo N.° 20 SUNAT — elige el motivo del traslado</p>
+        <div class="ios-choice-list">
+          <% motivos.forEach(function(m) { %>
+            <label class="ios-choice <%= form.cod_traslado === m.codigo ? 'is-on' : '' %>">
+              <input type="radio" name="cod_traslado" value="<%= m.codigo %>" data-docs="<%= m.docs %>" data-fijo="<%= m.destinatarioFijo ? '1' : '0' %>" data-titulo="<%= m.titulo %>" <%= form.cod_traslado === m.codigo ? 'checked' : '' %> />
+              <strong><%= m.codigo %> · <%= m.titulo %></strong>
+              <small><%= m.detalle || '' %></small>
+            </label>
+          <% }) %>
+        </div>
+      </section>
+
+      <!-- 2 Bienes -->
+      <section class="ios-wizard-pane" data-step="2">
+        <p class="ios-muted" id="bienesHint">Puedes vincular varias facturas o compras. Destinatario y bienes salen de ellas.</p>
+
+        <div id="blockFacturas" class="ios-form-card" hidden>
+          <h3 class="ios-form-label">Documentos afectados</h3>
+          <div class="ios-field">
+            <span id="greDocsFieldLabel">Comprobantes</span>
+            <button type="button" class="ios-picker-btn" id="greFacturaAbrir">
+              <span class="ios-picker-btn-text">
+                <strong id="greFacturaBtnTitulo">Seleccionar documentos</strong>
+                <small id="greFacturaBtnDetalle">Facturas emitidas o compras recibidas · puedes marcar varias</small>
+              </span>
+              <span class="ios-picker-btn-chevron" aria-hidden="true">▾</span>
+            </button>
+            <button type="button" class="ios-btn-ghost" id="greDocManualAbrir" style="margin-top:8px;">Ingresar manualmente</button>
+            <div id="greFacturasSel"></div>
+            <div id="greFacturasHidden"></div>
+          </div>
+        </div>
+
+        <div id="blockBienesDoc" class="ios-form-card" hidden>
+          <h3 class="ios-form-label">Líneas de productos</h3>
+          <p class="ios-muted" id="greBienesStatus">Ítems de los documentos vinculados.</p>
+          <div class="ios-nc-items" id="greBienesLista"></div>
+        </div>
+
+        <div id="blockDestinatario" class="ios-form-card">
+          <h3 class="ios-form-label">Destinatario</h3>
+          <p class="ios-muted" id="destinatarioHint">Se toma del cliente a quien se emitió la factura.</p>
+          <div id="destinatarioTerceros" hidden>
+            <button type="button" class="ios-picker-btn" id="greDestAbrir">
+              <span class="ios-picker-btn-text">
+                <strong id="greDestBtnTitulo">Elegir destinatario</strong>
+                <small id="greDestBtnDetalle">Lista de clientes registrados</small>
+              </span>
+              <span class="ios-picker-btn-chevron" aria-hidden="true">▾</span>
+            </button>
+          </div>
+          <div id="destinatarioVista" class="ios-selected-card" hidden>
+            <div class="ios-selected-card-text">
+              <strong id="destVistaNombre">—</strong>
+              <span id="destVistaDoc"></span>
+            </div>
+            <button type="button" class="ios-selected-card-change" id="greDestCambiar" hidden>Cambiar</button>
+          </div>
+          <input type="hidden" name="receptor_tipo_doc" id="receptorTipo" value="<%= form.receptor_tipo_doc || '6' %>" />
+          <input type="hidden" name="receptor_numero_doc" id="receptorDoc" value="<%= form.receptor_numero_doc || '' %>" />
+          <input type="hidden" name="receptor_razon_social" id="receptorNombre" value="<%= form.receptor_razon_social || '' %>" />
+          <div id="destinatarioManual" hidden>
+            <label class="ios-field">
+              <span>Tipo doc.</span>
+              <select id="receptorTipoManual">
+                <option value="6" <%= form.receptor_tipo_doc === '6' ? 'selected' : '' %>>RUC</option>
+                <option value="1" <%= form.receptor_tipo_doc === '1' ? 'selected' : '' %>>DNI</option>
+                <option value="4" <%= form.receptor_tipo_doc === '4' ? 'selected' : '' %>>CE</option>
+              </select>
+            </label>
+            <label class="ios-field">
+              <span>Número</span>
+              <input type="text" id="receptorDocManual" value="<%= form.receptor_numero_doc || '' %>" inputmode="numeric" />
+            </label>
+            <label class="ios-field">
+              <span>Razón social / nombre</span>
+              <input type="text" id="receptorNombreManual" value="<%= form.receptor_razon_social || '' %>" />
+            </label>
+          </div>
+        </div>
+
+        <div id="blockMovimientos" class="ios-form-card" hidden>
+          <h3 class="ios-form-label">Movimientos de traslado</h3>
+          <p class="ios-muted" style="margin:0 0 10px;">Elige salidas ya hechas entre almacenes; con ellas se arman los bienes de la guía.</p>
+          <button type="button" class="ios-picker-btn" id="greMovAbrir">
+            <span class="ios-picker-btn-text">
+              <strong id="greMovBtnTitulo">Seleccionar movimientos</strong>
+              <small id="greMovBtnDetalle">Traslados sin guía · puedes marcar varios</small>
+            </span>
+            <span class="ios-picker-btn-chevron" aria-hidden="true">▾</span>
+          </button>
+          <div id="greMovSel"></div>
+          <div id="greMovHidden"></div>
+          <div id="greLineasHidden"></div>
+        </div>
+
+        <div id="blockBienesMov" class="ios-form-card" hidden>
+          <h3 class="ios-form-label">Bienes del traslado</h3>
+          <p class="ios-muted" id="greBienesMovStatus">Ítems de los movimientos seleccionados.</p>
+          <div class="ios-nc-items" id="greBienesMovLista"></div>
+        </div>
+      </section>
+
+      <!-- 3 Carga -->
+      <section class="ios-wizard-pane" data-step="3">
+        <section class="ios-form-card">
+          <h3 class="ios-form-label">Peso total</h3>
+          <label class="ios-field">
+            <span>Peso *</span>
+            <input type="number" name="peso_total" value="<%= form.peso_total || '1' %>" min="0.001" step="0.001" required />
+          </label>
+          <label class="ios-field">
+            <span>Unidad</span>
+            <select name="und_peso_total">
+              <% unidadesPeso.forEach(function(u) { %>
+                <option value="<%= u.codigo %>" <%= form.und_peso_total === u.codigo ? 'selected' : '' %>><%= u.titulo %></option>
+              <% }) %>
+            </select>
+          </label>
+        </section>
+      </section>
+
+      <!-- 4 Ruta -->
+      <section class="ios-wizard-pane" data-step="4">
+        <section class="ios-form-card">
+          <h3 class="ios-form-label">Punto de partida</h3>
+          <input type="hidden" name="partida_ubigeo" id="partidaUbigeo" value="<%= form.partida_ubigeo || '' %>" />
+          <input type="hidden" name="partida_direccion" id="partidaDireccion" value="<%= form.partida_direccion || '' %>" />
+          <div class="ios-ubic-wrap">
+            <button type="button" class="ios-ubic-pick is-empty" id="grePartidaAbrir" data-gre-ubicar="partida">
+              <span class="ios-ubic-pick-icon" aria-hidden="true">📍</span>
+              <span class="ios-ubic-pick-text">
+                <strong id="grePartidaBtnTitulo">Toca para elegir ubicación</strong>
+                <small id="grePartidaBtnDetalle">Partida · lista guardada o Añadir</small>
+              </span>
+              <span class="ios-chevron" aria-hidden="true">›</span>
+            </button>
+            <button type="button" class="ios-ubic-clear" id="grePartidaQuitar" hidden aria-label="Quitar ubicación">×</button>
+          </div>
+        </section>
+        <section class="ios-form-card">
+          <h3 class="ios-form-label">Punto de llegada *</h3>
+          <input type="hidden" name="llegada_ubigeo" id="llegadaUbigeo" value="<%= form.llegada_ubigeo || '' %>" />
+          <input type="hidden" name="llegada_direccion" id="llegadaDireccion" value="<%= form.llegada_direccion || '' %>" />
+          <div class="ios-ubic-wrap">
+            <button type="button" class="ios-ubic-pick is-empty" id="greLlegadaAbrir" data-gre-ubicar="llegada">
+              <span class="ios-ubic-pick-icon" aria-hidden="true">📍</span>
+              <span class="ios-ubic-pick-text">
+                <strong id="greLlegadaBtnTitulo">Toca para elegir ubicación</strong>
+                <small id="greLlegadaBtnDetalle">Obligatorio · lista guardada o Añadir</small>
+              </span>
+              <span class="ios-chevron" aria-hidden="true">›</span>
+            </button>
+            <button type="button" class="ios-ubic-clear" id="greLlegadaQuitar" hidden aria-label="Quitar ubicación">×</button>
+          </div>
+        </section>
+      </section>
+
+      <!-- 5 Modalidad -->
+      <section class="ios-wizard-pane" data-step="5">
+        <p class="ios-muted">Público (ajeno) o privado (propio)</p>
+        <div class="ios-choice-list">
+          <% modalidades.forEach(function(m) { %>
+            <label class="ios-choice <%= form.mod_traslado === m.codigo ? 'is-on' : '' %>">
+              <input type="radio" name="mod_traslado" value="<%= m.codigo %>" <%= form.mod_traslado === m.codigo ? 'checked' : '' %> />
+              <strong><%= m.titulo %></strong>
+              <small><%= m.detalle %></small>
+            </label>
+          <% }) %>
+        </div>
+      </section>
+
+      <!-- 6 Transporte -->
+      <section class="ios-wizard-pane" data-step="6">
+        <div id="blockPublico" class="ios-form-card" hidden>
+          <h3 class="ios-form-label">Empresa transportista</h3>
+          <input type="hidden" name="transportista_ruc" id="transportistaRuc" value="<%= form.transportista_ruc || '' %>" />
+          <input type="hidden" name="transportista_razon_social" id="transportistaNombre" value="<%= form.transportista_razon_social || '' %>" />
+          <input type="hidden" name="transportista_mtc" id="transportistaMtc" value="<%= form.transportista_mtc || '' %>" />
+          <div class="ios-ubic-wrap">
+            <button type="button" class="ios-ubic-pick is-empty" id="greTransAbrir">
+              <span class="ios-ubic-pick-icon" aria-hidden="true">🚚</span>
+              <span class="ios-ubic-pick-text">
+                <strong id="greTransBtnTitulo">Toca para elegir transportista</strong>
+                <small id="greTransBtnDetalle">Lista guardada o Añadir</small>
+              </span>
+              <span class="ios-chevron" aria-hidden="true">›</span>
+            </button>
+            <button type="button" class="ios-ubic-clear" id="greTransQuitar" hidden aria-label="Quitar">×</button>
+          </div>
+        </div>
+
+        <section class="ios-form-card">
+          <h3 class="ios-form-label">Indicadores del traslado</h3>
+          <label class="ios-check" style="align-items:center;gap:12px;">
+            <input type="checkbox" name="traslado_vehiculo_m1_l" id="trasladoVehiculoM1L" value="1"
+              <%= form.traslado_vehiculo_m1_l ? 'checked' : '' %> />
+            <span>
+              <strong style="display:block;font-size:15px;">Vehículo categoría M1 o L</strong>
+              <small style="display:block;color:var(--ios-muted);margin-top:2px;line-height:1.35;">
+                Moto, cuatrimoto o auto ≤8 asientos. Con SI, SUNAT solo pide la placa (sin conductor).
+              </small>
+            </span>
+          </label>
+        </section>
+
+        <section class="ios-form-card">
+          <h3 class="ios-form-label">Vehículo principal</h3>
+          <input type="hidden" name="vehiculo_id" id="vehiculoId" value="<%= form.vehiculo_id || '' %>" />
+          <input type="hidden" name="vehiculo_placa" id="vehiculoPlaca" value="<%= form.vehiculo_placa || '' %>" />
+          <input type="hidden" name="vehiculo_secundarios_json" id="vehiculoSecundariosJson" value="<%= form.vehiculo_secundarios_json || '[]' %>" />
+          <div class="ios-ubic-wrap">
+            <button type="button" class="ios-ubic-pick is-empty" id="greVehiAbrir">
+              <span class="ios-ubic-pick-icon" aria-hidden="true">🚘</span>
+              <span class="ios-ubic-pick-text">
+                <strong id="greVehiBtnTitulo">Toca para elegir vehículo</strong>
+                <small id="greVehiBtnDetalle">Flota guardada o Añadir</small>
+              </span>
+              <span class="ios-chevron" aria-hidden="true">›</span>
+            </button>
+            <button type="button" class="ios-ubic-clear" id="greVehiQuitar" hidden aria-label="Quitar">×</button>
+          </div>
+          <div id="greVehiSecList" class="ios-sec-list" hidden></div>
+          <button type="button" class="ios-btn-ghost ios-sec-add" id="greVehiAddSec">+ Añadir secundario</button>
+        </section>
+
+        <section class="ios-form-card" id="blockConductor">
+          <h3 class="ios-form-label">Conductor principal</h3>
+          <input type="hidden" name="conductor_id" id="conductorId" value="<%= form.conductor_id || '' %>" />
+          <input type="hidden" name="conductor_tipo_doc" id="conductorTipo" value="<%= form.conductor_tipo_doc || '1' %>" />
+          <input type="hidden" name="conductor_numero_doc" id="conductorDoc" value="<%= form.conductor_numero_doc || '' %>" />
+          <input type="hidden" name="conductor_nombres" id="conductorNombre" value="<%= form.conductor_nombres || '' %>" />
+          <input type="hidden" name="conductor_licencia" id="conductorLicencia" value="<%= form.conductor_licencia || '' %>" />
+          <input type="hidden" name="conductor_secundarios_json" id="conductorSecundariosJson" value="<%= form.conductor_secundarios_json || '[]' %>" />
+          <div class="ios-ubic-wrap">
+            <button type="button" class="ios-ubic-pick is-empty" id="greCondAbrir">
+              <span class="ios-ubic-pick-icon" aria-hidden="true">👤</span>
+              <span class="ios-ubic-pick-text">
+                <strong id="greCondBtnTitulo">Toca para elegir conductor</strong>
+                <small id="greCondBtnDetalle">Lista guardada o Añadir</small>
+              </span>
+              <span class="ios-chevron" aria-hidden="true">›</span>
+            </button>
+            <button type="button" class="ios-ubic-clear" id="greCondQuitar" hidden aria-label="Quitar">×</button>
+          </div>
+          <div id="greCondSecList" class="ios-sec-list" hidden></div>
+          <button type="button" class="ios-btn-ghost ios-sec-add" id="greCondAddSec">+ Añadir secundario</button>
+        </section>
+      </section>
+
+      <!-- 7 Resumen -->
+      <section class="ios-wizard-pane" data-step="7">
+        <section class="ios-form-card">
+          <h3 class="ios-form-label">Fechas de traslado</h3>
+          <input type="hidden" name="fecha_traslado" id="fechaTraslado" value="<%= form.fecha_traslado || '' %>" required />
+          <input type="hidden" name="fecha_entrega_transportista" id="fechaEntrega" value="<%= form.fecha_entrega_transportista || '' %>" />
+          <div class="ios-list ios-date-list">
+            <button type="button" class="ios-row ios-date-row" id="greFechaTrasladoBtn" data-gre-fecha="traslado">
+              <span class="ios-row-text">
+                <strong>Inicio traslado</strong>
+                <small>Fecha de partida</small>
+              </span>
+              <span class="ios-date-row-value" id="greFechaTrasladoLabel">Elegir</span>
+              <span class="ios-chevron" aria-hidden="true">›</span>
+            </button>
+            <button type="button" class="ios-row ios-date-row" id="fechaEntregaWrap" data-gre-fecha="entrega" hidden>
+              <span class="ios-row-text">
+                <strong>Entrega transportista</strong>
+                <small>Solo transporte público</small>
+              </span>
+              <span class="ios-date-row-value" id="greFechaEntregaLabel">Elegir</span>
+              <span class="ios-chevron" aria-hidden="true">›</span>
+            </button>
+          </div>
+        </section>
+        <section class="ios-form-card">
+          <h3 class="ios-form-label">Resumen</h3>
+          <div class="ios-list">
+            <div class="ios-row ios-row-static"><span class="ios-row-text"><strong>Motivo</strong><small id="sumMotivo">—</small></span></div>
+            <div class="ios-row ios-row-static"><span class="ios-row-text"><strong>Modalidad</strong><small id="sumModalidad">—</small></span></div>
+            <div class="ios-row ios-row-static"><span class="ios-row-text"><strong>Destinatario</strong><small id="sumDest">—</small></span></div>
+            <div class="ios-row ios-row-static"><span class="ios-row-text"><strong>Ruta</strong><small id="sumRuta">—</small></span></div>
+            <div class="ios-row ios-row-static"><span class="ios-row-text"><strong>Transporte</strong><small id="sumTransporte">—</small></span></div>
+            <div class="ios-row ios-row-static"><span class="ios-row-text"><strong>Fechas</strong><small id="sumFechas">—</small></span></div>
+          </div>
+        </section>
+        <%- include('../../partials/app-emit-imagenes') %>
+      </section>
+
+      <div class="ios-wizard-nav">
+        <button type="button" class="ios-btn-secondary" id="btnPrev" hidden>Atrás</button>
+        <button type="button" class="ios-btn-primary" id="btnNext">Siguiente</button>
+        <button type="submit" class="ios-btn-primary" id="btnSubmit" hidden>Emitir</button>
+      </div>
+    </form>
+  </main>
+  <%- include('../../partials/app-emit-loading') %>
+  <%- include('../../partials/app-tabbar', { active: active, appBase: appBase }) %>
+
+  <div id="greDocManualPicker" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel" role="dialog" aria-modal="true">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-back" id="greDocManualCerrar">← Volver</button>
+        <h3>Documento manual</h3>
+        <span style="width:56px;"></span>
+      </div>
+      <div class="ios-sheet-status">Tipo, RUC emisor, serie y número · el RUC identifica al emisor del documento vinculado</div>
+      <div style="padding:0 16px 16px;display:flex;flex-direction:column;gap:12px;">
+        <label class="ios-field">
+          <span>Tipo</span>
+          <select id="greManualTipo">
+            <option value="01">Factura electrónica</option>
+            <option value="03">Boleta de venta</option>
+            <option value="09">GRE remitente</option>
+            <option value="31">GRE transportista</option>
+          </select>
+        </label>
+        <label class="ios-field">
+          <span>RUC emisor</span>
+          <input type="text" id="greManualEmisor" inputmode="numeric" maxlength="11" value="<%= companyRuc || '' %>" />
+          <small class="ios-field-hint" id="greManualEmisorHint">Tu RUC si lo emitiste tú; el del proveedor si es una compra o guía de terceros.</small>
+        </label>
+        <div class="ios-inline">
+          <label class="ios-field">
+            <span>Serie</span>
+            <input type="text" id="greManualSerie" maxlength="4" placeholder="F001" autocomplete="off" />
+          </label>
+          <label class="ios-field">
+            <span>Número</span>
+            <input type="text" id="greManualNumero" maxlength="8" inputmode="numeric" placeholder="123" autocomplete="off" />
+          </label>
+        </div>
+        <button type="button" class="ios-btn-primary" id="greDocManualAgregar">Agregar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="greDestPicker" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel" role="dialog" aria-modal="true">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-back" id="greDestPickerCerrar">← Volver</button>
+        <h3>Destinatario</h3>
+        <span style="width:56px;"></span>
+      </div>
+      <input type="search" id="greDestPickerBusqueda" class="ios-sheet-search" placeholder="Nombre, DNI, RUC…" autocomplete="off" />
+      <div class="ios-sheet-status" id="greDestPickerStatus">Busca o elige un cliente</div>
+      <div class="ios-sheet-list" id="greDestPickerLista"></div>
+    </div>
+  </div>
+
+  <%- include('../../partials/ubicacion-picker', { appBase: appBase }) %>
+
+  <div id="greCatalogPicker" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel" role="dialog" aria-modal="true">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-back" id="greCatCerrar">← Volver</button>
+        <h3 id="greCatTitulo">Catálogo</h3>
+        <button type="button" class="ios-sheet-action-label" id="greCatNueva">Añadir</button>
+      </div>
+      <div id="greCatListaWrap">
+        <input type="search" id="greCatBusqueda" class="ios-sheet-search" placeholder="Buscar…" autocomplete="off" />
+        <div class="ios-sheet-status" id="greCatStatus">Cargando…</div>
+        <div class="ios-sheet-list" id="greCatLista"></div>
+        <button type="button" class="ios-sheet-more" id="greCatMas" hidden>Ver más</button>
+      </div>
+      <div id="greCatFormWrap" class="ios-envio-form" hidden>
+        <div id="greCatFormFields"></div>
+        <button type="button" class="ios-btn-primary" id="greCatGuardar">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="greFechaSheet" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel ios-fecha-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="greFechaSheetTitulo">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-action" id="greFechaCancelar" aria-label="Cancelar">✕</button>
+        <h3 id="greFechaSheetTitulo">Fecha</h3>
+        <button type="button" class="ios-sheet-action ios-sheet-action-text" id="greFechaListo">Listo</button>
+      </div>
+      <p class="ios-fecha-sheet-hint" id="greFechaSheetHint">Elige el día</p>
+      <div class="ios-date-wheel" id="greFechaWheel" aria-label="Selector de fecha">
+        <div class="ios-date-wheel-fade ios-date-wheel-fade-top" aria-hidden="true"></div>
+        <div class="ios-date-wheel-fade ios-date-wheel-fade-bottom" aria-hidden="true"></div>
+        <div class="ios-date-wheel-highlight" aria-hidden="true"></div>
+        <div class="ios-date-wheel-unit" data-col="day">
+          <button type="button" class="ios-date-wheel-step is-up" data-dir="-1" aria-label="Día anterior">▴</button>
+          <div class="ios-date-wheel-col">
+            <ul class="ios-date-wheel-list" id="greFechaWheelDay"></ul>
+          </div>
+          <button type="button" class="ios-date-wheel-step is-down" data-dir="1" aria-label="Día siguiente">▾</button>
+        </div>
+        <div class="ios-date-wheel-unit" data-col="month">
+          <button type="button" class="ios-date-wheel-step is-up" data-dir="-1" aria-label="Mes anterior">▴</button>
+          <div class="ios-date-wheel-col">
+            <ul class="ios-date-wheel-list" id="greFechaWheelMonth"></ul>
+          </div>
+          <button type="button" class="ios-date-wheel-step is-down" data-dir="1" aria-label="Mes siguiente">▾</button>
+        </div>
+        <div class="ios-date-wheel-unit" data-col="year">
+          <button type="button" class="ios-date-wheel-step is-up" data-dir="-1" aria-label="Año anterior">▴</button>
+          <div class="ios-date-wheel-col">
+            <ul class="ios-date-wheel-list" id="greFechaWheelYear"></ul>
+          </div>
+          <button type="button" class="ios-date-wheel-step is-down" data-dir="1" aria-label="Año siguiente">▾</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="greFacturaPicker" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel" role="dialog" aria-modal="true">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-back" id="greFacturaPickerCerrar">← Listo</button>
+        <h3 id="greFacturaPickerTitulo">Documentos afectados</h3>
+        <span style="width:56px;"></span>
+      </div>
+      <div class="ios-chips" id="greDocFuenteTabs" hidden role="tablist" aria-label="Origen de documentos">
+        <button type="button" class="ios-chip is-on" data-fuente="ventas" role="tab" aria-selected="true">Emitidos</button>
+        <button type="button" class="ios-chip" data-fuente="compras" role="tab" aria-selected="false">Recibidos</button>
+      </div>
+      <input type="search" id="greFacturaPickerBusqueda" class="ios-sheet-search" placeholder="Serie, número o nombre…" autocomplete="off" />
+      <div class="ios-sheet-status" id="greFacturaPickerStatus">Toca para marcar varios</div>
+      <div class="ios-sheet-list" id="greFacturaPickerLista"></div>
+      <button type="button" class="ios-sheet-more" id="greFacturaPickerMas" hidden>Ver más</button>
+    </div>
+  </div>
+
+  <div id="greMovPicker" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel" role="dialog" aria-modal="true">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-back" id="greMovPickerCerrar">← Listo</button>
+        <h3>Traslados</h3>
+        <span style="width:56px;"></span>
+      </div>
+      <input type="search" id="greMovPickerBusqueda" class="ios-sheet-search" placeholder="Nº, almacén…" autocomplete="off" />
+      <div class="ios-sheet-status" id="greMovPickerStatus">Toca para marcar varios</div>
+      <div class="ios-sheet-list" id="greMovPickerLista"></div>
+      <button type="button" class="ios-sheet-more" id="greMovPickerMas" hidden>Ver más</button>
+    </div>
+  </div>
+
+  <%
+    var clientesJson = JSON.stringify((clientes || []).map(function(c) {
+      return {
+        id: c.id,
+        tipo_doc: c.tipo_doc || c.tipoDoc || '6',
+        razon_social: c.razon_social || c.razonSocial,
+        numero_doc: c.numero_doc || c.numeroDoc,
+      };
+    }));
+    var vehiculosJson = JSON.stringify(vehiculos || []);
+    var conductoresJson = JSON.stringify(conductores || []);
+    var transportistasJson = JSON.stringify(transportistas || []);
+  %>
+  <script type="application/json" id="gre-clientes-data"><%- clientesJson %></script>
+  <script type="application/json" id="gre-vehiculos-data"><%- vehiculosJson %></script>
+  <script type="application/json" id="gre-conductores-data"><%- conductoresJson %></script>
+  <script type="application/json" id="gre-transportistas-data"><%- transportistasJson %></script>
+  <script type="application/json" id="gre-docs-facturas-data"><%- JSON.stringify(docsFacturas || { items: [], total: 0, has_more: false, next_offset: 0, fuente: 'ventas' }) %></script>
+  <script type="application/json" id="gre-docs-compras-data"><%- JSON.stringify(docsCompras || compras || { items: [], total: 0, has_more: false, next_offset: 0, fuente: 'compras' }) %></script>
+  <script type="application/json" id="gre-facturas-sel-data"><%- JSON.stringify(form.factura_ids || []) %></script>
+  <script type="application/json" id="gre-compras-sel-data"><%- JSON.stringify(form.compra_ids || []) %></script>
+  <script src="/js/app-emit-loading.js"></script>
+  <script src="/js/app-emit-imagenes.js"></script>
+  <script src="/js/app-gre-remitente.js"></script>
+</body>
+</html>

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title><%= title %> — BackEnd Easy</title>
-  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/style.css?v=20260926panel" />
 </head>
 <body>
   <header class="header">
@@ -20,7 +20,7 @@
         <div class="card-header-row">
           <div>
             <h2><%= title %></h2>
-            <p class="api-hint"><%= total %> comprobante(s)</p>
+            <p class="api-hint"><%= total %> comprobante(s) en <%= adminEntornoLabel %></p>
           </div>
         </div>
 
@@ -37,7 +37,7 @@
                   <th>Número</th>
                   <th>Cliente</th>
                   <th>RUC empresa</th>
-                  <th>Fecha</th>
+                  <th>Fecha y hora</th>
                   <th>Total</th>
                   <th>Estado</th>
                 </tr>

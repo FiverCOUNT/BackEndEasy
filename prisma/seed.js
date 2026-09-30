@@ -119,7 +119,6 @@ async function main() {
       telefono: '014567890',
       telefonos: ['014567890', '999888777'],
       activo: true,
-      isActive: true,
       entorno: 'beta',
       plan: 'pro',
       taxRegime: 'RER',

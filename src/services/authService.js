@@ -9,6 +9,12 @@ const {
   buildConfiguracion,
 } = require('./sessionConfigService');
 
+function resolveUserEntorno(user) {
+  const raw = user?._dbEntorno || user?.company?.entorno || 'beta';
+  const v = String(raw).toLowerCase();
+  return v === 'prod' || v === 'production' ? 'prod' : 'beta';
+}
+
 function buildAccessToken(user) {
   return signAccessToken({
     sub: user.id,
@@ -17,7 +23,28 @@ function buildAccessToken(user) {
     companyRuc: user.company?.ruc ?? null,
     rol: user.rol || 'USUARIO',
     almacenId: user.almacenId != null ? String(user.almacenId) : null,
+    entorno: resolveUserEntorno(user),
   });
+}
+
+const CUENTA_DESHABILITADA =
+  'Tu acceso está deshabilitado. Contacta a soporte para reactivarlo.';
+
+function assertAccesoActivo(user) {
+  if (!user || user.estado !== 'ACTIVO') {
+    const err = new Error(CUENTA_DESHABILITADA);
+    err.status = 403;
+    err.code = 'CUENTA_DESHABILITADA';
+    throw err;
+  }
+
+  const company = user.company;
+  if (company && company.activo === false) {
+    const err = new Error(CUENTA_DESHABILITADA);
+    err.status = 403;
+    err.code = 'CUENTA_DESHABILITADA';
+    throw err;
+  }
 }
 
 async function login({ email, contrasena }) {
@@ -29,11 +56,7 @@ async function login({ email, contrasena }) {
     throw err;
   }
 
-  if (user.estado !== 'ACTIVO') {
-    const err = new Error('Usuario inactivo o no autorizado');
-    err.status = 403;
-    throw err;
-  }
+  assertAccesoActivo(user);
 
   const valid = await bcrypt.compare(contrasena, user.contrasena);
   if (!valid) {
@@ -42,7 +65,8 @@ async function login({ email, contrasena }) {
     throw err;
   }
 
-  return issueTokens(user);
+  const { runWithEntorno } = require('../config/prisma');
+  return runWithEntorno(resolveUserEntorno(user), () => issueTokens(user));
 }
 
 async function refresh(refreshToken) {
@@ -59,13 +83,10 @@ async function refresh(refreshToken) {
     throw err;
   }
 
-  if (user.estado !== 'ACTIVO') {
-    const err = new Error('Usuario inactivo o no autorizado');
-    err.status = 403;
-    throw err;
-  }
+  assertAccesoActivo(user);
 
-  return issueTokens(user);
+  const { runWithEntorno } = require('../config/prisma');
+  return runWithEntorno(resolveUserEntorno(user), () => issueTokens(user));
 }
 
 async function issueTokens(user) {
@@ -77,7 +98,7 @@ async function issueTokens(user) {
     refreshToken,
   });
 
-  return sessionPayload(await usuarioModel.findById(user.id));
+  return sessionPayload(await usuarioModel.findById(user.id, resolveUserEntorno(user)));
 }
 
 async function sessionPayload(updated) {
@@ -124,9 +145,10 @@ async function sessionPayload(updated) {
   };
 }
 
-async function sessionFromUserId(userId) {
-  const user = await usuarioModel.findById(userId);
-  return sessionPayload(user);
+async function sessionFromUserId(userId, entornoHint) {
+  const user = await usuarioModel.findById(userId, entornoHint);
+  const { runWithEntorno } = require('../config/prisma');
+  return runWithEntorno(resolveUserEntorno(user), () => sessionPayload(user));
 }
 
 module.exports = {

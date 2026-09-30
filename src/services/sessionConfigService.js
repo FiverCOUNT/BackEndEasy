@@ -6,7 +6,6 @@ async function loadCompanyForSession(companyId) {
   if (!companyId) return null;
   return prisma.company.findUnique({
     where: { id: BigInt(companyId) },
-    include: { address: true },
   });
 }
 
@@ -15,7 +14,6 @@ async function buildConfiguracion(company) {
 
   const almacenes = await prisma.almacen.findMany({
     where: { companyRuc: company.ruc },
-    include: { address: true },
     orderBy: [{ nombre: 'asc' }, { codigo: 'asc' }],
   });
 

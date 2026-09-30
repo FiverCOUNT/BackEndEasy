@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> · Easy</title>
+  <link rel="stylesheet" href="/css/app-ios.css" />
+</head>
+<body class="ios-app">
+  <%- include('../../partials/app-nav', { active: active }) %>
+
+  <main class="ios-main">
+    <header class="ios-top">
+      <div>
+        <p class="ios-eyebrow"><%= companyNombre || 'Empresa' %></p>
+        <h1><%= isEdit ? 'Editar ítem' : 'Nuevo ítem' %></h1>
+      </div>
+      <a class="ios-back" href="<%= appBase %>/catalogo">Catálogo</a>
+    </header>
+
+    <% if (error) { %>
+      <div class="ios-flash is-error"><%= error %></div>
+    <% } %>
+
+    <form
+      class="ios-form"
+      method="POST"
+      action="<%= isEdit ? (appBase + '/catalogo/' + itemId) : (appBase + '/catalogo') %>"
+      id="catalogoAppForm"
+      data-is-edit="<%= isEdit ? '1' : '' %>"
+    >
+      <section class="ios-form-card">
+        <h3 class="ios-form-label">Tipo</h3>
+        <div class="ios-segment" role="group" aria-label="Tipo de ítem">
+          <label class="<%= form.kind !== 'SERVICE' ? 'is-on' : '' %>">
+            <input type="radio" name="kind" value="PRODUCT" <%= form.kind !== 'SERVICE' ? 'checked' : '' %> />
+            Producto
+          </label>
+          <label class="<%= form.kind === 'SERVICE' ? 'is-on' : '' %>">
+            <input type="radio" name="kind" value="SERVICE" <%= form.kind === 'SERVICE' ? 'checked' : '' %> />
+            Servicio
+          </label>
+        </div>
+      </section>
+
+      <section class="ios-form-card">
+        <label class="ios-field">
+          <span>Nombre *</span>
+          <input type="text" name="nombre" value="<%= form.nombre || '' %>" required maxlength="255" placeholder="Ej. Aceite 20W50" />
+        </label>
+        <label class="ios-field">
+          <span>Código interno</span>
+          <input type="text" name="codigo" value="<%= form.codigo || '' %>" maxlength="30" placeholder="Opcional" />
+        </label>
+        <div class="ios-field">
+          <span>Código SUNAT</span>
+          <div class="ios-inline">
+            <input type="text" id="codigoSunat" name="codigoSunat" value="<%= form.codigoSunat || '' %>" maxlength="32" readonly placeholder="UNSPSC" />
+            <button type="button" class="ios-btn-secondary" id="btnAsignarCodigoSunat">Buscar</button>
+            <button type="button" class="ios-btn-ghost" id="btnLimpiarCodigoSunat">Limpiar</button>
+          </div>
+          <p class="ios-hint" id="codigoSunatNombreHint"><%= form.codigoSunatNombre || 'Catálogo N° 25 SUNAT (UNSPSC)' %></p>
+        </div>
+        <label class="ios-field">
+          <span>Descripción</span>
+          <input type="text" name="descripcion" value="<%= form.descripcion || '' %>" maxlength="500" placeholder="Opcional" />
+        </label>
+      </section>
+
+      <section class="ios-form-card">
+        <label class="ios-field">
+          <span>Precio de venta *</span>
+          <input type="number" name="precioUnitario" value="<%= form.precioUnitario || '' %>" min="0.01" step="0.01" required placeholder="0.00" />
+        </label>
+        <label class="ios-field">
+          <span>Precio de compra</span>
+          <input type="number" name="precioCompra" value="<%= form.precioCompra || '' %>" min="0" step="0.01" placeholder="Opcional" />
+        </label>
+        <label class="ios-field" id="fechaVenceWrap">
+          <span>Fecha de vencimiento</span>
+          <input type="date" name="fechaVencimiento" value="<%= form.fechaVencimiento || '' %>" />
+          <p class="ios-hint">Solo si el producto vence. Déjalo vacío en el resto.</p>
+        </label>
+
+        <div class="ios-field" id="unidadProductoWrap">
+          <span>Unidad</span>
+          <div class="ios-chips" id="unidadProductoChips">
+            <% unidadesProducto.forEach(function(u) { %>
+              <label class="ios-chip <%= form.unidad === u ? 'is-on' : '' %>">
+                <input type="radio" name="unidadProducto" value="<%= u %>" <%= form.unidad === u ? 'checked' : '' %> />
+                <%= u %>
+              </label>
+            <% }); %>
+          </div>
+        </div>
+        <div class="ios-field" id="unidadServicioWrap" hidden>
+          <span>Unidad</span>
+          <div class="ios-chips">
+            <% unidadesServicio.forEach(function(u) { %>
+              <label class="ios-chip <%= form.unidad === u || form.kind === 'SERVICE' ? 'is-on' : '' %>">
+                <input type="radio" name="unidadServicio" value="<%= u %>" <%= form.unidad === u || form.kind === 'SERVICE' ? 'checked' : '' %> />
+                <%= u %>
+              </label>
+            <% }); %>
+          </div>
+        </div>
+        <input type="hidden" name="unidad" id="unidadHidden" value="<%= form.unidad || 'NIU' %>" />
+        <input type="hidden" name="afectacionIgv" value="<%= form.afectacionIgv || '10' %>" />
+        <input type="hidden" name="duracionMinutos" value="<%= form.duracionMinutos || '60' %>" />
+      </section>
+
+      <section class="ios-form-card ios-switch-grid">
+        <label class="ios-switch-row" id="serieWrap">
+          <span>
+            <strong>Maneja serie</strong>
+            <small>Solo NIU</small>
+          </span>
+          <input type="checkbox" name="manejaSerie" <%= form.manejaSerie ? 'checked' : '' %> id="manejaSerie" />
+        </label>
+        <label class="ios-switch-row">
+          <span>
+            <strong>Maneja stock</strong>
+            <small>Por almacén</small>
+          </span>
+          <input type="checkbox" name="manejaStock" <%= form.manejaStock ? 'checked' : '' %> id="manejaStock" />
+        </label>
+        <label class="ios-switch-row">
+          <span>
+            <strong>Activo</strong>
+            <small>Visible</small>
+          </span>
+          <input type="checkbox" name="activo" <%= form.activo !== false ? 'checked' : '' %> />
+        </label>
+      </section>
+
+      <div class="ios-form-actions">
+        <button type="submit" class="ios-btn-primary"><%= isEdit ? 'Guardar' : 'Crear ítem' %></button>
+        <a class="ios-btn-ghost" href="<%= appBase %>/catalogo">Cancelar</a>
+      </div>
+    </form>
+  </main>
+
+  <div id="codigoSunatPicker" class="ios-sheet" hidden aria-hidden="true"
+       data-search-url="<%= appBase %>/catalogo/codigos-sunat">
+    <div class="ios-sheet-panel" role="dialog" aria-modal="true">
+      <div class="ios-sheet-head">
+        <h3>Código SUNAT</h3>
+        <button type="button" class="ios-btn-ghost" id="btnCerrarCodigoSunat">Cerrar</button>
+      </div>
+      <input type="search" id="codigoSunatBusqueda" class="ios-sheet-search" placeholder="Buscar por nombre o código…" autocomplete="off" />
+      <div class="ios-sheet-status" id="codigoSunatStatus">Escribe para buscar…</div>
+      <div class="ios-sheet-list" id="codigoSunatResultados"></div>
+    </div>
+  </div>
+
+  <%- include('../../partials/app-tabbar', { active: active }) %>
+  <script src="/js/app-catalogo.js?v=precio-vence"></script>
+</body>
+</html>

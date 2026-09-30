@@ -1,0 +1,37 @@
+<%
+  var tabActive = active || 'inicio';
+  function tabOn(id) {
+    if (id === 'inicio') return tabActive === 'inicio';
+    if (id === 'emitir') return tabActive === 'emitir';
+    if (id === 'comprobantes') return tabActive === 'comprobantes';
+    if (id === 'ajustes') return tabActive === 'ajustes';
+    return false;
+  }
+%>
+<nav class="ios-tabbar" aria-label="Navegación principal">
+  <a href="<%= appBase %>/" class="<%= tabOn('inicio') ? 'is-active' : '' %>">
+    <span>⌂</span>
+    <small>Inicio</small>
+  </a>
+  <a href="<%= appBase %>/emitir" class="<%= tabOn('emitir') ? 'is-active' : '' %>">
+    <span>⇄</span>
+    <small>Emitir</small>
+  </a>
+  <a href="<%= appBase %>/ordenes/crear" class="ios-tab-plus" aria-label="Nueva orden">
+    <span class="ios-plus-wrap">
+      <span class="ios-plus">+</span>
+      <% if (typeof ordenesNoVistas === 'number' && ordenesNoVistas > 0) { %>
+        <span class="ios-tab-badge"><%= ordenesNoVistas > 9 ? '9+' : ordenesNoVistas %></span>
+      <% } %>
+    </span>
+    <small>Orden</small>
+  </a>
+  <a href="<%= appBase %>/comprobantes" class="<%= tabOn('comprobantes') ? 'is-active' : '' %>">
+    <span>☰</span>
+    <small>Comprob.</small>
+  </a>
+  <a href="<%= appBase %>/ajustes" class="<%= tabOn('ajustes') ? 'is-active' : '' %>">
+    <span>⚙</span>
+    <small>Ajustes</small>
+  </a>
+</nav>

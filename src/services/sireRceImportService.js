@@ -7,13 +7,14 @@ const {
   registrarInvoiceRecibido,
   intentarParsedDesdeSspp,
 } = require('./ssppReceptorService');
+const { normalizeCorrelativoCompra } = require('../models/compraModel');
 
 const SIRE_BASE = (process.env.SUNAT_SIRE_BASE || 'https://api-sire.sunat.gob.pe').replace(/\/$/, '');
 const COD_LIBRO_RCE = '080000';
 
 /**
  * Importa la propuesta SIRE RCE (compras) de un periodo YYYYMM
- * y guarda cada CPE como invoice recibido (company_ruc=emisor, cliente=tú).
+ * y guarda cada CPE en tabla `compras` (receptor = tu RUC).
  */
 async function importarComprasDelPeriodo(companyRuc, periodoRaw = null) {
   const company = await companyModel.findByRuc(companyRuc);
@@ -55,6 +56,7 @@ async function importarComprasDelPeriodo(companyRuc, periodoRaw = null) {
     periodo,
     ticket: numTicket,
     encontrados: filas.length,
+    filas,
     creados: 0,
     enriquecidos: 0,
     duplicados: 0,
@@ -68,6 +70,8 @@ async function importarComprasDelPeriodo(companyRuc, periodoRaw = null) {
     try {
       let parsed = filaToParsedCompra(fila, company.ruc);
       let fuente = 'sire_rce';
+      let xml = null;
+      let pdfBuffer = null;
       const fromSspp = await intentarParsedDesdeSspp(company, {
         emisor_ruc: fila.emisorRuc,
         tipo_doc: fila.tipoDoc,
@@ -76,15 +80,18 @@ async function importarComprasDelPeriodo(companyRuc, periodoRaw = null) {
         fecha_emision: fila.fechaEmision,
         monto: fila.mtoImpVenta,
       });
-      if (fromSspp?.lineas?.length) {
+      if (fromSspp?.parsed?.lineas?.length) {
         // Conservar razón social SIRE si el XML viene corto.
-        if (!fromSspp.proveedor?.razon_social || fromSspp.proveedor.razon_social === fromSspp.proveedor.numero_doc) {
-          fromSspp.proveedor = {
-            ...fromSspp.proveedor,
+        const parsedSspp = fromSspp.parsed;
+        if (!parsedSspp.proveedor?.razon_social || parsedSspp.proveedor.razon_social === parsedSspp.proveedor.numero_doc) {
+          parsedSspp.proveedor = {
+            ...parsedSspp.proveedor,
             razon_social: parsed.proveedor.razon_social,
           };
         }
-        parsed = fromSspp;
+        parsed = parsedSspp;
+        xml = fromSspp.xml || null;
+        pdfBuffer = fromSspp.pdf || null;
         fuente = 'sire_sspp';
         resultados.sspp_ok += 1;
       } else {
@@ -94,6 +101,8 @@ async function importarComprasDelPeriodo(companyRuc, periodoRaw = null) {
       const r = await registrarInvoiceRecibido(company, parsed, {
         fuente,
         reemplazarResumen: true,
+        xml,
+        pdfBuffer,
       });
       if (r.creado) {
         resultados.creados += 1;
@@ -389,10 +398,10 @@ function parsePropuestaRceTxt(txt, receptorRuc = null) {
     if (cells.length < 14) continue;
 
     const tipoDoc = String(cells[6] || '').padStart(2, '0');
-    if (!/^(01|03|07|08)$/.test(tipoDoc)) continue;
+    if (!/^(01|03|07|08|09|31)$/.test(tipoDoc)) continue;
 
     const serie = String(cells[7] || '').toUpperCase();
-    const correlativo = String(cells[9] || '').replace(/\D/g, '');
+    const correlativo = normalizeCorrelativoCompra(cells[9]);
     let emisorRuc = String(cells[12] || '').replace(/\D/g, '');
     const emisorRazonSocial = String(cells[13] || '').trim() || emisorRuc;
     const fechaEmision = cells[4] || null;
@@ -465,7 +474,12 @@ function filaToParsedCompra(fila, receptorRuc = null) {
   const proveedor = String(fila.emisorRazonSocial || fila.emisorRuc || 'Proveedor').trim();
   const tipoEtiqueta = etiquetaTipoDocCpe(fila.tipoDoc);
   const docRef = `${fila.serie}-${fila.correlativo}`;
-  const nombre = (esInventariable ? `Compra · ${proveedor}` : `Servicio · ${proveedor}`).slice(0, 255);
+  const esGre = /^(09|31)$/.test(String(fila.tipoDoc || '').padStart(2, '0'));
+  const nombre = (
+    esGre
+      ? `GRE · ${proveedor}`
+      : (esInventariable ? `Compra · ${proveedor}` : `Servicio · ${proveedor}`)
+  ).slice(0, 255);
   const descripcion = `${nombre} · ${tipoEtiqueta} ${docRef}`.slice(0, 500);
   const codigo = `CMP-${fila.emisorRuc}-${fila.serie}-${fila.correlativo}`.slice(0, 64);
 
@@ -481,20 +495,32 @@ function filaToParsedCompra(fila, receptorRuc = null) {
       razon_social: fila.emisorRazonSocial || fila.emisorRuc,
     },
     receptor: { numero_doc: receptorRuc || null },
-    sub_total: sub || null,
-    mto_igv: igv || null,
-    mto_imp_venta: total || null,
-    lineas: total
+    sub_total: esGre ? 0 : (sub || null),
+    mto_igv: esGre ? 0 : (igv || null),
+    mto_imp_venta: esGre ? 0 : (total || null),
+    lineas: (total || esGre)
       ? [{
           nombre,
           descripcion,
           cantidad: 1,
-          unidad,
-          precio_unitario: total,
+          unidad: esGre ? 'NIU' : unidad,
+          precio_unitario: esGre ? 0 : total,
           codigo,
-          kind: esInventariable ? 'PRODUCT' : 'SERVICE',
+          kind: esGre || esInventariable ? 'PRODUCT' : 'SERVICE',
         }]
       : [],
+    ...(esGre
+      ? {
+          guia_meta: {
+            rol_recibido: 'DESTINATARIO',
+            pendiente_sspp: true,
+            envio: {
+              cod_traslado: '01',
+              mod_traslado: '01',
+            },
+          },
+        }
+      : {}),
   };
 }
 

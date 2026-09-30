@@ -1,5 +1,6 @@
 const clienteModel = require('../models/clienteModel');
 const { parseListQuery, buildPageMeta } = require('../utils/pagination');
+const { adminPath } = require('../config/adminPanel');
 
 function parseFlash(req) {
   const { msg, tipo } = req.query;
@@ -21,8 +22,8 @@ async function list(req, res, next) {
       total,
       page,
       pageSize,
-      basePath: '/clientes',
-      query: { q, msg: req.query.msg, tipo: req.query.tipo },
+      basePath: adminPath('/clientes'),
+      query: { q, entorno: res.locals.adminEntorno, msg: req.query.msg, tipo: req.query.tipo },
     });
 
     res.render('clientes/listar', {
@@ -33,7 +34,7 @@ async function list(req, res, next) {
       pageSize,
       pagination,
       flash: parseFlash(req),
-      searchAction: '/clientes',
+      searchAction: adminPath('/clientes'),
       searchPlaceholder: 'Buscar por documento, razón social o RUC empresa…',
     });
   } catch (err) {

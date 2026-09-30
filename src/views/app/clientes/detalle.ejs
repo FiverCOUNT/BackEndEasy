@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> · Easy</title>
+  <link rel="stylesheet" href="/css/app-ios.css" />
+</head>
+<body class="ios-app">
+  <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
+  <main class="ios-main">
+    <header class="ios-top">
+      <div>
+        <p class="ios-eyebrow"><%= companyNombre %></p>
+        <h1><%= cliente.razon_social || 'Cliente' %></h1>
+      </div>
+      <a class="ios-back" href="<%= appBase %>/clientes">Lista</a>
+    </header>
+    <% if (flash) { %><div class="ios-flash <%= flash.type === 'error' ? 'is-error' : 'is-ok' %>"><%= flash.text %></div><% } %>
+
+    <%
+      var tipoDoc = cliente.tipo_doc || '';
+      var docLabel = cliente.tipo_doc_label || (tipoDoc === '1' ? 'DNI' : tipoDoc === '6' ? 'RUC' : 'Doc.');
+      var addr = cliente.address || {};
+      var dirLinea = addr.direccion || '';
+      var refLabels = {
+        SALIDA_MANUAL: 'Manual',
+        ENTRADA_MANUAL: 'Manual',
+        TRASLADO: 'Traslado',
+        VENTA: 'Venta',
+        COMPRA: 'Compra',
+        DEVOLUCION_CLIENTE: 'Devolución',
+        GUIA_REMISION: 'Guía',
+        ORDEN: 'Orden',
+      };
+      function labelRef(ref) {
+        if (!ref) return '';
+        return refLabels[ref] || String(ref).replace(/_/g, ' ');
+      }
+      function inicial(nombre) {
+        var s = String(nombre || '').trim();
+        return s ? s.charAt(0).toUpperCase() : '·';
+      }
+    %>
+
+    <section class="ios-cliente-hero">
+      <div class="ios-cliente-hero-doc">
+        <span class="ios-cliente-hero-badge"><%= docLabel %></span>
+        <strong><%= cliente.numero_doc || '—' %></strong>
+      </div>
+      <% if (cliente.telefono) { %><p class="ios-cliente-hero-meta">Tel. <%= cliente.telefono %></p><% } %>
+      <% if (dirLinea) { %><p class="ios-cliente-hero-meta"><%= dirLinea %></p><% } %>
+      <p class="ios-cliente-hero-stats">
+        <span><%= entregas %> entrega<%= entregas === 1 ? '' : 's' %></span>
+        <span aria-hidden="true">·</span>
+        <span><%= devoluciones %> devolución<%= devoluciones === 1 ? '' : 'es' %></span>
+      </p>
+    </section>
+
+    <div class="ios-cliente-actions">
+      <a class="ios-cliente-action is-primary" href="<%= appBase %>/clientes/<%= cliente.id %>/editar">
+        <span class="ios-cliente-action-icon" aria-hidden="true">✎</span>
+        <span>
+          <strong>Editar</strong>
+          <small>Datos del cliente</small>
+        </span>
+      </a>
+      <a class="ios-cliente-action is-accent" href="<%= appBase %>/salidas/crear">
+        <span class="ios-cliente-action-icon" aria-hidden="true">↗</span>
+        <span>
+          <strong>Nueva entrega</strong>
+          <small>Registrar salida</small>
+        </span>
+      </a>
+    </div>
+
+    <p class="ios-count">Entregas y devoluciones</p>
+
+    <% if (!movimientos.length) { %>
+      <section class="ios-card-empty">
+        <div class="ios-empty-icon">📦</div>
+        <h2>Sin movimientos</h2>
+        <p>Aún no hay entregas ni devoluciones para este cliente.</p>
+      </section>
+    <% } else { %>
+      <div class="ios-mov-list" id="movList">
+        <% movimientos.forEach(function(m) {
+          var esDevolucion = m.tipo === 'ENTRADA' && m.refTipo === 'DEVOLUCION_CLIENTE';
+          var isOut = m.tipo === 'SALIDA';
+          var pill = labelRef(m.refTipo);
+          if (esDevolucion) pill = 'Devolución';
+          else if (m.comprobanteId && (!pill || m.refTipo === 'SALIDA_MANUAL')) pill = 'Venta';
+          else if (isOut && !pill) pill = 'Entrega';
+          var preview = '';
+          if (m.lineas && m.lineas[0] && m.lineas[0].nombre) {
+            preview = m.lineas[0].nombre;
+            if (m.lineasCount > 1) preview += ' y ' + (m.lineasCount - 1) + ' más';
+          }
+          if (!preview) preview = m.observaciones || '';
+          var metaBits = [];
+          if (m.almacenNombre) metaBits.push(m.almacenNombre);
+          metaBits.push(m.lineasCount + ' línea' + (m.lineasCount === 1 ? '' : 's'));
+          var who = m.usuarioNombre || m.usuarioEmail || '';
+          var pillClass = 'is-default';
+          var refKey = (m.comprobanteId && m.refTipo === 'SALIDA_MANUAL') ? 'VENTA' : m.refTipo;
+          if (esDevolucion || refKey === 'DEVOLUCION_CLIENTE') pillClass = 'is-dev';
+          else if (refKey === 'SALIDA_MANUAL' || refKey === 'ENTRADA_MANUAL') pillClass = 'is-manual';
+          else if (refKey === 'VENTA' || refKey === 'ORDEN') pillClass = 'is-venta';
+          else if (refKey === 'TRASLADO') pillClass = 'is-traslado';
+          else if (refKey === 'COMPRA') pillClass = 'is-compra';
+          else if (refKey === 'GUIA_REMISION') pillClass = 'is-guia';
+        %>
+          <button type="button" class="ios-mov-card <%= isOut ? 'is-out' : 'is-in' %>" data-mov-id="<%= m.id %>" aria-haspopup="dialog">
+            <span class="ios-mov-avatar <%= isOut ? 'is-out' : 'is-in' %>" aria-hidden="true"><%= inicial(who || m.numero) %></span>
+            <span class="ios-mov-main">
+              <span class="ios-mov-title">
+                <strong><%= m.numero %></strong>
+                <% if (pill) { %><span class="ios-mov-pill <%= pillClass %>"><%= pill %></span><% } %>
+              </span>
+              <small><%= m.fecha %></small>
+              <% if (preview) { %><small class="ios-mov-preview"><%= preview %></small><% } %>
+              <small><%= metaBits.join(' · ') %></small>
+            </span>
+            <span class="ios-chevron" aria-hidden="true">›</span>
+          </button>
+        <% }); %>
+      </div>
+    <% } %>
+  </main>
+
+  <div id="movDetailSheet" class="ios-sheet ios-sheet-mov" hidden aria-hidden="true">
+    <div class="ios-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="movDetailTitle">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-back" id="movDetailCerrar">Cerrar</button>
+        <h3 id="movDetailTitle">Detalle</h3>
+        <span class="ios-sheet-head-spacer" aria-hidden="true"></span>
+      </div>
+      <div class="ios-mov-detail" id="movDetailBody"></div>
+    </div>
+  </div>
+
+  <div id="seriesSheet" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel" role="dialog" aria-modal="true">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-back" id="seriesSheetCerrar">← Volver</button>
+        <h3 id="seriesSheetTitle">Series</h3>
+        <span class="ios-sheet-head-spacer" aria-hidden="true"></span>
+      </div>
+      <input type="search" id="seriesSheetBusqueda" class="ios-sheet-search" placeholder="Buscar número de serie…" autocomplete="off" />
+      <div class="ios-sheet-status" id="seriesSheetStatus">Cargando…</div>
+      <div class="ios-sheet-list" id="seriesSheetLista"></div>
+    </div>
+  </div>
+
+  <div id="regresarConfirmSheet" class="ios-sheet" hidden aria-hidden="true">
+    <div class="ios-sheet-panel ios-confirm-panel ios-regresar-panel" role="dialog" aria-modal="true" aria-labelledby="regresarConfirmTitle">
+      <h3 id="regresarConfirmTitle">Regresar salida</h3>
+      <p id="regresarConfirmText">Se creará un ingreso con los mismos ítems y series volverán a almacén.</p>
+      <div id="regresarAlmacenWrap" class="ios-regresar-almacen" hidden>
+        <label for="regresarAlmacenSelect">Almacén destino</label>
+        <select id="regresarAlmacenSelect" class="ios-select ios-regresar-select"></select>
+      </div>
+      <p id="regresarAlmacenNota" class="ios-regresar-nota" hidden></p>
+      <button type="button" class="ios-btn-primary" id="regresarConfirmOk">Confirmar</button>
+      <button type="button" class="ios-btn-ghost" id="regresarConfirmCancel">Cancelar</button>
+    </div>
+  </div>
+
+  <script type="application/json" id="movData"><%- JSON.stringify(movimientos).replace(/</g, '\\u003c') %></script>
+  <script type="application/json" id="almacenesRegresarData"><%- JSON.stringify((typeof almacenes !== 'undefined' && almacenes ? almacenes : []).map(function(a){ return { id: a.id, nombre: a.nombre || a.codigo || a.id }; })).replace(/</g, '\\u003c') %></script>
+  <script>
+  (function () {
+    var raw = document.getElementById('movData');
+    var items = [];
+    try { items = JSON.parse(raw ? raw.textContent : '[]'); } catch (e) { items = []; }
+    var byId = {};
+    items.forEach(function (m) { if (m && m.id) byId[m.id] = m; });
+    var appBase = <%- JSON.stringify(typeof appBase !== 'undefined' ? appBase : '/app') %>;
+    var isAdmin = <%- JSON.stringify(typeof isWebAdmin !== 'undefined' ? !!isWebAdmin : false) %>;
+    var almacenesRegresar = [];
+    try {
+      almacenesRegresar = JSON.parse(document.getElementById('almacenesRegresarData').textContent || '[]');
+    } catch (e) { almacenesRegresar = []; }
+
+    var refLabels = {
+      SALIDA_MANUAL: 'Manual',
+      ENTRADA_MANUAL: 'Manual',
+      TRASLADO: 'Traslado',
+      VENTA: 'Venta',
+      COMPRA: 'Compra',
+      DEVOLUCION_CLIENTE: 'Devolución',
+      REGRESO_SALIDA: 'Regreso',
+      GUIA_REMISION: 'Guía',
+      ORDEN: 'Orden',
+    };
+
+    function esc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function labelRef(ref) {
+      if (!ref) return '—';
+      return refLabels[ref] || String(ref).replace(/_/g, ' ');
+    }
+
+    var sheet = document.getElementById('movDetailSheet');
+    var body = document.getElementById('movDetailBody');
+    var title = document.getElementById('movDetailTitle');
+    var btnClose = document.getElementById('movDetailCerrar');
+    var seriesSheet = document.getElementById('seriesSheet');
+    var seriesTitle = document.getElementById('seriesSheetTitle');
+    var seriesStatus = document.getElementById('seriesSheetStatus');
+    var seriesLista = document.getElementById('seriesSheetLista');
+    var seriesBusqueda = document.getElementById('seriesSheetBusqueda');
+    var seriesTimer = null;
+    var seriesMovCache = [];
+    var currentMov = null;
+    var confirmSheet = document.getElementById('regresarConfirmSheet');
+    var confirmText = document.getElementById('regresarConfirmText');
+    var confirmOk = document.getElementById('regresarConfirmOk');
+    var confirmCancel = document.getElementById('regresarConfirmCancel');
+    var regresarBusy = false;
+    var almacenWrap = document.getElementById('regresarAlmacenWrap');
+    var almacenSelect = document.getElementById('regresarAlmacenSelect');
+    var almacenNota = document.getElementById('regresarAlmacenNota');
+
+    function closeSheet() {
+      if (!sheet) return;
+      sheet.hidden = true;
+      sheet.setAttribute('aria-hidden', 'true');
+      if (
+        (seriesSheet && seriesSheet.hidden)
+        && (confirmSheet && confirmSheet.hidden)
+      ) {
+        document.body.classList.remove('ios-sheet-open');
+      }
+    }
+
+    function closeSeriesSheet() {
+      if (!seriesSheet) return;
+      seriesSheet.hidden = true;
+      seriesSheet.setAttribute('aria-hidden', 'true');
+      if (
+        (sheet && sheet.hidden)
+        && (confirmSheet && confirmSheet.hidden)
+      ) {
+        document.body.classList.remove('ios-sheet-open');
+      }
+    }
+
+    function closeConfirmSheet() {
+      if (!confirmSheet) return;
+      confirmSheet.hidden = true;
+      confirmSheet.setAttribute('aria-hidden', 'true');
+      if (
+        (sheet && sheet.hidden)
+        && (seriesSheet && seriesSheet.hidden)
+      ) {
+        document.body.classList.remove('ios-sheet-open');
+      }
+    }
+
+    function openConfirmRegresar(m) {
+      if (!confirmSheet || !m || !m.id) return;
+      currentMov = m;
+      if (confirmText) {
+        confirmText.textContent = 'Se creará un ingreso con los ítems de '
+          + (m.numero || 'esta salida')
+          + '. Las series volverán a estar disponibles.';
+      }
+      if (almacenWrap && almacenSelect && isAdmin && almacenesRegresar.length) {
+        almacenWrap.hidden = false;
+        if (almacenNota) almacenNota.hidden = true;
+        almacenSelect.innerHTML = '';
+        almacenesRegresar.forEach(function (a) {
+          var opt = document.createElement('option');
+          opt.value = a.id;
+          opt.textContent = a.nombre || a.id;
+          if (String(a.id) === String(m.almacenId || '')) opt.selected = true;
+          almacenSelect.appendChild(opt);
+        });
+        if (!almacenSelect.value && almacenesRegresar[0]) {
+          almacenSelect.value = almacenesRegresar[0].id;
+        }
+      } else {
+        if (almacenWrap) almacenWrap.hidden = true;
+        if (almacenNota) {
+          almacenNota.hidden = false;
+          almacenNota.textContent = 'Se regresará a '
+            + (m.almacenNombre || 'tu almacén')
+            + '.';
+        }
+      }
+      if (confirmOk) {
+        confirmOk.disabled = false;
+        confirmOk.textContent = 'Confirmar';
+      }
+      confirmSheet.hidden = false;
+      confirmSheet.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('ios-sheet-open');
+    }
+
+    function ejecutarRegresar() {
+      if (regresarBusy || !currentMov || !currentMov.id) return;
+      var destinoId = '';
+      if (isAdmin) {
+        destinoId = almacenSelect ? String(almacenSelect.value || '').trim() : '';
+        if (!destinoId) {
+          window.alert('Selecciona el almacén de destino.');
+          return;
+        }
+      }
+      regresarBusy = true;
+      if (confirmOk) {
+        confirmOk.disabled = true;
+        confirmOk.textContent = 'Regresando…';
+      }
+      var payload = {};
+      if (destinoId) payload.almacen_id = destinoId;
+      fetch(appBase + '/salidas/' + encodeURIComponent(currentMov.id) + '/regresar', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+        .then(function (res) {
+          return res.json().then(function (data) {
+            if (!res.ok) throw new Error((data && data.message) || 'No se pudo regresar');
+            return data;
+          });
+        })
+        .then(function (data) {
+          closeConfirmSheet();
+          closeSheet();
+          var num = (data && data.movimiento && data.movimiento.numero) || '';
+          var msg = num
+            ? 'Ingreso ' + num + ' registrado.'
+            : ((data && data.message) || 'Ingreso registrado.');
+          window.location.search = '?msg=' + encodeURIComponent(msg) + '&tipo=ok';
+        })
+        .catch(function (err) {
+          regresarBusy = false;
+          if (confirmOk) {
+            confirmOk.disabled = false;
+            confirmOk.textContent = 'Confirmar';
+          }
+          window.alert(err.message || 'No se pudo regresar la salida');
+        });
+    }
+
+    function renderSeriesItems(list) {
+      if (!seriesLista) return;
+      seriesLista.innerHTML = '';
+      if (!list.length) {
+        if (seriesStatus) seriesStatus.textContent = 'Sin series en este movimiento';
+        return;
+      }
+      if (seriesStatus) {
+        seriesStatus.textContent = list.length + ' serie' + (list.length === 1 ? '' : 's') + ' del movimiento';
+      }
+      list.forEach(function (s) {
+        var el = document.createElement('div');
+        el.className = 'ios-sheet-item';
+        el.innerHTML =
+          '<strong>' + esc(s.numero_serie || s.serie || '—') + '</strong>' +
+          '<span>' + esc(s.estado || 'En movimiento') + '</span>';
+        seriesLista.appendChild(el);
+      });
+    }
+
+    function seriesFromMovimiento(catalogItemId) {
+      if (!currentMov || !catalogItemId) return [];
+      var seen = {};
+      var out = [];
+      (currentMov.lineas || []).forEach(function (l) {
+        if (String(l.catalog_item_id || '') !== String(catalogItemId)) return;
+        var num = l.serie || '';
+        if (!num || seen[num]) return;
+        seen[num] = true;
+        out.push({ numero_serie: num, estado: 'En movimiento' });
+      });
+      return out;
+    }
+
+    function filterSeriesLocal(q) {
+      var needle = String(q || '').trim().toLowerCase();
+      if (!needle) return seriesMovCache.slice();
+      return seriesMovCache.filter(function (s) {
+        return String(s.numero_serie || '').toLowerCase().indexOf(needle) >= 0;
+      });
+    }
+
+    function openSeriesFromLinea(row) {
+      if (!row) return;
+      var catalogId = row.getAttribute('data-catalog-item') || '';
+      var nombre = row.getAttribute('data-nombre') || 'Series';
+      var serie = row.getAttribute('data-serie') || '';
+      seriesMovCache = seriesFromMovimiento(catalogId);
+      if (!seriesMovCache.length && serie) {
+        seriesMovCache = [{ numero_serie: serie, estado: 'En movimiento' }];
+      }
+      if (seriesTitle) seriesTitle.textContent = nombre || 'Series';
+      if (seriesBusqueda) seriesBusqueda.value = '';
+      if (seriesLista) seriesLista.innerHTML = '';
+      seriesSheet.hidden = false;
+      seriesSheet.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('ios-sheet-open');
+      renderSeriesItems(seriesMovCache);
+      setTimeout(function () { seriesBusqueda && seriesBusqueda.focus(); }, 50);
+    }
+
+    function openSheet(m) {
+      if (!sheet || !body || !m) return;
+      currentMov = m;
+      title.textContent = m.numero || 'Detalle';
+      var rows = [];
+      function add(label, value) {
+        if (value == null || value === '') return;
+        rows.push(
+          '<div class="ios-mov-kv"><span>' + esc(label) + '</span><strong>' + esc(value) + '</strong></div>'
+        );
+      }
+      function addHtml(label, html) {
+        if (!html) return;
+        rows.push(
+          '<div class="ios-mov-kv"><span>' + esc(label) + '</span><strong>' + html + '</strong></div>'
+        );
+      }
+      add('Fecha', m.fecha);
+      var origenLabel = labelRef(m.refTipo);
+      if (m.comprobanteId && (!origenLabel || m.refTipo === 'SALIDA_MANUAL')) origenLabel = 'Venta';
+      add('Origen', origenLabel);
+      add('Estado', m.estado);
+      add('Almacén', m.almacenNombre);
+      if (m.almacenDestinoNombre) add('Destino (traslado)', m.almacenDestinoNombre);
+      add('Cliente', m.clienteNombre);
+      add('Doc. cliente', m.clienteDoc);
+      add('Usuario', m.usuarioNombre || m.usuarioEmail || '—');
+      if (m.observaciones) {
+        if (m.comprobanteId) {
+          var href = appBase + '/comprobantes?abrir=' + encodeURIComponent(m.comprobanteId);
+          addHtml(
+            'Comprobante',
+            '<a class="ios-mov-doc-link" href="' + esc(href) + '">' + esc(m.observaciones) + ' ›</a>'
+          );
+        } else {
+          add('Observaciones', m.observaciones);
+        }
+      }
+
+      var grupos = [];
+      var indexByKey = {};
+      (m.lineas || []).forEach(function (l) {
+        var cid = String(l.catalog_item_id || '');
+        var key = cid || ('n:' + String(l.nombre || ''));
+        var serie = String(l.serie || '').trim();
+        var g = indexByKey[key];
+        if (!g) {
+          g = {
+            catalog_item_id: cid,
+            nombre: l.nombre || 'Ítem',
+            codigo: l.codigo || '',
+            unidad: l.unidad || 'NIU',
+            cantidad: 0,
+            series: [],
+          };
+          indexByKey[key] = g;
+          grupos.push(g);
+        }
+        var qty = Number(l.cantidad);
+        g.cantidad += Number.isFinite(qty) && qty > 0 ? qty : (serie ? 1 : 0);
+        if (serie && g.series.indexOf(serie) === -1) g.series.push(serie);
+      });
+
+      var lineasHtml = '';
+      grupos.forEach(function (g) {
+        var meta = [];
+        if (g.codigo) meta.push(g.codigo);
+        meta.push((g.cantidad || '—') + ' ' + (g.unidad || ''));
+        var nSeries = g.series.length;
+        var conSerie = nSeries > 0;
+        var attrs = conSerie
+          ? ' class="ios-mov-linea is-serie" role="button" tabindex="0"'
+            + ' data-catalog-item="' + esc(g.catalog_item_id) + '"'
+            + ' data-nombre="' + esc(g.nombre || 'Ítem') + '"'
+          : ' class="ios-mov-linea"';
+        var hint = '';
+        if (conSerie) {
+          hint = nSeries === 1
+            ? '<span class="ios-mov-linea-hint">Ver serie ›</span>'
+            : '<span class="ios-mov-linea-hint">Ver ' + nSeries + ' series ›</span>';
+        }
+        lineasHtml +=
+          '<div' + attrs + '>' +
+            '<strong>' + esc(g.nombre || 'Ítem') + '</strong>' +
+            '<small>' + esc(meta.join(' · ')) + '</small>' +
+            hint +
+          '</div>';
+      });
+
+      body.innerHTML =
+        '<section class="ios-mov-detail-card">' + rows.join('') + '</section>' +
+        '<p class="ios-mov-detail-h">Ítems</p>' +
+        '<section class="ios-mov-detail-card">' +
+          (lineasHtml || '<div class="ios-mov-kv"><span>Sin líneas</span><strong></strong></div>') +
+        '</section>' +
+        (m.puedeRegresar
+          ? '<button type="button" class="ios-btn-primary ios-mov-regresar" id="btnRegresarSalida">Regresar</button>'
+          : '');
+
+      sheet.hidden = false;
+      sheet.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('ios-sheet-open');
+    }
+
+    document.getElementById('movList')?.addEventListener('click', function (ev) {
+      var btn = ev.target.closest('[data-mov-id]');
+      if (!btn) return;
+      openSheet(byId[btn.getAttribute('data-mov-id')]);
+    });
+
+    body?.addEventListener('click', function (ev) {
+      if (ev.target.closest('#btnRegresarSalida')) {
+        ev.preventDefault();
+        openConfirmRegresar(currentMov);
+        return;
+      }
+      var row = ev.target.closest('.ios-mov-linea.is-serie');
+      if (!row) return;
+      openSeriesFromLinea(row);
+    });
+
+    body?.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      var row = ev.target.closest('.ios-mov-linea.is-serie');
+      if (!row) return;
+      ev.preventDefault();
+      openSeriesFromLinea(row);
+    });
+
+    seriesBusqueda?.addEventListener('input', function () {
+      clearTimeout(seriesTimer);
+      seriesTimer = setTimeout(function () {
+        var filtered = filterSeriesLocal(seriesBusqueda.value.trim());
+        if (!filtered.length && seriesBusqueda.value.trim()) {
+          if (seriesStatus) seriesStatus.textContent = 'Sin series para esa búsqueda';
+          if (seriesLista) seriesLista.innerHTML = '';
+          return;
+        }
+        renderSeriesItems(filtered);
+      }, 180);
+    });
+
+    confirmOk?.addEventListener('click', ejecutarRegresar);
+    confirmCancel?.addEventListener('click', closeConfirmSheet);
+    confirmSheet?.addEventListener('click', function (ev) {
+      if (ev.target === confirmSheet) closeConfirmSheet();
+    });
+
+    btnClose?.addEventListener('click', closeSheet);
+    document.getElementById('seriesSheetCerrar')?.addEventListener('click', closeSeriesSheet);
+    sheet?.addEventListener('click', function (ev) {
+      if (ev.target === sheet) closeSheet();
+    });
+    seriesSheet?.addEventListener('click', function (ev) {
+      if (ev.target === seriesSheet) closeSeriesSheet();
+    });
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Escape') return;
+      if (confirmSheet && !confirmSheet.hidden) {
+        closeConfirmSheet();
+        return;
+      }
+      if (seriesSheet && !seriesSheet.hidden) {
+        closeSeriesSheet();
+        return;
+      }
+      if (sheet && !sheet.hidden) closeSheet();
+    });
+  })();
+  </script>
+  <%- include('../../partials/app-tabbar', { active: active, appBase: appBase }) %>
+</body>
+</html>

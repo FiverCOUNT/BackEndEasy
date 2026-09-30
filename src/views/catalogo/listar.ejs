@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title><%= title %> — BackEnd Easy</title>
-  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/style.css?v=20260926panel" />
 </head>
 <body>
   <header class="header">
@@ -20,14 +20,15 @@
         <div class="card-header-row">
           <div>
             <h2><%= title %></h2>
-            <p class="api-hint"><%= total %> ítem(s) en total</p>
+            <p class="api-hint"><%= total %> ítem(s) en <%= adminEntornoLabel %></p>
           </div>
-          <a href="/catalogo/crear" class="btn-link">+ Nuevo ítem</a>
+          <a href="<%= adminBase %>/catalogo/crear" class="btn-link">+ Nuevo ítem</a>
         </div>
 
         <%- include('../partials/flash', { flash }) %>
 
         <form class="list-search" method="GET" action="<%= searchAction %>">
+          <input type="hidden" name="entorno" value="<%= adminEntorno %>" />
           <div class="list-search-row">
             <input
               type="search"
@@ -51,7 +52,7 @@
             </select>
             <button type="submit" class="btn-sm btn-edit">Buscar</button>
             <% if (q || kind || companyRuc) { %>
-              <a href="<%= searchAction %>" class="btn-sm btn-clear">Limpiar</a>
+              <a href="<%= searchAction %>?entorno=<%= adminEntorno %>" class="btn-sm btn-clear">Limpiar</a>
             <% } %>
           </div>
         </form>
@@ -63,7 +64,7 @@
             <% if (q || kind || companyRuc) { %>
               No hay resultados con esos filtros.
             <% } else { %>
-              No hay ítems. <a href="/catalogo/crear">Registrar el primero</a>
+              No hay ítems. <a href="<%= adminBase %>/catalogo/crear">Registrar el primero</a>
             <% } %>
           </p>
         <% } else { %>
@@ -93,7 +94,17 @@
                       <% if (it.descripcion) { %><br><span class="muted"><%= it.descripcion %></span><% } %>
                     </td>
                     <td class="muted"><%= it.companyRuc %></td>
-                    <td><%= it.precioUnitario.toFixed(2) %></td>
+                    <td>
+                      <%= Number(it.precioUnitario ?? it.precio_unitario ?? 0).toFixed(2) %>
+                      <% var compra = it.precioCompra != null ? it.precioCompra : it.precio_compra; %>
+                      <% if (compra != null && compra !== '') { %>
+                        <br><span class="muted">Compra <%= Number(compra).toFixed(2) %></span>
+                      <% } %>
+                      <% var vence = it.fechaVencimiento || it.fecha_vencimiento; %>
+                      <% if (vence) { %>
+                        <br><span class="muted">Vence <%= vence %></span>
+                      <% } %>
+                    </td>
                     <td class="muted">
                       <% if (it.manejaSerie) { %>Series<% } else if (it.manejaStock) { %><%= it.stockActual ?? 0 %><% } else { %>—<% } %>
                     </td>
@@ -106,19 +117,19 @@
                     </td>
                     <td>
                       <div class="actions-cell">
-                        <a href="/catalogo/<%= it.id %>/editar" class="btn-sm btn-edit">Editar</a>
+                        <a href="<%= adminBase %>/catalogo/<%= it.id %>/editar" class="btn-sm btn-edit">Editar</a>
                         <% if (!it.activo) { %>
-                          <form method="POST" action="/catalogo/<%= it.id %>/activar" class="inline-form">
+                          <form method="POST" action="<%= adminBase %>/catalogo/<%= it.id %>/activar" class="inline-form">
                             <button type="submit" class="btn-sm btn-success">Activar</button>
                           </form>
                         <% } else { %>
-                          <form method="POST" action="/catalogo/<%= it.id %>/desactivar" class="inline-form">
+                          <form method="POST" action="<%= adminBase %>/catalogo/<%= it.id %>/desactivar" class="inline-form">
                             <button type="submit" class="btn-sm btn-warn">Desactivar</button>
                           </form>
                         <% } %>
                         <form
                           method="POST"
-                          action="/catalogo/<%= it.id %>/eliminar"
+                          action="<%= adminBase %>/catalogo/<%= it.id %>/eliminar"
                           class="inline-form"
                           onsubmit="return confirm('¿Eliminar <%= it.nombre %>?');"
                         >

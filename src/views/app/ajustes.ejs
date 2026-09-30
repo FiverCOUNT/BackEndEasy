@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> · Easy</title>
+  <link rel="stylesheet" href="/css/app-ios.css" />
+</head>
+<body class="ios-app">
+  <%- include('../partials/app-nav', { active: active }) %>
+
+  <main class="ios-main">
+    <header class="ios-top">
+      <div>
+        <p class="ios-eyebrow">Cuenta y soporte</p>
+        <h1>Ajustes</h1>
+      </div>
+      <div class="ios-user-chip" title="<%= usuario.email %>">
+        <%= (usuario.email || '?').slice(0, 1).toUpperCase() %>
+      </div>
+    </header>
+
+    <section class="ios-form-card ios-ajustes-empresa">
+      <% if (typeof flash !== 'undefined' && flash) { %>
+        <div class="ios-flash <%= flash.type === 'error' ? 'is-error' : 'is-ok' %>"><%= flash.text %></div>
+      <% } %>
+      <div class="ios-ajustes-head">
+        <% if (canEditLogo) { %>
+          <button type="button" class="ios-ajustes-avatar is-editable" id="btnEditarFotoEmpresa" aria-label="Editar foto de la empresa">
+            <% if (empresa.logoUrl) { %>
+              <img
+                src="<%= empresa.logoUrl %>"
+                alt=""
+                class="ios-ajustes-logo"
+                id="empresaLogoImg"
+                loading="lazy"
+                onerror="this.hidden=true;this.nextElementSibling.hidden=false;"
+              />
+              <span class="ios-ajustes-initials" hidden><%= empresa.initials || 'E' %></span>
+            <% } else { %>
+              <span class="ios-ajustes-initials"><%= empresa.initials || 'E' %></span>
+            <% } %>
+            <span class="ios-ajustes-avatar-edit" aria-hidden="true">✎</span>
+          </button>
+        <% } else { %>
+          <div class="ios-ajustes-avatar" aria-hidden="true">
+            <% if (empresa.logoUrl) { %>
+              <img
+                src="<%= empresa.logoUrl %>"
+                alt=""
+                class="ios-ajustes-logo"
+                loading="lazy"
+                onerror="this.hidden=true;this.nextElementSibling.hidden=false;"
+              />
+              <span class="ios-ajustes-initials" hidden><%= empresa.initials || 'E' %></span>
+            <% } else { %>
+              <span class="ios-ajustes-initials"><%= empresa.initials || 'E' %></span>
+            <% } %>
+          </div>
+        <% } %>
+        <div class="ios-ajustes-titles">
+          <div class="ios-ajustes-title-row">
+            <h2><%= empresa.displayName || empresa.nombre %></h2>
+            <span class="ios-env-pill <%= empresa.esProd ? 'is-prod' : 'is-beta' %>">
+              <span class="ios-env-dot" aria-hidden="true"></span>
+              <%= empresa.entornoLabel || (empresa.esProd ? 'Producción' : 'Beta') %>
+            </span>
+          </div>
+          <% if (empresa.nombreComercial && empresa.nombre && empresa.nombreComercial !== empresa.nombre) { %>
+            <p class="ios-muted-line"><%= empresa.nombre %></p>
+          <% } %>
+          <p class="ios-muted-line">RUC <%= empresa.ruc %></p>
+          <% if (canEditLogo) { %>
+            <button type="button" class="ios-ajustes-edit-foto" id="btnEditarFotoEmpresaTxt">Editar foto</button>
+          <% } %>
+        </div>
+      </div>
+      <div class="ios-ajustes-meta">
+        <div class="ios-ajustes-meta-row">
+          <span>Usuario</span>
+          <strong><%= usuario.email %></strong>
+        </div>
+        <div class="ios-ajustes-meta-row">
+          <span>Rol</span>
+          <strong><%= usuario.rol %></strong>
+        </div>
+        <div class="ios-ajustes-meta-row">
+          <span>Almacén</span>
+          <strong><%= almacenAsignado %></strong>
+        </div>
+        <div class="ios-ajustes-meta-row">
+          <span>Entorno SUNAT</span>
+          <strong><%= empresa.entornoLabel || (empresa.esProd ? 'Producción' : 'Beta') %></strong>
+        </div>
+        <% if (canEditMtc) { %>
+          <form class="ios-ajustes-mtc-form" method="POST" action="<%= appBase %>/ajustes/mtc">
+            <label for="nroMtcAjustes">MTC</label>
+            <div class="ios-ajustes-mtc-row">
+              <input
+                type="text"
+                id="nroMtcAjustes"
+                name="nroMtc"
+                value="<%= empresa.nroMtc || '' %>"
+                maxlength="40"
+                placeholder="1588035CNG"
+                autocomplete="off"
+                autocapitalize="characters"
+                spellcheck="false"
+              />
+              <button type="submit" class="ios-btn-primary ios-ajustes-mtc-save">Guardar</button>
+            </div>
+            <p class="ios-ajustes-mtc-hint">Registro MTC de la empresa (GRE transporte público).</p>
+          </form>
+        <% } else { %>
+          <div class="ios-ajustes-meta-row">
+            <span>MTC</span>
+            <strong><%= empresa.nroMtc || '—' %></strong>
+          </div>
+        <% } %>
+      </div>
+    </section>
+
+    <% if (canEditLogo) { %>
+      <form id="formLogoEmpresa" method="POST" action="<%= appBase %>/ajustes/logo" enctype="multipart/form-data" hidden>
+        <input type="file" id="inputLogoEmpresa" name="logoEmpresa" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif,.png,.jpg,.jpeg,.webp,.svg,.gif" />
+      </form>
+      <div id="fotoSheet" class="ios-sheet" hidden aria-hidden="true">
+        <div class="ios-sheet-panel ios-confirm-panel">
+          <h3>Foto de la empresa</h3>
+          <p>Elige una imagen (PNG, JPG, WEBP… máx. 2 MB). Se guarda en Cloudflare.</p>
+          <button type="button" class="ios-btn-primary" id="btnElegirFoto">Elegir foto</button>
+          <button type="button" class="ios-btn-ghost" id="btnCancelarFoto">Cancelar</button>
+        </div>
+      </div>
+    <% } %>
+
+    <% if ((typeof canManageUsuarios !== 'undefined' && canManageUsuarios) || (typeof canManageMetodosPago !== 'undefined' && canManageMetodosPago)) { %>
+      <h3 class="ios-section-title">Empresa</h3>
+      <div class="ios-list">
+        <% if (typeof canManageUsuarios !== 'undefined' && canManageUsuarios) { %>
+          <a class="ios-row" href="<%= appBase %>/usuarios">
+            <span class="ios-row-icon" style="background:linear-gradient(145deg,#E3F2FD,#BBDEFB);color:#1565C0;font-size:18px" aria-hidden="true">👤</span>
+            <span class="ios-row-text">
+              <strong>Gestión de usuarios</strong>
+              <small>Cuentas enlazadas a esta empresa</small>
+            </span>
+            <span class="ios-chevron">›</span>
+          </a>
+        <% } %>
+        <% if (typeof canManageMetodosPago !== 'undefined' && canManageMetodosPago) { %>
+          <a class="ios-row" href="<%= appBase %>/metodos-pago">
+            <span class="ios-row-icon" style="background:linear-gradient(145deg,#E8F5E9,#C8E6C9);color:#1B5E20;font-size:18px" aria-hidden="true">💳</span>
+            <span class="ios-row-text">
+              <strong>Método de pago</strong>
+              <small>Yape, CCI, Plin y otros medios de cobro</small>
+            </span>
+            <span class="ios-chevron">›</span>
+          </a>
+        <% } %>
+      </div>
+    <% } %>
+
+    <h3 class="ios-section-title">Soporte</h3>
+    <% if (!tieneSoporte) { %>
+      <section class="ios-form-card ios-ajustes-empty">
+        <span>🎧</span>
+        <p>No hay datos de soporte configurados en el servidor.</p>
+      </section>
+    <% } else { %>
+      <div class="ios-list">
+        <% if (soporte.desarrollador) { %>
+          <div class="ios-row ios-row-static">
+            <span class="ios-row-icon" style="background:#E3F2FD;color:#1565C0">👤</span>
+            <span class="ios-row-text">
+              <strong>Desarrollador</strong>
+              <small><%= soporte.desarrollador %></small>
+            </span>
+          </div>
+        <% } %>
+        <% if (soporte.email) { %>
+          <a class="ios-row" href="mailto:<%= soporte.email %>">
+            <span class="ios-row-icon" style="background:#FFF3E0;color:#EF6C00">✉</span>
+            <span class="ios-row-text">
+              <strong>Email</strong>
+              <small><%= soporte.email %></small>
+            </span>
+            <span class="ios-chevron">›</span>
+          </a>
+        <% } %>
+        <% if (soporte.whatsapp) { %>
+          <a class="ios-row" href="https://wa.me/<%= String(soporte.whatsapp).replace(/\D/g, '') %>" target="_blank" rel="noopener">
+            <span class="ios-row-icon" style="background:#E8F5E9;color:#2E7D32">💬</span>
+            <span class="ios-row-text">
+              <strong>WhatsApp</strong>
+              <small><%= soporte.whatsapp %></small>
+            </span>
+            <span class="ios-chevron">›</span>
+          </a>
+        <% } %>
+        <% (soporte.telefonos || []).forEach(function(tel) { %>
+          <a class="ios-row" href="tel:<%= String(tel).replace(/\s/g, '') %>">
+            <span class="ios-row-icon" style="background:#E8EAF6;color:#3949AB">☎</span>
+            <span class="ios-row-text">
+              <strong>Teléfono</strong>
+              <small><%= tel %></small>
+            </span>
+            <span class="ios-chevron">›</span>
+          </a>
+        <% }); %>
+        <% if (soporte.horario) { %>
+          <div class="ios-row ios-row-static">
+            <span class="ios-row-icon" style="background:#F3E5F5;color:#6A1B9A">◷</span>
+            <span class="ios-row-text">
+              <strong>Horario</strong>
+              <small><%= soporte.horario %></small>
+            </span>
+          </div>
+        <% } %>
+      </div>
+    <% } %>
+
+    <h3 class="ios-section-title" style="margin-top:22px">App móvil</h3>
+    <% if (!tieneActualizaciones) { %>
+      <section class="ios-form-card ios-ajustes-empty">
+        <span>⬆</span>
+        <p>No hay información de versiones publicada.</p>
+      </section>
+    <% } else { %>
+      <div class="ios-list">
+        <% if (actualizaciones.version_actual) { %>
+          <div class="ios-row ios-row-static">
+            <span class="ios-row-icon" style="background:#E3F2FD;color:#1565C0">i</span>
+            <span class="ios-row-text">
+              <strong>Versión actual</strong>
+              <small><%= actualizaciones.version_actual %></small>
+            </span>
+          </div>
+        <% } %>
+        <% if (actualizaciones.version_minima) { %>
+          <div class="ios-row ios-row-static">
+            <span class="ios-row-icon" style="background:#FFF8E1;color:#F9A825">i</span>
+            <span class="ios-row-text">
+              <strong>Versión mínima</strong>
+              <small><%= actualizaciones.version_minima %></small>
+            </span>
+          </div>
+        <% } %>
+        <% if (actualizaciones.url) { %>
+          <a class="ios-row" href="<%= actualizaciones.url %>" target="_blank" rel="noopener">
+            <span class="ios-row-icon" style="background:#E8F1FF;color:#007AFF">↗</span>
+            <span class="ios-row-text">
+              <strong>Tienda / actualización</strong>
+              <small>Abrir enlace</small>
+            </span>
+            <span class="ios-chevron">›</span>
+          </a>
+        <% } %>
+        <% if (actualizaciones.url_apk) { %>
+          <a class="ios-row" href="<%= actualizaciones.url_apk %>" target="_blank" rel="noopener">
+            <span class="ios-row-icon" style="background:#E8F5E9;color:#2E7D32">⬇</span>
+            <span class="ios-row-text">
+              <strong>Descargar APK</strong>
+              <small>Instalación directa</small>
+            </span>
+            <span class="ios-chevron">›</span>
+          </a>
+        <% } %>
+      </div>
+    <% } %>
+
+    <h3 class="ios-section-title" style="margin-top:22px">Sesión</h3>
+    <div class="ios-list">
+      <button type="button" class="ios-row ios-logout-row" id="btnCerrarSesion">
+        <span class="ios-row-icon" style="background:#FFEBEE;color:#C62828">⎋</span>
+        <span class="ios-row-text">
+          <strong style="color:#C62828">Cerrar sesión</strong>
+          <small>Salir de la cuenta en este navegador</small>
+        </span>
+        <span class="ios-chevron">›</span>
+      </button>
+    </div>
+
+    <form id="formLogout" method="POST" action="<%= appBase %>/logout" hidden></form>
+  </main>
+
+  <div id="logoutSheet" class="ios-sheet" hidden aria-hidden="true">
+    <div class="ios-sheet-panel ios-confirm-panel">
+      <h3>Cerrar sesión</h3>
+      <p>¿Salir de la cuenta en este navegador?</p>
+      <button type="button" class="ios-btn-primary ios-btn-danger" id="btnConfirmarLogout">Cerrar sesión</button>
+      <button type="button" class="ios-btn-ghost" id="btnCancelarLogout">Cancelar</button>
+    </div>
+  </div>
+
+  <%- include('../partials/app-tabbar', { active: active }) %>
+  <script>
+    (function () {
+      var sheet = document.getElementById('logoutSheet');
+      var form = document.getElementById('formLogout');
+      document.getElementById('btnCerrarSesion')?.addEventListener('click', function () {
+        sheet.hidden = false;
+        sheet.setAttribute('aria-hidden', 'false');
+      });
+      document.getElementById('btnCancelarLogout')?.addEventListener('click', function () {
+        sheet.hidden = true;
+        sheet.setAttribute('aria-hidden', 'true');
+      });
+      document.getElementById('btnConfirmarLogout')?.addEventListener('click', function () {
+        form.submit();
+      });
+      sheet?.addEventListener('click', function (e) {
+        if (e.target === sheet) {
+          sheet.hidden = true;
+          sheet.setAttribute('aria-hidden', 'true');
+        }
+      });
+
+      var fotoSheet = document.getElementById('fotoSheet');
+      var inputLogo = document.getElementById('inputLogoEmpresa');
+      var formLogo = document.getElementById('formLogoEmpresa');
+      function openFoto() {
+        if (!fotoSheet) return;
+        fotoSheet.hidden = false;
+        fotoSheet.setAttribute('aria-hidden', 'false');
+      }
+      function closeFoto() {
+        if (!fotoSheet) return;
+        fotoSheet.hidden = true;
+        fotoSheet.setAttribute('aria-hidden', 'true');
+      }
+      document.getElementById('btnEditarFotoEmpresa')?.addEventListener('click', openFoto);
+      document.getElementById('btnEditarFotoEmpresaTxt')?.addEventListener('click', openFoto);
+      document.getElementById('btnCancelarFoto')?.addEventListener('click', closeFoto);
+      document.getElementById('btnElegirFoto')?.addEventListener('click', function () {
+        inputLogo?.click();
+      });
+      fotoSheet?.addEventListener('click', function (e) {
+        if (e.target === fotoSheet) closeFoto();
+      });
+      inputLogo?.addEventListener('change', function () {
+        if (inputLogo.files && inputLogo.files.length) formLogo.submit();
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> · Easy</title>
+  <link rel="stylesheet" href="/css/app-ios.css" />
+</head>
+<body class="ios-app">
+  <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
+  <main class="ios-main">
+    <header class="ios-top">
+      <div>
+        <p class="ios-eyebrow">Ajustes</p>
+        <h1>Métodos de pago</h1>
+      </div>
+      <a class="ios-fab-link" href="<%= appBase %>/metodos-pago/crear" title="Añadir">+</a>
+    </header>
+
+    <% if (flash) { %>
+      <div class="ios-flash <%= flash.type === 'error' ? 'is-error' : 'is-ok' %>"><%= flash.text %></div>
+    <% } %>
+
+    <form class="ios-filters" method="GET">
+      <div class="ios-search-row">
+        <div class="ios-search">
+          <input type="search" name="q" value="<%= q || '' %>" placeholder="Nombre, tipo o valor…" />
+        </div>
+        <button type="submit" class="ios-btn-secondary" style="flex-shrink:0;white-space:nowrap">Buscar</button>
+      </div>
+    </form>
+
+    <div class="ios-list" style="margin-top:12px">
+      <% if (!(items || []).length) { %>
+        <section class="ios-form-card ios-ajustes-empty">
+          <span>💳</span>
+          <p>Aún no hay métodos de pago. Añade Yape, CCI, Efectivo u otro medio de cobro.</p>
+          <a class="ios-btn-primary" href="<%= appBase %>/metodos-pago/crear" style="margin-top:12px;display:inline-flex">Añadir método</a>
+        </section>
+      <% } %>
+      <% (items || []).forEach(function(m) {
+        var iconBg = '#E8F5E9';
+        var iconColor = '#2E7D32';
+        var icon = '💳';
+        if (m.tipo === 'YAPE') { iconBg = '#F3E5F5'; iconColor = '#7B1FA2'; icon = '📱'; }
+        else if (m.tipo === 'PLIN') { iconBg = '#E3F2FD'; iconColor = '#1565C0'; icon = '📲'; }
+        else if (m.tipo === 'CCI' || m.tipo === 'TRANSFERENCIA') { iconBg = '#FFF3E0'; iconColor = '#EF6C00'; icon = '🏦'; }
+        else if (m.tipo === 'EFECTIVO') { iconBg = '#E8F5E9'; iconColor = '#2E7D32'; icon = '💵'; }
+        var sub = m.tipo + (m.valor ? (' · ' + m.valor) : '') + (m.activo === false ? ' · Inactivo' : '');
+      %>
+        <a class="ios-row" href="<%= appBase %>/metodos-pago/<%= m.id %>/editar">
+          <span class="ios-row-icon" style="background:<%= iconBg %>;color:<%= iconColor %>"><%= icon %></span>
+          <span class="ios-row-text">
+            <strong><%= m.nombre %></strong>
+            <small><%= sub %></small>
+          </span>
+          <span class="ios-chevron">›</span>
+        </a>
+      <% }) %>
+    </div>
+
+    <p style="margin:16px 0 8px">
+      <a class="ios-back" href="<%= appBase %>/ajustes">← Volver a Ajustes</a>
+    </p>
+  </main>
+  <%- include('../../partials/app-tabbar', { active: active, appBase: appBase }) %>
+</body>
+</html>

@@ -1,0 +1,16 @@
+<section class="ios-form-card ios-emit-imgs" id="emitImagenesCard"
+  data-upload-url="<%= appBase %>/emitir/adjuntos"
+  data-max="3">
+  <div class="ios-emit-imgs-head">
+    <h3 class="ios-form-label">Imágenes</h3>
+    <span class="ios-emit-imgs-hint">Opcional · máx. 3</span>
+  </div>
+  <div class="ios-emit-imgs-grid" id="emitImagenesGrid">
+    <label class="ios-emit-imgs-add" id="emitImagenesAdd">
+      <input type="file" id="emitImagenesInput" accept="image/jpeg,image/png,image/webp,image/gif" multiple hidden />
+      <span class="ios-emit-imgs-add-icon">＋</span>
+    </label>
+  </div>
+  <p class="ios-emit-imgs-status" id="emitImagenesStatus" hidden></p>
+  <input type="hidden" name="adjuntos_json" id="emitAdjuntosJson" value="[]" />
+</section>

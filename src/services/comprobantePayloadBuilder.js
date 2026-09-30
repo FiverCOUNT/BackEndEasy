@@ -1,5 +1,12 @@
 const { parseStoredTimestamp } = require('../utils/fechas');
 const { assertUbigeoPeru, isValidUbigeoPeru, normalizeUbigeoDigits } = require('../utils/ubigeo');
+const { aplicarIndicadorPagadorFleteGreT } = require('../utils/grePagadorFleteSunat');
+const {
+  GRE_ENVIO_INDICADORES,
+  aplicarIndicadorVehiculoM1L,
+  truthyFlag,
+  tieneIndicadorVehiculoM1L,
+} = require('../utils/greEnvioIndicadoresSunat');
 
 const UBIGEO_FALLBACK = '150101';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -71,16 +78,25 @@ function normalizeCodLocal(value) {
   return '0000';
 }
 
-function buildDireccion(address) {
-  return {
-    ubigeo: normalizeUbigeo(address?.ubigeo),
-    departamento: (address?.departamento || 'LIMA').toUpperCase(),
-    provincia: (address?.provincia || 'LIMA').toUpperCase(),
-    distrito: (address?.distrito || 'LIMA').toUpperCase(),
-    urbanizacion: address?.urbanizacion || '-',
-    direccion: address?.direccion || '-',
-    cod_local: normalizeCodLocal(address?.codLocal),
-  };
+/**
+ * Política AddressTypeCode (listID=RUC + valor=cod_local) según RS 123-2022 / UBL GRE.
+ *
+ * Anexo N.° 12: código de establecimiento es obligatorio solo en motivo 04.
+ * - 01/03/06: partida = establecimiento del remitente; llegada = domicilio (sin ATC).
+ * - 02 compra: sin ATC (partida es del proveedor; poner RUC remitente → SUNAT 3411).
+ * - 04/07/18: partida y llegada = establecimientos del remitente (distintos).
+ * Nunca enviar cod_local sin RUC → SUNAT 3410 (listID vacío).
+ */
+function greEstablecimientoPolicy(codTraslado) {
+  const cod = String(codTraslado || '01').trim();
+  if (['04', '07', '18'].includes(cod)) {
+    return { partida: true, llegada: true };
+  }
+  if (['01', '03', '06'].includes(cod)) {
+    return { partida: true, llegada: false };
+  }
+  // 02 compra y resto (13 otros, etc.): solo ubigeo + dirección.
+  return { partida: false, llegada: false };
 }
 
 function buildDireccionEnvio(address, fallback = 'SIN DIRECCION', campo = 'punto de traslado', options = {}) {
@@ -93,15 +109,32 @@ function buildDireccionEnvio(address, fallback = 'SIN DIRECCION', campo = 'punto
     distrito: (address?.distrito || '').trim().toUpperCase() || undefined,
     direccion: (address?.direccion || fallback).toUpperCase(),
   };
-  // Motivo 04 (y similares): GRE exige RUC + cod_local del establecimiento en partida/llegada.
   if (options.incluirEstablecimiento) {
-    out.cod_local = normalizeCodLocal(codLocalRaw);
     const ruc = String(rucRaw || '').trim();
-    if (ruc) out.ruc = ruc;
-  } else if (codLocalRaw != null && String(codLocalRaw).trim() !== '') {
-    out.cod_local = normalizeCodLocal(codLocalRaw);
+    // Sin RUC no se emite AddressTypeCode (evita 3410).
+    if (ruc) {
+      out.cod_local = normalizeCodLocal(codLocalRaw);
+      out.ruc = ruc;
+    }
   }
   return out;
+}
+
+function entityAddress(entity) {
+  if (!entity) return null;
+  return entity.addressJson || entity.address || null;
+}
+
+function buildDireccion(address) {
+  return {
+    ubigeo: normalizeUbigeo(address?.ubigeo),
+    departamento: (address?.departamento || 'LIMA').toUpperCase(),
+    provincia: (address?.provincia || 'LIMA').toUpperCase(),
+    distrito: (address?.distrito || 'LIMA').toUpperCase(),
+    urbanizacion: address?.urbanizacion || '-',
+    direccion: address?.direccion || '-',
+    cod_local: normalizeCodLocal(address?.codLocal || address?.cod_local),
+  };
 }
 
 function buildEmisor(company) {
@@ -113,7 +146,7 @@ function buildEmisor(company) {
     ruc: company.ruc,
     razon_social: company.nombre,
     nombre_comercial: company.nombreComercial || company.nombre,
-    direccion: buildDireccion(company.address),
+    direccion: buildDireccion(entityAddress(company)),
   };
 }
 
@@ -314,21 +347,69 @@ function normalizeConductor(raw) {
   if (!raw || typeof raw !== 'object') return null;
 
   const numDoc = String(raw.num_doc || raw.numero_doc || raw.numDoc || '').trim();
-  const nombreCompleto = String(raw.nombres || raw.nombre || '').trim();
+  const nombreCompleto = String(raw.nombre || raw.nombres || '').trim();
   if (!numDoc && !nombreCompleto) return null;
 
-  const partes = nombreCompleto.split(/\s+/);
-  const nombres = String(raw.nombres || partes[0] || '').trim();
-  const apellidos = String(raw.apellidos || partes.slice(1).join(' ') || '').trim();
+  const partes = nombreCompleto.split(/\s+/).filter(Boolean);
+  // Si ya vienen separados, respétalos; si no, reparte nombre completo.
+  let nombres = String(raw.nombres || '').trim();
+  let apellidos = String(raw.apellidos || '').trim();
+  if (!apellidos && partes.length >= 2) {
+    // Convención Perú frecuente: Nombres + 2 apellidos al final.
+    if (partes.length >= 3) {
+      apellidos = partes.slice(-2).join(' ');
+      nombres = partes.slice(0, -2).join(' ') || partes[0];
+    } else {
+      nombres = partes[0];
+      apellidos = partes.slice(1).join(' ');
+    }
+  } else if (!nombres) {
+    nombres = partes[0] || nombreCompleto;
+  }
+  if (!apellidos) apellidos = '-';
   const licencia = String(raw.licencia || '').trim() || null;
 
-  return {
+  const conductor = {
     tipo_doc: String(raw.tipo_doc || raw.tipoDoc || '1'),
     num_doc: numDoc,
     nombres,
     ...(apellidos ? { apellidos } : {}),
     ...(licencia ? { licencia } : {}),
   };
+
+  // Principal + secundarios (mismo patrón que vehículo.secundarios).
+  // También acepta envio.conductores[] como lista plana (1.º = principal).
+  const secundariosRaw = Array.isArray(raw.secundarios)
+    ? raw.secundarios
+    : [];
+  const secundarios = secundariosRaw
+    .map((sec) => {
+      if (!sec || typeof sec !== 'object') return null;
+      const { secundarios: _omit, ...rest } = sec;
+      return normalizeConductor(rest);
+    })
+    .filter(Boolean);
+  if (secundarios.length) conductor.secundarios = secundarios;
+
+  return conductor;
+}
+
+/** Acepta conductor único o lista plana `conductores[]` → principal + secundarios. */
+function resolveConductorFromEnvio(envio) {
+  if (!envio || typeof envio !== 'object') return null;
+  if (Array.isArray(envio.conductores) && envio.conductores.length) {
+    const [principal, ...rest] = envio.conductores;
+    const base = normalizeConductor(principal);
+    if (!base) return null;
+    const extras = rest
+      .map((c) => normalizeConductor(c))
+      .filter(Boolean);
+    const nested = Array.isArray(base.secundarios) ? base.secundarios : [];
+    const secundarios = [...nested, ...extras];
+    if (secundarios.length) base.secundarios = secundarios;
+    return base;
+  }
+  return normalizeConductor(envio.conductor);
 }
 
 function normalizeVehiculo(raw) {
@@ -366,28 +447,44 @@ function vehiculoSoloPlaca(vehiculo) {
 }
 
 function resolveEnvio(invoice) {
-  const envio = resolveGuiaMeta(invoice).envio || {};
+  const meta = resolveGuiaMeta(invoice);
+  const envio = meta.envio || {};
   const codTraslado = String(envio.cod_traslado || envio.codTraslado || '01');
-  // 02 compra / 04 misma empresa / 07 subcontratista / 18: punto = establecimiento del remitente.
-  const incluirEstablecimiento = ['02', '04', '07', '18'].includes(codTraslado);
+  const esGreTransportista = String(invoice.tipoDoc || '') === '31';
   const rucEmpresa = String(invoice.company?.ruc || invoice.companyRuc || '').trim() || null;
-  const dirOpts = { incluirEstablecimiento, ruc: rucEmpresa };
+  // GRE-R: establecimiento del remitente = emisor. GRE-T: partida es del remitente (meta), no del transportista.
+  const rucRemitente = String(
+    meta.remitente?.numero_doc
+      || meta.remitente?.numeroDoc
+      || meta.remitente?.num_doc
+      || meta.remitente?.ruc
+      || '',
+  ).replace(/\D/g, '') || null;
+  const rucEstablecimiento = esGreTransportista
+    ? (rucRemitente || rucEmpresa)
+    : rucEmpresa;
+  const policy = greEstablecimientoPolicy(codTraslado);
+  const partidaOpts = { incluirEstablecimiento: policy.partida, ruc: rucEstablecimiento };
+  const llegadaOpts = {
+    incluirEstablecimiento: policy.llegada,
+    ruc: esGreTransportista ? rucEstablecimiento : rucEmpresa,
+  };
 
   const partida = envio.partida
-    ? buildDireccionEnvio(envio.partida, 'PUNTO DE PARTIDA', 'punto de partida', dirOpts)
+    ? buildDireccionEnvio(envio.partida, 'PUNTO DE PARTIDA', 'punto de partida', partidaOpts)
     : buildDireccionEnvio(
-      invoice.company?.address,
+      entityAddress(invoice.company),
       invoice.company?.nombre || 'PUNTO DE PARTIDA',
       'punto de partida',
-      dirOpts,
+      partidaOpts,
     );
   const llegada = envio.llegada
-    ? buildDireccionEnvio(envio.llegada, 'PUNTO DE LLEGADA', 'punto de llegada', dirOpts)
+    ? buildDireccionEnvio(envio.llegada, 'PUNTO DE LLEGADA', 'punto de llegada', llegadaOpts)
     : buildDireccionEnvio(
-      invoice.cliente?.address || invoice.company?.address,
+      entityAddress(invoice.cliente) || entityAddress(invoice.company),
       invoice.cliente?.razonSocial || invoice.company?.nombre || 'PUNTO DE LLEGADA',
       'punto de llegada',
-      dirOpts,
+      llegadaOpts,
     );
 
   const pesoTotal = envio.peso_total != null
@@ -413,7 +510,7 @@ function resolveEnvio(invoice) {
   }
 
   if (
-    incluirEstablecimiento
+    policy.llegada
     && partida.cod_local
     && llegada.cod_local
     && partida.cod_local === llegada.cod_local
@@ -436,30 +533,57 @@ function resolveEnvio(invoice) {
     llegada,
   };
 
+  // GRE-R + M1/L: SUNAT solo pide placa (+ indicador). Sin conductor ni transportista.
+  const flagM1Explicit = envio.traslado_vehiculo_m1_l != null || envio.trasladoVehiculoM1L != null;
+  const m1Activo = !esGreTransportista && (
+    flagM1Explicit
+      ? (truthyFlag(envio.traslado_vehiculo_m1_l) || truthyFlag(envio.trasladoVehiculoM1L))
+      : tieneIndicadorVehiculoM1L(envio)
+  );
+  if (m1Activo) {
+    payload.mod_traslado = '02';
+  }
+
   const transportistaRaw = envio.transportista || null;
   const nroMtcEmpresa = String(invoice.company?.nroMtc || '').trim();
   const nroMtcEnvio = String(envio.nro_mtc || envio.nroMtc || '').trim() || nroMtcEmpresa;
-  // No inventar transportista = empresa emisora (SUNAT 2560).
+  const emisorRuc = String(invoice.company?.ruc || invoice.companyRuc || '').trim();
+
+  // GRE-T: el emisor ES el transportista (Greenter + RS 123). Default público + MTC.
+  // GRE-R: no inventar transportista = empresa emisora (SUNAT 2560).
   let transportista = normalizeTransportista(
     transportistaRaw
       ? {
           ...transportistaRaw,
           nro_mtc: transportistaRaw.nro_mtc || transportistaRaw.nroMtc || nroMtcEnvio,
         }
-      : null,
+      : (esGreTransportista && emisorRuc.length === 11
+        ? {
+            tipo_doc: '6',
+            num_doc: emisorRuc,
+            razon_social: String(invoice.company?.nombre || invoice.company?.razonSocial || '').trim(),
+            nro_mtc: nroMtcEnvio || undefined,
+          }
+        : null),
   );
 
-  const vehiculo = normalizeVehiculo(envio.vehiculo);
-  const conductor = normalizeConductor(envio.conductor);
+  if (esGreTransportista) {
+    payload.mod_traslado = String(envio.mod_traslado || envio.modTraslado || '01');
+  }
 
-  const emisorRuc = String(invoice.company?.ruc || invoice.companyRuc || '').trim();
+  const vehiculo = normalizeVehiculo(envio.vehiculo);
+  let conductor = m1Activo ? null : resolveConductorFromEnvio(envio);
+
   const destDoc = String(invoice.cliente?.numeroDoc || invoice.cliente?.numero_doc || '').trim();
+  const remitentMeta = resolveGuiaMeta(invoice).remitente || {};
+  const remitenteDoc = String(remitentMeta.numero_doc || remitentMeta.numeroDoc || '').trim();
   const carrierDoc = String(transportista?.num_doc || '').trim();
 
-  // 2560: transportista ≠ remitente ni destinatario.
-  // Caso típico: eligieron público (01) pero pusieron su propio RUC + vehículo propio.
+  // 2560 solo GRE remitente: transportista ≠ remitente ni destinatario.
+  // En GRE-T el carrier = emisor es correcto.
   if (
-    payload.mod_traslado === '01'
+    !esGreTransportista
+    && payload.mod_traslado === '01'
     && carrierDoc
     && (carrierDoc === emisorRuc || (destDoc && carrierDoc === destDoc))
   ) {
@@ -474,15 +598,27 @@ function resolveEnvio(invoice) {
     }
   }
 
+  if (
+    esGreTransportista
+    && carrierDoc
+    && ((destDoc && carrierDoc === destDoc) || (remitenteDoc && carrierDoc === remitenteDoc))
+  ) {
+    throw new Error(
+      'En GRE transportista el emisor (transportista) no puede ser el mismo RUC del remitente o destinatario.',
+    );
+  }
+
   // 3347: privado sin CarrierParty.
   // 3452+: permisos/TUCE/autorización solo van en público; en privado el payload lleva solo placa.
-  // (No se borra nada del catálogo de vehículos; solo se omite al armar el XML.)
   let vehiculoPayload = vehiculo;
-  if (payload.mod_traslado === '02') {
+  if (payload.mod_traslado === '02' || m1Activo) {
     transportista = null;
     delete payload.fecha_entrega_transportista;
     if (vehiculoPayload) {
-      vehiculoPayload = vehiculoSoloPlaca(vehiculoPayload);
+      // M1/L: una sola placa (sin secundarios / TUCE), igual que el portal SUNAT.
+      vehiculoPayload = m1Activo
+        ? { placa: vehiculoPayload.placa }
+        : vehiculoSoloPlaca(vehiculoPayload);
     }
   }
 
@@ -490,8 +626,10 @@ function resolveEnvio(invoice) {
   if (vehiculoPayload) payload.vehiculo = vehiculoPayload;
   if (conductor) payload.conductor = conductor;
 
-  // Indicador de vehículo/conductores del transportista: solo aplica a transporte público.
-  const registrarVehiculos = payload.mod_traslado === '01'
+  // Indicador veh./conductores del transportista: solo GRE-R público y sin M1/L.
+  const registrarVehiculos = !esGreTransportista
+    && !m1Activo
+    && payload.mod_traslado === '01'
     && (
       envio.registrar_vehiculos_conductores === true
       || envio.registrarVehiculosConductores === true
@@ -499,13 +637,32 @@ function resolveEnvio(invoice) {
     );
 
   if (registrarVehiculos && (vehiculo || conductor)) {
-    payload.indicadores = ['SUNAT_Envio_IndicadorVehiculoConductoresTransp'];
+    payload.indicadores = [GRE_ENVIO_INDICADORES.VEHICULO_CONDUCTORES_TRANSP];
+  }
+
+  if (Array.isArray(envio.indicadores) && envio.indicadores.length && !m1Activo) {
+    const extra = envio.indicadores.map((x) => String(x).trim()).filter(Boolean);
+    payload.indicadores = [...new Set([...(payload.indicadores || []), ...extra])];
+  }
+
+  // GRE-R: indicador M1/L (excepción GRE-T; XML solo con placa).
+  if (!esGreTransportista) {
+    const envioTmp = { indicadores: m1Activo ? [] : [...(payload.indicadores || [])] };
+    aplicarIndicadorVehiculoM1L(envioTmp, m1Activo);
+    if (envioTmp.indicadores.length) {
+      payload.indicadores = envioTmp.indicadores;
+    } else {
+      delete payload.indicadores;
+    }
+    payload.traslado_vehiculo_m1_l = m1Activo;
   }
 
   if (payload.mod_traslado === '01') {
     if (!payload.transportista) {
       throw new Error(
-        'Transporte público (01) requiere un transportista distinto al remitente/destinatario.',
+        esGreTransportista
+          ? 'GRE transportista requiere RUC/MTC del transportista emisor.'
+          : 'Transporte público (01) requiere un transportista distinto al remitente/destinatario.',
       );
     }
     if (!payload.transportista.nro_mtc) {
@@ -513,12 +670,29 @@ function resolveEnvio(invoice) {
     }
   }
 
-  if (payload.mod_traslado === '02') {
+  if (m1Activo) {
     if (!payload.vehiculo?.placa) {
-      throw new Error('Transporte privado (02) requiere la placa del vehículo.');
+      throw new Error('Traslado en vehículos M1 o L requiere la placa del vehículo.');
+    }
+    delete payload.conductor;
+    delete payload.transportista;
+    return payload;
+  }
+
+  if (payload.mod_traslado === '02' || esGreTransportista) {
+    if (!payload.vehiculo?.placa) {
+      throw new Error(
+        esGreTransportista
+          ? 'GRE transportista requiere la placa del vehículo.'
+          : 'Transporte privado (02) requiere la placa del vehículo.',
+      );
     }
     if (!payload.conductor?.num_doc) {
-      throw new Error('Transporte privado (02) requiere los datos del conductor.');
+      throw new Error(
+        esGreTransportista
+          ? 'GRE transportista requiere los datos del conductor.'
+          : 'Transporte privado (02) requiere los datos del conductor.',
+      );
     }
   }
 
@@ -541,7 +715,7 @@ function buildVentaPayload(invoice) {
     fecha_emision: formatFechaEmision(invoice.fechaEmision),
     tipo_operacion: invoice.tipoOperacion || '0101',
     tipo_moneda: invoice.tipoMoneda || 'PEN',
-    forma_pago: (invoice.formaPago || 'contado').toLowerCase(),
+    forma_pago: (invoice.formaPago || 'contado').toLowerCase().startsWith('cred') ? 'credito' : 'contado',
     emisor: buildEmisor(company),
     receptor: buildReceptor(invoice.cliente),
     totales: buildTotales(invoice),
@@ -551,11 +725,83 @@ function buildVentaPayload(invoice) {
   const leyendas = buildLeyendas(invoice.legends);
   if (leyendas) payload.leyendas = leyendas;
 
+  if (payload.forma_pago === 'credito') {
+    const fecha = String(invoice.fecVencimiento || '').slice(0, 10);
+    const monto = toNumber(invoice.mtoImpVenta);
+    if (!fecha) throw new Error('Factura al crédito sin fecha de pago.');
+    payload.mto_credito = monto;
+    payload.cuotas = [{ monto, fecha_pago: fecha }];
+  }
+
+  const sunat = invoice.guiaMetaJson?.sunat_emision || invoice.guiaMeta?.sunat_emision;
+  if (sunat?.flags?.detraccion === 'si') {
+    const pct = Number(sunat.detraccion_porcentaje);
+    const extra = sunat.detraccion_extra && typeof sunat.detraccion_extra === 'object'
+      ? sunat.detraccion_extra
+      : {};
+    const montoExtra = (key) => {
+      const n = Number(String(extra[key] ?? '').replace(',', '.'));
+      return Number.isFinite(n) && n >= 0 ? n : 0;
+    };
+    const efectiva = montoExtra('valor_referencial');
+    const servicio = extra.valor_referencial_servicio != null && String(extra.valor_referencial_servicio) !== ''
+      ? montoExtra('valor_referencial_servicio')
+      : efectiva;
+    const nominal = montoExtra('valor_referencial_nominal');
+    const valorRef = Math.max(servicio, efectiva, nominal);
+    const baseDet = valorRef > toNumber(invoice.mtoImpVenta)
+      ? valorRef
+      : toNumber(invoice.mtoImpVenta);
+    const montoDet = Math.round((baseDet * pct) / 100 * 100) / 100;
+    payload.tipo_operacion = String(sunat.tipo_operacion || '1001');
+    payload.detraccion = {
+      porcentaje: pct,
+      monto: montoDet,
+      cuenta: String(sunat.detraccion_cuenta || ''),
+      codigo: String(sunat.detraccion_codigo || ''),
+      medio_pago: String(sunat.detraccion_medio_pago || '001'),
+    };
+    if (Number.isFinite(valorRef) && valorRef > 0) {
+      payload.detraccion.valor_referencial = valorRef;
+    }
+    if (payload.tipo_operacion === '1004') {
+      payload.detraccion.transporte_carga = {
+        origen_ubigeo: String(extra.origen_ubigeo || '').trim(),
+        origen_direccion: String(extra.origen_direccion || '').replace(/\]\]>/g, '').trim(),
+        destino_ubigeo: String(extra.destino_ubigeo || '').trim(),
+        destino_direccion: String(extra.destino_direccion || '').replace(/\]\]>/g, '').trim(),
+        detalle_viaje: String(extra.detalle_viaje || '').replace(/\]\]>/g, '').trim(),
+        valor_referencial: efectiva > 0 ? efectiva : servicio,
+        valor_servicio: servicio,
+        valor_nominal: nominal > 0 ? nominal : servicio,
+        registro_mtc: String(extra.registro_mtc || '').trim(),
+        configuracion_vehicular: String(extra.configuracion_vehicular || '').trim(),
+        carga_util_tm: montoExtra('carga_util_tm'),
+        retorno_vacio: String(extra.retorno_vacio || 'no') === 'si',
+      };
+    }
+    if (payload.tipo_operacion === '1002') {
+      payload.detraccion.hidrobiologico = {
+        matricula: String(extra.matricula || '').trim(),
+        nombre: String(extra.nombre_embarcacion || '').trim(),
+        especie: String(extra.especie || '').trim(),
+        lugar: String(extra.lugar_descarga || '').trim(),
+        cantidad: montoExtra('cantidad_especie'),
+        fecha: String(extra.fecha_descarga || '').slice(0, 10),
+      };
+    }
+  }
+
   if (invoice.tipoDoc === '07' || invoice.tipoDoc === '08') {
     payload.tipo_doc = invoice.tipoDoc;
     payload.cod_motivo = invoice.motivoCodigo;
     payload.des_motivo = invoice.motivoNota;
     payload.documento_afectado = buildDocumentoAfectado(invoice.documentoAfectado);
+    if (invoice.tipoDoc === '07' && String(invoice.motivoCodigo || '').trim() === '02') {
+      const meta = resolveGuiaMeta(invoice);
+      const nuevaFactura = String(meta.nueva_factura || meta.nuevaFactura || '').trim();
+      if (nuevaFactura) payload.compra = nuevaFactura;
+    }
     delete payload.forma_pago;
   }
 
@@ -642,6 +888,7 @@ function buildGuiaTransportistaPayload(invoice) {
 
   const payload = {
     version: '2022',
+    tipo_doc: '31',
     serie: invoice.serie,
     correlativo: String(invoice.correlativo),
     fecha_emision: formatFechaEmision(invoice.fechaEmision),
@@ -655,6 +902,19 @@ function buildGuiaTransportistaPayload(invoice) {
     envio: resolveEnvio(invoice),
     detalles: invoice.details.map((detail, index) => buildDetalleGuia(detail, detail.catalogItem, index)),
   };
+
+  const pagador = meta.pagador_flete || meta.pagadorFlete || meta.envio?.pagador_flete || null;
+  if (pagador && typeof pagador === 'object') {
+    const indicador = String(pagador.indicador || pagador.pagador || 'REMITENTE').trim().toUpperCase();
+    payload.pagador_flete = {
+      indicador,
+      tipo_doc: pagador.tipo_doc || pagador.tipoDoc || '6',
+      num_doc: pagador.num_doc || pagador.numero_doc || pagador.numeroDoc || pagador.ruc || '',
+      razon_social: pagador.razon_social || pagador.razonSocial || pagador.nombre || '',
+    };
+    payload.envio = payload.envio || {};
+    aplicarIndicadorPagadorFleteGreT(payload.envio, indicador);
+  }
 
   const docs = buildDocumentosRelacionadosPayload(invoice);
   if (docs.length && !isGreSandboxEntorno(company)) {

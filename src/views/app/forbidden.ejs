@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> · Easy</title>
+  <link rel="stylesheet" href="/css/app-ios.css" />
+</head>
+<body class="ios-app">
+  <%- include('../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
+  <main class="ios-main ios-main-centered">
+    <section class="ios-card-empty">
+      <div class="ios-empty-icon">🔒</div>
+      <h2>Acceso restringido</h2>
+      <p><%= message || 'No tienes permiso para ver esta sección.' %></p>
+      <a class="ios-btn-primary" href="<%= appBase %>/">Volver al inicio</a>
+    </section>
+  </main>
+</body>
+</html>

@@ -2,15 +2,20 @@ const catalogItemModel = require('../models/catalogItemModel');
 const productoSerieModel = require('../models/productoSerieModel');
 const prisma = require('../config/prisma');
 const { resolveCatalogQuery } = require('../utils/catalogAccess');
+const { parseMobileListQuery, sendMobilePage } = require('../utils/pagination');
 
 async function list(req, res, next) {
   try {
     const { almacenId, restrictToAlmacen } = resolveCatalogQuery(req);
-    const items = await catalogItemModel.findByCompanyRuc(req.companyRuc, {
+    const { q, page, pageSize, skip } = parseMobileListQuery(req.query);
+    const { items, total } = await catalogItemModel.findByCompanyRucPaginated(req.companyRuc, {
       almacenId,
       restrictToAlmacen,
+      q,
+      skip,
+      take: pageSize,
     });
-    res.json(items);
+    return sendMobilePage(res, { items, total, page, pageSize });
   } catch (err) {
     next(err);
   }
@@ -56,6 +61,12 @@ async function listSeriesDisponibles(req, res, next) {
   }
 }
 
+async function respondWithStock(res, row, req, { status = 200 } = {}) {
+  const { almacenId } = resolveCatalogQuery(req);
+  const [enriched] = await catalogItemModel.enrichStock([row], almacenId || null);
+  return res.status(status).json(enriched);
+}
+
 async function create(req, res, next) {
   try {
     const body = { ...req.body, companyRuc: req.companyRuc };
@@ -66,7 +77,7 @@ async function create(req, res, next) {
     }
 
     const row = await catalogItemModel.create(body);
-    res.status(201).json(catalogItemModel.toApi(row));
+    return respondWithStock(res, row, req, { status: 201 });
   } catch (err) {
     next(err);
   }
@@ -87,7 +98,7 @@ async function update(req, res, next) {
     }
 
     const row = await catalogItemModel.update(id, body);
-    res.json(catalogItemModel.toApi(row));
+    return respondWithStock(res, row, req);
   } catch (err) {
     next(err);
   }
@@ -107,7 +118,7 @@ async function patch(req, res, next) {
 
     const activo = req.body.activo === true || req.body.activo === 'true';
     const row = await catalogItemModel.setActive(id, activo);
-    res.json(catalogItemModel.toApi(row));
+    return respondWithStock(res, row, req);
   } catch (err) {
     next(err);
   }

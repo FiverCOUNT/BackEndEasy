@@ -1,0 +1,12 @@
+<div id="barcodeSerieSheet" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+  <div class="ios-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="barcodeSerieTitulo">
+    <div class="ios-sheet-head">
+      <button type="button" class="ios-sheet-back" id="barcodeSerieCerrar">← Volver</button>
+      <h3 id="barcodeSerieTitulo">Escanear serie</h3>
+      <span style="width:56px;"></span>
+    </div>
+    <video id="barcodeSerieVideo" class="ios-scan-video" hidden autoplay playsinline muted></video>
+    <input type="text" id="barcodeSerieInput" class="ios-sheet-search" placeholder="Serie o código de barras" autocomplete="off" />
+    <div class="ios-sheet-status" id="barcodeSerieStatus">Apunta la cámara o escribe la serie y presiona Enter.</div>
+  </div>
+</div>

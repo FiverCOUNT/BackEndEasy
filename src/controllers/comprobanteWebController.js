@@ -1,4 +1,5 @@
 const comprobanteModel = require('../models/comprobanteModel');
+const { formatFechaHora } = require('../utils/appWebHelpers');
 
 function parseFlash(req) {
   const { msg, tipo } = req.query;
@@ -8,7 +9,11 @@ function parseFlash(req) {
 
 async function list(req, res, next) {
   try {
-    const comprobantes = await comprobanteModel.findAll();
+    const rows = await comprobanteModel.findAll();
+    const comprobantes = rows.map((c) => ({
+      ...c,
+      fechaEmision: formatFechaHora(c.fechaEmision),
+    }));
     res.render('comprobantes/listar', {
       title: 'Comprobantes',
       comprobantes,

@@ -1,8 +1,13 @@
 <nav class="nav-menu" aria-label="Menú principal">
-  <a href="/" class="nav-home <%= active === 'inicio' ? 'active' : '' %>">
+  <a href="<%= adminBase %>/" class="nav-home <%= active === 'inicio' ? 'active' : '' %>">
     <span class="nav-icon" aria-hidden="true">⌂</span>
     Inicio
   </a>
+
+  <div class="entorno-filter nav-entorno" role="tablist" aria-label="Base de datos">
+    <a class="entorno-filter-btn <%= adminEntorno === 'prod' ? 'is-on' : '' %>" href="<%= entornoHrefProd %>">Producción</a>
+    <a class="entorno-filter-btn <%= adminEntorno === 'beta' ? 'is-on' : '' %>" href="<%= entornoHrefBeta %>">Beta</a>
+  </div>
 
   <div class="nav-sections">
     <div class="nav-section <%= active && active.startsWith('usuarios') ? 'is-open' : '' %>">
@@ -11,8 +16,8 @@
         Usuarios
       </span>
       <div class="nav-sub">
-        <a href="/usuarios" class="<%= active === 'usuarios' ? 'active' : '' %>">Listado</a>
-        <a href="/usuarios/crear" class="<%= active === 'usuarios-crear' ? 'active' : '' %>">Nuevo usuario</a>
+        <a href="<%= adminBase %>/usuarios" class="<%= active === 'usuarios' ? 'active' : '' %>">Listado</a>
+        <a href="<%= adminBase %>/usuarios/crear" class="<%= active === 'usuarios-crear' ? 'active' : '' %>">Nuevo usuario</a>
       </div>
     </div>
 
@@ -22,8 +27,8 @@
         Empresas
       </span>
       <div class="nav-sub">
-        <a href="/companies" class="<%= active === 'companies' ? 'active' : '' %>">Listado</a>
-        <a href="/companies/crear" class="<%= active === 'companies-crear' ? 'active' : '' %>">Nueva empresa</a>
+        <a href="<%= adminBase %>/companies" class="<%= active === 'companies' ? 'active' : '' %>">Listado</a>
+        <a href="<%= adminBase %>/companies/crear" class="<%= active === 'companies-crear' ? 'active' : '' %>">Nueva empresa</a>
       </div>
     </div>
 
@@ -33,8 +38,8 @@
         Almacenes
       </span>
       <div class="nav-sub">
-        <a href="/almacenes" class="<%= active === 'almacenes' ? 'active' : '' %>">Listado</a>
-        <a href="/almacenes/crear" class="<%= active === 'almacenes-crear' ? 'active' : '' %>">Nuevo almacén</a>
+        <a href="<%= adminBase %>/almacenes" class="<%= active === 'almacenes' ? 'active' : '' %>">Listado</a>
+        <a href="<%= adminBase %>/almacenes/crear" class="<%= active === 'almacenes-crear' ? 'active' : '' %>">Nuevo almacén</a>
       </div>
     </div>
 
@@ -44,8 +49,8 @@
         Catálogo
       </span>
       <div class="nav-sub">
-        <a href="/catalogo" class="<%= active === 'catalogo' ? 'active' : '' %>">Listado</a>
-        <a href="/catalogo/crear" class="<%= active === 'catalogo-crear' ? 'active' : '' %>">Nuevo ítem</a>
+        <a href="<%= adminBase %>/catalogo" class="<%= active === 'catalogo' ? 'active' : '' %>">Listado</a>
+        <a href="<%= adminBase %>/catalogo/crear" class="<%= active === 'catalogo-crear' ? 'active' : '' %>">Nuevo ítem</a>
       </div>
     </div>
 
@@ -55,7 +60,7 @@
         Comprobantes
       </span>
       <div class="nav-sub">
-        <a href="/comprobantes" class="<%= active === 'comprobantes' ? 'active' : '' %>">Listado</a>
+        <a href="<%= adminBase %>/comprobantes" class="<%= active === 'comprobantes' ? 'active' : '' %>">Listado</a>
       </div>
     </div>
 
@@ -65,7 +70,7 @@
         Clientes
       </span>
       <div class="nav-sub">
-        <a href="/clientes" class="<%= active === 'clientes' ? 'active' : '' %>">Listado</a>
+        <a href="<%= adminBase %>/clientes" class="<%= active === 'clientes' ? 'active' : '' %>">Listado</a>
       </div>
     </div>
 
@@ -75,7 +80,7 @@
         App móvil
       </span>
       <div class="nav-sub">
-        <a href="/configuracion" class="<%= active === 'configuracion' ? 'active' : '' %>">Configuración</a>
+        <a href="<%= adminBase %>/configuracion" class="<%= active === 'configuracion' ? 'active' : '' %>">Configuración</a>
       </div>
     </div>
   </div>
@@ -83,7 +88,7 @@
   <% if (typeof adminUser !== 'undefined' && adminUser) { %>
     <div class="nav-user">
       <span class="nav-user-email" title="<%= adminUser.email %>"><%= adminUser.email %></span>
-      <form method="POST" action="/logout" class="inline-form">
+      <form method="POST" action="<%= adminBase %>/logout" class="inline-form">
         <button type="submit" class="btn-sm btn-logout">Salir</button>
       </form>
     </div>

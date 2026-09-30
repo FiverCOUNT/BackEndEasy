@@ -17,6 +17,8 @@ enum EstadoUsuario {
 enum RolUsuario {
   ADMIN
   USUARIO
+  /// Acceso al panel web /admin (gestión de empresas / plataforma).
+  SUPER_ADMIN
 }
 
 model Company {
@@ -26,8 +28,8 @@ model Company {
   nombreComercial          String?  @map("nombre_comercial") @db.VarChar(255)
   tipoDoc                  String?  @map("tipo_doc") @db.VarChar(2)
   numeroDoc                String?  @map("numero_doc") @db.VarChar(20)
-  addressId                String?  @unique @map("address_id") @db.VarChar(36)
-  address                  Address? @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  /// Snapshot de dirección (ubigeo, distrito, mz/lote…). Ya no usa FK a addresses.
+  addressJson              Json?    @map("address_json")
   email                    String?  @db.VarChar(255)
   telefono                 String?  @db.VarChar(30)
   telefonos                Json?
@@ -46,26 +48,13 @@ model Company {
   nameLogo                 String?  @map("name_logo") @db.VarChar(255)
   entorno                  String?  @db.VarChar(20)
   webhookUrl               String?  @map("webhook_url") @db.VarChar(500)
-  apiKey                   String?  @map("api_key") @db.VarChar(255)
-  apiSecret                String?  @map("api_secret") @db.VarChar(255)
   plan                     String?  @db.VarChar(50)
   taxRegime                String?  @map("tax_regime") @db.VarChar(50)
-  igvRateOverride          Decimal? @map("igv_rate_override") @db.Decimal(6, 4)
-  nrusCategoria            Int?     @map("nrus_categoria")
-  maxDocumentsMonth        Int?     @map("max_documents_month")
-  documentsThisMonth       Int?     @map("documents_this_month")
-  aiMessagesThisMonth      Int?     @map("ai_messages_this_month")
-  usageResetMonth          String?  @map("usage_reset_month") @db.VarChar(7)
-  userId                   BigInt?  @map("user_id")
-  sireEnabled              Boolean? @map("sire_enabled")
   sireLastPeriodSynced     String?  @map("sire_last_period_synced") @db.VarChar(10)
-  sireLastReconciliationAt String?  @map("sire_last_reconciliation_at") @db.VarChar(30)
   sireClientId             String?  @map("sire_client_id") @db.VarChar(255)
   sireClientSecret         String?  @map("sire_client_secret") @db.VarChar(255)
   activo                   Boolean?
-  isActive                 Boolean? @map("is_active")
   tieneCertificado         Boolean? @map("tiene_certificado")
-  tieneWebhook             Boolean? @map("tiene_webhook")
   creadoEn                 String?  @map("creado_en") @db.VarChar(30)
   seriesConfigJson         Json?    @map("series_config")
   /// Número de Registro MTC (empresas de transporte / GRE pública). Ej: 1588035CNG
@@ -73,8 +62,7 @@ model Company {
 
   usuarios Usuario[]
 
-  @@index([ruc])
-  @@index([userId])
+  @@unique([ruc])
   @@map("companies")
 }
 
@@ -91,6 +79,7 @@ model Usuario {
   company      Company?      @relation(fields: [companyId], references: [id], onDelete: SetNull)
   almacenId    String?       @map("almacen_id") @db.VarChar(36)
   almacen      Almacen?      @relation(fields: [almacenId], references: [id], onDelete: SetNull)
+  movimientos  Movimiento[]
 
   @@index([almacenId])
   @@map("usuarios")
@@ -123,16 +112,21 @@ model SaleDetail {
   mtoBaseIgv        Decimal? @map("mto_base_igv") @db.Decimal(14, 4)
   porcentajeIgv     Decimal? @map("porcentaje_igv") @db.Decimal(6, 2)
   productoSerieId   String?  @map("producto_serie_id") @db.VarChar(36)
+  /// Si tiene valor, la línea participa en movimiento de inventario de ese almacén.
+  /// Null = digitada / solo referencia (no afecta stock).
+  almacenId         String?  @map("almacen_id") @db.VarChar(36)
   estado            SaleDetailEstado @default(ACTIVO)
   productoSerie     ProductoSerie? @relation(fields: [productoSerieId], references: [id], onDelete: SetNull)
   catalogItem       CatalogItem?   @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
   invoice           Invoice?       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  almacen           Almacen?       @relation(fields: [almacenId], references: [id], onDelete: SetNull)
 
   @@index([invoiceId])
   @@index([productoSerieId])
   @@index([catalogItemId])
   @@index([codigoSunat])
   @@index([estado])
+  @@index([almacenId])
   @@map("sale_details")
 }
 
@@ -156,6 +150,7 @@ model ProductoSerie {
   saleDetails   SaleDetail[]
   lineasCatalogo LineaCatalogoItem[]
   inventario     Inventario?
+  ordenDetalles  OrdenDetalle[]
   catalogItem   CatalogItem @relation(fields: [catalogItemId], references: [id])
   comprobante   Invoice?    @relation(fields: [comprobanteId], references: [id], onDelete: SetNull)
   almacen       Almacen?    @relation(fields: [almacenId], references: [id], onDelete: SetNull)
@@ -197,24 +192,26 @@ model Movimiento {
   guiaRemisionId   String?           @map("guia_remision_id") @db.VarChar(36)
   fechaDespacho    String?           @map("fecha_despacho") @db.VarChar(30)
   clienteId        String?           @map("cliente_id") @db.VarChar(36)
+  usuarioId        Int?              @map("usuario_id")
   lineas           LineaCatalogoItem[]
   comprobante      Invoice?          @relation("MovimientoComprobante", fields: [comprobanteId], references: [id], onDelete: SetNull)
   guiaRemision     Invoice?          @relation("MovimientoGuiaRemision", fields: [guiaRemisionId], references: [id], onDelete: SetNull)
   almacen          Almacen           @relation("MovimientoAlmacenOrigen", fields: [almacenId], references: [id])
   almacenDestino   Almacen?          @relation("MovimientoAlmacenDestino", fields: [almacenDestinoId], references: [id], onDelete: SetNull)
   cliente          Cliente?          @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  usuario          Usuario?          @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
 
   @@index([companyRuc])
   @@index([almacenId])
   @@index([almacenDestinoId])
   @@index([comprobanteId])
   @@index([clienteId])
+  @@index([usuarioId])
   @@map("movimientos")
 }
 
 model LineaCatalogoItem {
   lineaId         String   @id @default(uuid()) @map("linea_id") @db.VarChar(36)
-  externalId      String?  @map("id") @db.VarChar(36)
   movimientoId    String   @map("movimiento_id") @db.VarChar(36)
   catalogItemId   String   @map("catalog_item_id") @db.VarChar(64)
   nombre          String?  @db.VarChar(255)
@@ -258,6 +255,10 @@ model CatalogItem {
   descripcion     String?  @db.VarChar(500)
   unidad          String   @db.VarChar(10)
   precioUnitario  Decimal  @map("precio_unitario") @db.Decimal(14, 4)
+  /// Costo de adquisición. Vacío si aún no se registró.
+  precioCompra    Decimal? @map("precio_compra") @db.Decimal(14, 4)
+  /// YYYY-MM-DD. Solo productos que vencen; null en el resto.
+  fechaVencimiento String? @map("fecha_vencimiento") @db.VarChar(10)
   afectacionIgv   String   @default("10") @map("afectacion_igv") @db.VarChar(4)
   activo          Boolean  @default(true)
   manejaStock     Boolean  @default(false) @map("maneja_stock")
@@ -269,6 +270,7 @@ model CatalogItem {
   lineasCatalogo LineaCatalogoItem[]
   saleDetails    SaleDetail[]
   inventario     Inventario[]
+  ordenDetalles  OrdenDetalle[]
 
   @@index([companyRuc])
   @@index([companyRuc, codigo])
@@ -323,18 +325,21 @@ model Cliente {
   tipoDoc     String  @map("tipo_doc") @db.VarChar(2)
   numeroDoc   String  @map("numero_doc") @db.VarChar(20)
   razonSocial String   @map("razon_social") @db.VarChar(255)
-  addressId   String?  @unique @map("address_id") @db.VarChar(36)
-  address     Address? @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  /// Snapshot de dirección del cliente (JSON). Catálogo reciente = tabla addresses.
+  addressJson Json?    @map("address_json")
   telefono    String?  @db.VarChar(30)
   activo      Boolean @default(true)
   invoices    Invoice[]
   movimientos Movimiento[]
+  ordenes     Orden[]
 
   @@unique([companyRuc, tipoDoc, numeroDoc])
   @@index([companyRuc])
   @@map("clientes")
 }
 
+/// Catálogo de ubicaciones reutilizables (picker GRE / órdenes).
+/// Las entidades (cliente, almacén, empresa, orden) guardan su propio snapshot JSON.
 model Address {
   id           String    @id @default(uuid()) @db.VarChar(36)
   ubigeo       String?   @db.VarChar(6)
@@ -344,40 +349,85 @@ model Address {
   urbanizacion String?   @db.VarChar(100)
   direccion    String?   @db.VarChar(500)
   codLocal     String?   @default("0000") @map("cod_local") @db.VarChar(4)
-  /// Si está seteado: ubicación GRE reutilizable de la empresa (antes empresa_ubicaciones).
   companyRuc   String?   @map("company_ruc") @db.VarChar(11)
   etiqueta     String?   @db.VarChar(120)
   creadoEn     DateTime? @default(now()) @map("creado_en")
-
-  company Company?
-  cliente Cliente?
-  almacen Almacen?
 
   @@index([companyRuc])
   @@map("addresses")
 }
 
-/// Vehículo — tabla sola, sin relaciones.
+/// Catálogo SUNAT 13 / INEI: departamento (código de 2 dígitos).
+model Region {
+  codigo     String      @id @db.Char(2)
+  nombre     String      @db.VarChar(80)
+  provincias Provincia[]
+
+  @@map("regiones")
+}
+
+/// Provincia INEI: código = región(2) + provincia(2).
+model Provincia {
+  codigo       String     @id @db.Char(4)
+  codigoLocal  String     @map("codigo_local") @db.Char(2)
+  nombre       String     @db.VarChar(100)
+  regionCodigo String     @map("region_codigo") @db.Char(2)
+  region       Region     @relation(fields: [regionCodigo], references: [codigo], onDelete: Restrict)
+  distritos    Distrito[]
+
+  @@index([regionCodigo])
+  @@map("provincias")
+}
+
+/// Distrito INEI: código = ubigeo completo (6 dígitos) = región + provincia + distrito.
+model Distrito {
+  codigo          String    @id @db.Char(6)
+  codigoLocal     String    @map("codigo_local") @db.Char(2)
+  nombre          String    @db.VarChar(120)
+  provinciaCodigo String    @map("provincia_codigo") @db.Char(4)
+  provincia       Provincia @relation(fields: [provinciaCodigo], references: [codigo], onDelete: Restrict)
+
+  @@index([provinciaCodigo])
+  @@map("distritos")
+}
+
+/// Vehículo de la empresa (flota GRE).
 /// permisos: lista JSON [{ "tipo": "TUCE", "numero": "15M..." }, ...]
 model Vehiculo {
-  id       String @id @default(uuid()) @db.VarChar(36)
-  placa    String @unique @db.VarChar(15)
-  permisos Json   @default("[]")
+  id         String @id @default(uuid()) @db.VarChar(36)
+  companyRuc String @map("company_ruc") @db.VarChar(11)
+  placa      String @db.VarChar(15)
+  permisos   Json   @default("[]")
 
+  @@unique([companyRuc, placa])
+  @@index([companyRuc])
   @@map("vehiculos")
 }
 
-/// Conductor — tabla sola, sin relaciones.
+/// Conductor de la empresa (flota GRE).
 model Conductor {
   id               String  @id @default(uuid()) @db.VarChar(36)
+  companyRuc       String  @map("company_ruc") @db.VarChar(11)
   tipoDoc          String  @default("1") @map("tipo_doc") @db.VarChar(2)
   numeroDoc        String  @map("numero_doc") @db.VarChar(20)
   nombresCompletos String  @map("nombres_completos") @db.VarChar(255)
   licencia         String? @db.VarChar(40)
 
-  @@unique([tipoDoc, numeroDoc])
+  @@unique([companyRuc, tipoDoc, numeroDoc])
+  @@index([companyRuc])
   @@index([numeroDoc])
   @@map("conductores")
+}
+
+/// Empresa transportista (cat. público GRE) — tabla sola, sin relaciones.
+model Transportista {
+  id          String  @id @default(uuid()) @db.VarChar(36)
+  ruc         String  @unique @db.VarChar(11)
+  razonSocial String  @map("razon_social") @db.VarChar(255)
+  nroMtc      String? @map("nro_mtc") @db.VarChar(40)
+
+  @@index([razonSocial])
+  @@map("transportistas")
 }
 
 model Almacen {
@@ -385,9 +435,9 @@ model Almacen {
   companyRuc         String   @map("company_ruc") @db.VarChar(11)
   codigo             String   @db.VarChar(32)
   nombre             String   @db.VarChar(255)
-  addressId          String?  @unique @map("address_id") @db.VarChar(36)
+  /// Snapshot de dirección del almacén (JSON).
+  addressJson        Json?    @map("address_json")
   activo             Boolean  @default(true)
-  address            Address? @relation(fields: [addressId], references: [id], onDelete: SetNull)
 
   productoSeries     ProductoSerie[]
   movimientosOrigen  Movimiento[]      @relation("MovimientoAlmacenOrigen")
@@ -396,6 +446,8 @@ model Almacen {
   usuarios           Usuario[]
   inventario         Inventario[]
   invoices           Invoice[]
+  ordenDetalles      OrdenDetalle[]
+  saleDetails        SaleDetail[]
 
   @@unique([companyRuc, codigo])
   @@index([companyRuc])
@@ -414,6 +466,8 @@ model Invoice {
   fecVencimiento          String?           @map("fec_vencimiento") @db.VarChar(30)
   tipoMoneda              String            @default("PEN") @map("tipo_moneda") @db.VarChar(3)
   formaPago               String?           @map("forma_pago") @db.VarChar(50)
+  /// Medio de cobro elegido al emitir (Yape, CCI, etc.).
+  metodoPagoId            String?           @map("metodo_pago_id") @db.VarChar(36)
   observacion             String?           @db.Text
   mtoOperGravadas         Decimal?          @map("mto_oper_gravadas") @db.Decimal(14, 4)
   mtoOperExoneradas       Decimal?          @map("mto_oper_exoneradas") @db.Decimal(14, 4)
@@ -425,7 +479,7 @@ model Invoice {
   mtoImpVenta             Decimal?          @map("mto_imp_venta") @db.Decimal(14, 4)
   /// Almacén de salida al emitir factura/boleta (inventario post-venta).
   almacenId               String?           @map("almacen_id") @db.VarChar(36)
-  /// Solo guías 09/31: envío (ubicaciones partida/llegada + transporte). Docs relacionados van en tabla aparte.
+  /// Solo guías 09/31: envío (partida/llegada, vehículo[+secundarios], conductor[+secundarios]).
   guiaMetaJson            Json?             @map("guia_meta")
   motivoCodigo            String?           @map("motivo_codigo") @db.VarChar(10)
   motivoNota              String?           @map("motivo_nota") @db.VarChar(255)
@@ -443,11 +497,11 @@ model Invoice {
   sunatNotasDirecto       Json?             @map("sunat_notas")
   hash                    String?           @map("hash_cpe") @db.VarChar(128)
   sunatJson               Json?             @map("sunat")
-  enviarAutomatico        Boolean?          @map("enviar_automatico")
   clienteId               String?           @map("cliente_id") @db.VarChar(36)
 
   cliente                 Cliente?          @relation(fields: [clienteId], references: [id], onDelete: SetNull)
   almacen                 Almacen?          @relation(fields: [almacenId], references: [id], onDelete: SetNull)
+  metodoPago              MetodoPago?       @relation(fields: [metodoPagoId], references: [id], onDelete: SetNull)
   documentoAfectado       Invoice?          @relation("DocumentoAfectado", fields: [documentoAfectadoId], references: [id], onDelete: SetNull)
   notasQueAfectan         Invoice[]         @relation("DocumentoAfectado")
   details                 SaleDetail[]
@@ -458,6 +512,8 @@ model Invoice {
   /// GRE / CPE → CPEs relacionados (emitidos o recibidos).
   lineInvoices         LineInvoiceInvoice[] @relation("LineInvoicePrincipal")
   referenciadoEnLineas LineInvoiceInvoice[] @relation("LineInvoiceRelacionado")
+  /// Pedido de la app que originó o quedó ligado a este comprobante (0..1).
+  orden                Orden?
 
   @@unique([companyRuc, tipoDoc, serie, correlativo])
   @@index([companyRuc])
@@ -465,7 +521,29 @@ model Invoice {
   @@index([documentoAfectadoId])
   @@index([clienteId])
   @@index([almacenId])
+  @@index([metodoPagoId])
   @@map("invoices")
+}
+
+/// Medios de cobro de la empresa (Yape, CCI, Plin…) para factura/boleta.
+model MetodoPago {
+  id            String   @id @db.VarChar(36)
+  companyRuc    String   @map("company_ruc") @db.VarChar(11)
+  /// Nombre visible: "Yape Raymi", "BCP CCI".
+  nombre        String   @db.VarChar(120)
+  /// Canal: YAPE | CCI | PLIN | TRANSFERENCIA | EFECTIVO | OTRO.
+  tipo          String   @db.VarChar(30)
+  /// Celular Yape/Plin o número CCI.
+  valor         String   @db.VarChar(80)
+  activo        Boolean  @default(true)
+  creadoEn      DateTime @default(now()) @map("creado_en")
+  actualizadoEn DateTime @updatedAt @map("actualizado_en")
+
+  invoices Invoice[]
+
+  @@index([companyRuc])
+  @@index([companyRuc, activo])
+  @@map("metodos_pago")
 }
 
 /// Enlace invoice ↔ invoice relacionado (p. ej. GRE → factura emitida/recibida).
@@ -487,10 +565,15 @@ model LineInvoiceInvoice {
   @@map("line_invoice_invoice")
 }
 
-/// Compras registradas por la empresa (p. ej. OCR de factura del proveedor).
-/// Distintas de invoices emitidos en la plataforma; alimentan GRE motivo 02.
+/// Documentos externos recibidos (facturas/GRE de proveedores, OCR, SIRE, scraper SOL).
+/// Misma idea que Invoice (cabecera + detalle) pero aislado de la emisión:
+///  - líneas del proveedor → columna `lineas` (JSON), sin SaleDetail
+///  - GRE / docs relacionados → columna `guia_meta` (JSON), sin line_invoice_invoice
+///  - catálogo solo si el usuario relaciona una línea manualmente (catalog_item_id en JSON)
+/// Tus comprobantes emitidos viven en `invoices`, no aquí.
 model Compra {
   id                    String   @id @db.VarChar(36)
+  /// Tu RUC (receptor / adquiriente).
   companyRuc            String   @map("company_ruc") @db.VarChar(11)
   tipoDoc               String   @default("01") @map("tipo_doc") @db.VarChar(4)
   serie                 String   @db.VarChar(10)
@@ -503,10 +586,19 @@ model Compra {
   subTotal              Decimal? @map("sub_total") @db.Decimal(14, 4)
   mtoIgv                Decimal? @map("mto_igv") @db.Decimal(14, 4)
   mtoImpVenta           Decimal? @map("mto_imp_venta") @db.Decimal(14, 4)
-  /// Líneas: [{ descripcion, cantidad, unidad, precio_unitario, codigo? }]
+  /// Líneas del proveedor (JSON): descripción, cantidad, unidad, precio. catalog_item_id solo si el usuario relacionó manualmente al ingresar.
   lineasJson            Json     @map("lineas")
+  /// OCR | SIRE_RCE | SIRE_SSPP | SSPP | XML_MANUAL
   origen                String   @default("OCR") @db.VarChar(20)
+  /// Fuente detallada SUNAT (sire_rce, sire_sspp, sspp, xml_manual).
+  fuente                String?  @db.VarChar(30)
+  estado                String?  @default("ACEPTADO") @db.VarChar(30)
   imagenUrl             String?  @map("imagen_url") @db.VarChar(500)
+  xmlUrl                String?  @map("xml_url") @db.VarChar(500)
+  pdfUrl                String?  @map("pdf_url") @db.VarChar(500)
+  hashCpe               String?  @map("hash_cpe") @db.VarChar(128)
+  guiaMetaJson          Json?    @map("guia_meta")
+  /// GRE: envío, destinatario, transportista, documentos_relacionados (JSON, refs externas sin FK).
   observacion           String?  @db.Text
   creadoEn              DateTime @default(now()) @map("creado_en")
   actualizadoEn         DateTime @updatedAt @map("actualizado_en")
@@ -514,7 +606,86 @@ model Compra {
   @@unique([companyRuc, tipoDoc, serie, correlativo, proveedorNumeroDoc])
   @@index([companyRuc])
   @@index([proveedorNumeroDoc])
+  @@index([companyRuc, fechaEmision])
+  @@index([fuente])
   @@map("compras")
+}
+
+enum OrdenEstado {
+  BORRADOR
+  CONFIRMADA
+  FACTURADA
+  ANULADA
+}
+
+/// Pedido / orden de la app (antes o además del comprobante).
+/// Relacionada a un [Cliente] y, cuando se factura, a un [Invoice].
+model Orden {
+  id              String      @id @db.VarChar(36)
+  companyRuc      String      @map("company_ruc") @db.VarChar(11)
+  clienteId       String      @map("cliente_id") @db.VarChar(36)
+  /// Comprobante emitido a partir de esta orden (opcional hasta facturar).
+  invoiceId       String?     @unique @map("invoice_id") @db.VarChar(36)
+  /// Snapshot JSON de la dirección de envío (ubigeo, distrito, mz/lote…).
+  addressEnvio    Json?       @map("address_envio")
+  estado          OrdenEstado @default(BORRADOR)
+  tipoMoneda      String      @default("PEN") @map("tipo_moneda") @db.VarChar(3)
+  observacion     String?     @db.Text
+  mtoOperGravadas Decimal?    @map("mto_oper_gravadas") @db.Decimal(14, 4)
+  mtoIgv          Decimal?    @map("mto_igv") @db.Decimal(14, 4)
+  subTotal        Decimal?    @map("sub_total") @db.Decimal(14, 4)
+  mtoImpVenta     Decimal?    @map("mto_imp_venta") @db.Decimal(14, 4)
+  /// False hasta que alguien abra la orden (badge / notificación).
+  visto           Boolean     @default(false)
+  creadoEn        DateTime    @default(now()) @map("creado_en")
+  actualizadoEn   DateTime    @updatedAt @map("actualizado_en")
+
+  cliente      Cliente        @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+  invoice      Invoice?       @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  detalles     OrdenDetalle[]
+
+  @@index([companyRuc])
+  @@index([clienteId])
+  @@index([estado])
+  @@index([companyRuc, creadoEn])
+  @@map("ordenes")
+}
+
+/// Línea de producto de una [Orden] (mismo patrón de precios que [SaleDetail]).
+model OrdenDetalle {
+  id                String  @id @default(uuid()) @db.VarChar(36)
+  ordenId           String  @map("orden_id") @db.VarChar(36)
+  catalogItemId     String? @map("catalog_item_id") @db.VarChar(64)
+  /// Orden de la línea en el pedido (1-based).
+  ordenLinea        Int     @default(0) @map("orden_linea")
+  codigo            String? @db.VarChar(64)
+  codigoSunat       String? @map("codigo_sunat") @db.VarChar(32)
+  descripcion       String? @db.VarChar(500)
+  nombre            String? @db.VarChar(255)
+  cantidad          Decimal @db.Decimal(14, 4)
+  unidad            String? @default("NIU") @db.VarChar(10)
+  mtoPrecioUnitario Decimal? @map("mto_precio_unitario") @db.Decimal(14, 4)
+  tipAfeIgv         String  @default("10") @map("tip_afe_igv") @db.VarChar(4)
+  mtoValorUnitario  Decimal? @map("mto_valor_unitario") @db.Decimal(14, 4)
+  mtoValorVenta     Decimal? @map("mto_valor_venta") @db.Decimal(14, 4)
+  mtoBaseIgv        Decimal? @map("mto_base_igv") @db.Decimal(14, 4)
+  mtoIgv            Decimal? @map("mto_igv") @db.Decimal(14, 4)
+  porcentajeIgv     Decimal? @map("porcentaje_igv") @db.Decimal(6, 2)
+  total             Decimal? @map("total") @db.Decimal(14, 4)
+  almacenId         String?  @map("almacen_id") @db.VarChar(36)
+  /// Serie física reservada / elegida en la orden (NIU con maneja_serie).
+  productoSerieId   String?  @map("producto_serie_id") @db.VarChar(36)
+
+  orden         Orden         @relation(fields: [ordenId], references: [id], onDelete: Cascade)
+  catalogItem   CatalogItem?  @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+  almacen       Almacen?      @relation(fields: [almacenId], references: [id], onDelete: SetNull)
+  productoSerie ProductoSerie? @relation(fields: [productoSerieId], references: [id], onDelete: SetNull)
+
+  @@index([ordenId])
+  @@index([catalogItemId])
+  @@index([almacenId])
+  @@index([productoSerieId])
+  @@map("orden_detalles")
 }
 
 /// Configuración global de la app móvil (una sola fila, id = 1).
@@ -554,4 +725,16 @@ model CodigoProductoSunat {
 
   @@index([nombre])
   @@map("codigo_producto_sunat")
+}
+
+/// Tipos de operación SUNAT con detracción (1001 a 1004).
+/// codigos: menú de bien/servicio. campos: datos extra que pide ese tipo.
+model Detraccion {
+  codigo  String @id @db.VarChar(4)
+  nombre  String @db.VarChar(240)
+  codigos Json
+  campos  Json
+  orden   Int    @default(0)
+
+  @@map("detracciones")
 }

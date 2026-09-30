@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title><%= title %> — BackEnd Easy</title>
-  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/style.css?v=20260926panel" />
 </head>
 <body>
   <header class="header">
@@ -20,13 +20,43 @@
       <div class="card-header-row">
         <div>
           <h2><%= title %></h2>
-          <p class="api-hint"><%= total %> usuario(s) en total</p>
+          <p class="api-hint"><%= total %> usuario(s) en <%= entorno === 'beta' ? 'beta' : 'producción' %></p>
         </div>
-        <a href="/usuarios/crear" class="btn-link">+ Nuevo usuario</a>
+        <a href="<%= adminBase %>/usuarios/crear" class="btn-link">+ Nuevo usuario</a>
       </div>
 
       <%- include('../partials/flash', { flash }) %>
-      <%- include('../partials/list-search', { searchAction, searchPlaceholder, q, pageSize }) %>
+
+      <form class="list-search" method="GET" action="<%= searchAction %>">
+        <input type="hidden" name="entorno" value="<%= entorno %>" />
+        <div class="list-search-row">
+          <input
+            type="search"
+            name="q"
+            value="<%= typeof q !== 'undefined' ? q : '' %>"
+            placeholder="<%= searchPlaceholder %>"
+            class="list-search-input"
+            autocomplete="off"
+          />
+          <select name="company" class="list-filter-select">
+            <option value="">Todas las empresas</option>
+            <option value="none" <%= companyId === 'none' ? 'selected' : '' %>>Sin empresa (plataforma)</option>
+            <% (companies || []).forEach(function(c) { %>
+              <option value="<%= c.id %>" <%= String(companyId) === String(c.id) ? 'selected' : '' %>>
+                <%= c.nombre %> · <%= c.ruc %>
+              </option>
+            <% }); %>
+          </select>
+          <button type="submit" class="btn-sm btn-edit">Buscar</button>
+          <% if (q || companyId) { %>
+            <a href="<%= searchAction %>?entorno=<%= entorno %>" class="btn-sm btn-clear">Limpiar</a>
+          <% } %>
+        </div>
+        <% if (typeof pageSize !== 'undefined') { %>
+          <input type="hidden" name="limit" value="<%= pageSize %>" />
+        <% } %>
+      </form>
+
       <%- include('../partials/pagination', { pagination, q, paginationPosition: 'header' }) %>
 
       <% if (usuarios.length === 0) { %>
@@ -34,7 +64,7 @@
           <% if (q) { %>
             No hay resultados para «<%= q %>».
           <% } else { %>
-            No hay usuarios. <a href="/usuarios/crear">Crear el primero</a>
+            No hay usuarios. <a href="<%= adminBase %>/usuarios/crear">Crear el primero</a>
           <% } %>
         </p>
       <% } else { %>
@@ -59,7 +89,7 @@
                   <td><%= u.id %></td>
                   <td><strong><%= u.email %></strong></td>
                   <td>
-                    <span class="badge <%= u.rol === 'ADMIN' ? 'badge-activo' : '' %>"><%= u.rol %></span>
+                    <span class="badge <%= (u.rol === 'ADMIN' || u.rol === 'SUPER_ADMIN') ? 'badge-activo' : '' %>"><%= u.rol %></span>
                   </td>
                   <td><span class="badge badge-<%= u.estado.toLowerCase() %>"><%= u.estado %></span></td>
                   <td>
@@ -88,24 +118,27 @@
                   <td class="muted"><%= u.lastUpdated %></td>
                   <td>
                     <div class="actions-cell">
-                      <a href="/usuarios/<%= u.id %>/editar" class="btn-sm btn-edit">Editar</a>
+                      <a href="<%= adminBase %>/usuarios/<%= u.id %>/editar?entorno=<%= entorno %>" class="btn-sm btn-edit">Editar</a>
 
                       <% if (u.estado !== 'ACTIVO') { %>
-                        <form method="POST" action="/usuarios/<%= u.id %>/activar" class="inline-form">
+                        <form method="POST" action="<%= adminBase %>/usuarios/<%= u.id %>/activar" class="inline-form">
+                          <input type="hidden" name="entorno" value="<%= entorno %>" />
                           <button type="submit" class="btn-sm btn-success">Activar</button>
                         </form>
                       <% } else { %>
-                        <form method="POST" action="/usuarios/<%= u.id %>/desactivar" class="inline-form">
+                        <form method="POST" action="<%= adminBase %>/usuarios/<%= u.id %>/desactivar" class="inline-form">
+                          <input type="hidden" name="entorno" value="<%= entorno %>" />
                           <button type="submit" class="btn-sm btn-warn">Desactivar</button>
                         </form>
                       <% } %>
 
                       <form
                         method="POST"
-                        action="/usuarios/<%= u.id %>/eliminar"
+                        action="<%= adminBase %>/usuarios/<%= u.id %>/eliminar"
                         class="inline-form"
                         onsubmit="return confirm('¿Eliminar usuario <%= u.email %>? Esta acción no se puede deshacer.');"
                       >
+                        <input type="hidden" name="entorno" value="<%= entorno %>" />
                         <button type="submit" class="btn-sm btn-danger">Eliminar</button>
                       </form>
                     </div>

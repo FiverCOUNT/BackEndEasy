@@ -30,6 +30,8 @@ function toApi(item) {
     descripcion: item.descripcion,
     unidad: item.unidad,
     precio_unitario: toNumber(item.precioUnitario) ?? 0,
+    precio_compra: toNumber(item.precioCompra),
+    fecha_vencimiento: item.fechaVencimiento || null,
     afectacion_igv: item.afectacionIgv,
     activo: item.activo !== false,
     maneja_stock: Boolean(item.manejaStock),
@@ -47,6 +49,8 @@ function toPublic(item) {
     companyRuc: api.company_ruc,
     codigoSunat: api.codigo_sunat,
     precioUnitario: api.precio_unitario,
+    precioCompra: api.precio_compra,
+    fechaVencimiento: api.fecha_vencimiento,
     afectacionIgv: api.afectacion_igv,
     manejaStock: api.maneja_stock,
     manejaSerie: api.maneja_serie,
@@ -55,7 +59,7 @@ function toPublic(item) {
   };
 }
 
-function buildSearchWhere({ q = '', kind = '', companyRuc = '' } = {}) {
+function buildSearchWhere({ q = '', kind = '', companyRuc = '', soloActivos = false } = {}) {
   const where = {};
 
   if (companyRuc) {
@@ -64,6 +68,10 @@ function buildSearchWhere({ q = '', kind = '', companyRuc = '' } = {}) {
 
   if (kind && KINDS.includes(kind)) {
     where.kind = kind;
+  }
+
+  if (soloActivos) {
+    where.activo = true;
   }
 
   const term = (q || '').trim();
@@ -79,6 +87,23 @@ function buildSearchWhere({ q = '', kind = '', companyRuc = '' } = {}) {
   }
 
   return where;
+}
+
+function parsePrecioOpcional(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const n = toNumber(value);
+  if (n == null || n < 0) return null;
+  return n;
+}
+
+function parseFecha(value) {
+  const s = String(value ?? '').trim().slice(0, 10);
+  if (!s) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const [y, m, d] = s.split('-').map((n) => Number(n));
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) return null;
+  return s;
 }
 
 function parseBool(value, defaultValue = true) {
@@ -100,6 +125,10 @@ function parseBody(body) {
     descripcion: (body.descripcion || '').trim() || null,
     unidad: (body.unidad || (isProduct ? 'NIU' : 'ZZ')).trim(),
     precioUnitario: toNumber(body.precioUnitario ?? body.precio_unitario) ?? 0,
+    precioCompra: parsePrecioOpcional(body.precioCompra ?? body.precio_compra),
+    fechaVencimiento: isProduct
+      ? parseFecha(body.fechaVencimiento ?? body.fecha_vencimiento)
+      : null,
     afectacionIgv: (body.afectacionIgv || body.afectacion_igv || '10').trim(),
     activo: parseBool(body.activo, true),
     manejaStock:
@@ -107,11 +136,17 @@ function parseBody(body) {
         ? false
         : body.manejaStock === 'on' ||
           body.manejaStock === 'true' ||
+          body.manejaStock === true ||
           body.maneja_stock === true ||
+          body.maneja_stock === 'on' ||
+          body.maneja_stock === 'true' ||
           isProduct,
     manejaSerie:
       body.manejaSerie === 'on' ||
       body.manejaSerie === 'true' ||
+      body.manejaSerie === true ||
+      body.maneja_serie === 'on' ||
+      body.maneja_serie === 'true' ||
       body.maneja_serie === true,
     stockActual: toNumber(body.stockActual ?? body.stock_actual),
     duracionMinutos:
@@ -154,8 +189,17 @@ async function enrichStock(items, almacenId = null, { format = 'api' } = {}) {
   );
 }
 
-async function findPaginated({ q = '', kind = '', companyRuc = '', page = 1, pageSize = 25, skip = 0 }) {
-  const where = buildSearchWhere({ q, kind, companyRuc });
+async function findPaginated({
+  q = '',
+  kind = '',
+  companyRuc = '',
+  page = 1,
+  pageSize = 25,
+  skip = 0,
+  soloActivos = false,
+  almacenId = null,
+}) {
+  const where = buildSearchWhere({ q, kind, companyRuc, soloActivos });
 
   const [total, rows] = await Promise.all([
     prisma.catalogItem.count({ where }),
@@ -167,7 +211,7 @@ async function findPaginated({ q = '', kind = '', companyRuc = '', page = 1, pag
     }),
   ]);
 
-  const items = await enrichStock(rows, null, { format: 'public' });
+  const items = await enrichStock(rows, almacenId || null, { format: 'public' });
   return { total, items };
 }
 
@@ -205,6 +249,70 @@ async function findByCompanyRuc(companyRuc, { almacenId, restrictToAlmacen = fal
   return items;
 }
 
+/**
+ * Listado móvil: página de N ítems (default 20) sin cargar/enrich todo el catálogo.
+ */
+async function findByCompanyRucPaginated(
+  companyRuc,
+  {
+    almacenId = null,
+    restrictToAlmacen = false,
+    q = '',
+    skip = 0,
+    take = 20,
+  } = {},
+) {
+  const where = { companyRuc };
+  if (almacenId) {
+    where.kind = 'PRODUCT';
+  }
+
+  const qn = String(q || '').trim();
+  if (qn) {
+    where.OR = [
+      { nombre: { contains: qn } },
+      { codigo: { contains: qn } },
+      { codigoSunat: { contains: qn } },
+      { descripcion: { contains: qn } },
+    ];
+  }
+
+  if (restrictToAlmacen && almacenId) {
+    // Con filtro de almacén + stock>0 aún hace falta enriquecer; acotamos a ítems vinculados.
+    const linkedIds = await getItemIdsLinkedToAlmacen(companyRuc, almacenId);
+    const idList = [...linkedIds];
+    if (idList.length === 0) {
+      return { items: [], total: 0 };
+    }
+    where.id = { in: idList };
+    const rows = await prisma.catalogItem.findMany({
+      where,
+      orderBy: [{ activo: 'desc' }, { nombre: 'asc' }],
+    });
+    let items = await enrichStock(rows, almacenId);
+    items = items.filter((item) => {
+      const stock = item.stock_actual ?? 0;
+      if (item.maneja_stock || item.maneja_serie) return stock > 0;
+      return true;
+    });
+    const total = items.length;
+    return { items: items.slice(skip, skip + take), total };
+  }
+
+  const [total, rows] = await Promise.all([
+    prisma.catalogItem.count({ where }),
+    prisma.catalogItem.findMany({
+      where,
+      orderBy: [{ activo: 'desc' }, { nombre: 'asc' }],
+      skip,
+      take,
+    }),
+  ]);
+
+  const items = await enrichStock(rows, almacenId);
+  return { items, total };
+}
+
 async function findById(id) {
   return prisma.catalogItem.findUnique({ where: { id } });
 }
@@ -237,6 +345,8 @@ async function create(body, id = randomUUID()) {
       descripcion: data.descripcion,
       unidad: data.unidad,
       precioUnitario: data.precioUnitario,
+      precioCompra: data.precioCompra,
+      fechaVencimiento: data.fechaVencimiento,
       afectacionIgv: data.afectacionIgv,
       activo: data.activo,
       manejaStock,
@@ -320,6 +430,8 @@ async function update(id, body) {
       descripcion: data.descripcion,
       unidad: data.unidad,
       precioUnitario: data.precioUnitario,
+      precioCompra: data.precioCompra,
+      fechaVencimiento: data.fechaVencimiento,
       afectacionIgv: data.afectacionIgv,
       activo: data.activo,
       manejaStock,
@@ -368,8 +480,10 @@ module.exports = {
   toApi,
   toPublic,
   parseBody,
+  enrichStock,
   findPaginated,
   findByCompanyRuc,
+  findByCompanyRucPaginated,
   findById,
   findByCodigo,
   findByCodigoExceptId,

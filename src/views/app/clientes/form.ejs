@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> · Easy</title>
+  <link rel="stylesheet" href="/css/app-ios.css" />
+</head>
+<body class="ios-app">
+  <% var editIdSafe = (typeof editId !== 'undefined' && editId) ? editId : ''; %>
+  <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
+  <main class="ios-main">
+    <header class="ios-top">
+      <div>
+        <p class="ios-eyebrow"><%= companyNombre %></p>
+        <h1><%= editIdSafe ? 'Editar cliente' : 'Nuevo cliente' %></h1>
+      </div>
+      <a class="ios-btn-secondary" href="<%= appBase %>/clientes">Volver</a>
+    </header>
+    <% if (error) { %><div class="ios-flash is-error"><%= error %></div><% } %>
+    <% var addr = form.address || {}; %>
+    <form class="ios-form" method="POST" action="<%= editIdSafe ? appBase + '/clientes/' + editIdSafe : appBase + '/clientes' %>">
+      <label>Tipo doc
+        <select name="tipo_doc" <%= editIdSafe ? 'disabled' : '' %>>
+          <option value="1" <%= form.tipo_doc === '1' ? 'selected' : '' %>>DNI</option>
+          <option value="6" <%= form.tipo_doc === '6' ? 'selected' : '' %>>RUC</option>
+        </select>
+      </label>
+      <% if (editIdSafe) { %>
+        <input type="hidden" name="tipo_doc" value="<%= form.tipo_doc || '1' %>" />
+      <% } %>
+      <label>Número
+        <input name="numero_doc" value="<%= form.numero_doc || '' %>" <%= editIdSafe ? 'readonly' : 'required' %> />
+      </label>
+      <label>Razón social / Nombre
+        <input name="razon_social" value="<%= form.razon_social || '' %>" required />
+      </label>
+      <label>Teléfono
+        <input name="telefono" value="<%= form.telefono || '' %>" />
+      </label>
+
+      <section class="ios-form-card" style="margin-top:12px;">
+        <h3 class="ios-form-label">Dirección (opcional)</h3>
+        <input type="hidden" name="address[ubigeo]" id="cliUbigeo" value="<%= addr.ubigeo || '' %>" />
+        <input type="hidden" name="address[departamento]" id="cliDepartamento" value="<%= addr.departamento || '' %>" />
+        <input type="hidden" name="address[provincia]" id="cliProvincia" value="<%= addr.provincia || '' %>" />
+        <input type="hidden" name="address[distrito]" id="cliDistrito" value="<%= addr.distrito || '' %>" />
+        <input type="hidden" name="address[urbanizacion]" id="cliUrbanizacion" value="<%= addr.urbanizacion || '' %>" />
+        <input type="hidden" name="address[direccion]" id="cliDireccion" value="<%= addr.direccion || '' %>" />
+        <div class="ios-ubic-wrap">
+          <button type="button" class="ios-ubic-pick <%= (addr.direccion || addr.ubigeo) ? 'is-on' : 'is-empty' %>" id="cliUbicAbrir">
+            <span class="ios-ubic-pick-icon" aria-hidden="true">📍</span>
+            <span class="ios-ubic-pick-text">
+              <strong id="cliUbicTitulo"><%= addr.direccion || 'Toca para elegir ubicación' %></strong>
+              <small id="cliUbicDetalle"><%= addr.ubigeo ? ('Ubigeo ' + addr.ubigeo) : 'Región, distrito y dirección (mz, lote…)' %></small>
+            </span>
+          </button>
+          <button type="button" class="ios-ubic-clear" id="cliUbicQuitar" <%= (addr.direccion || addr.ubigeo) ? '' : 'hidden' %> aria-label="Quitar">×</button>
+        </div>
+      </section>
+
+      <button type="submit" class="ios-btn-primary"><%= editIdSafe ? 'Guardar cambios' : 'Registrar cliente' %></button>
+    </form>
+  </main>
+  <%- include('../../partials/app-tabbar', { active: active, appBase: appBase }) %>
+  <%- include('../../partials/ubicacion-picker', { appBase: appBase }) %>
+  <script>
+    if (window.EasyUbicacion) {
+      window.EasyUbicacion.bindPick({
+        openBtn: 'cliUbicAbrir',
+        clearBtn: 'cliUbicQuitar',
+        pickBtn: 'cliUbicAbrir',
+        titleEl: 'cliUbicTitulo',
+        detailEl: 'cliUbicDetalle',
+        title: 'Dirección del cliente',
+        emptyDetail: 'Región, distrito y dirección (mz, lote…)',
+        fields: {
+          ubigeo: 'cliUbigeo',
+          departamento: 'cliDepartamento',
+          provincia: 'cliProvincia',
+          distrito: 'cliDistrito',
+          urbanizacion: 'cliUrbanizacion',
+          direccion: 'cliDireccion',
+        },
+      });
+    }
+  </script>
+</body>
+</html>

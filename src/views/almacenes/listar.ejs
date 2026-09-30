@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title><%= title %> — BackEnd Easy</title>
-  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/style.css?v=20260926panel" />
 </head>
 <body>
   <header class="header">
@@ -20,14 +20,15 @@
         <div class="card-header-row">
           <div>
             <h2><%= title %></h2>
-            <p class="api-hint"><%= total %> almacén(es) en total</p>
+            <p class="api-hint"><%= total %> almacén(es) en <%= adminEntornoLabel %></p>
           </div>
-          <a href="/almacenes/crear" class="btn-link">+ Nuevo almacén</a>
+          <a href="<%= adminBase %>/almacenes/crear" class="btn-link">+ Nuevo almacén</a>
         </div>
 
         <%- include('../partials/flash', { flash }) %>
 
         <form class="list-search" method="GET" action="<%= searchAction %>">
+          <input type="hidden" name="entorno" value="<%= adminEntorno %>" />
           <div class="list-search-row">
             <input
               type="search"
@@ -45,7 +46,7 @@
             </select>
             <button type="submit" class="btn-sm btn-edit">Buscar</button>
             <% if (q || companyRuc) { %>
-              <a href="<%= searchAction %>" class="btn-sm btn-clear">Limpiar</a>
+              <a href="<%= searchAction %>?entorno=<%= adminEntorno %>" class="btn-sm btn-clear">Limpiar</a>
             <% } %>
           </div>
         </form>
@@ -57,7 +58,7 @@
             <% if (q || companyRuc) { %>
               No hay resultados con esos filtros.
             <% } else { %>
-              No hay almacenes. <a href="/almacenes/crear">Registrar el primero</a>
+              No hay almacenes. <a href="<%= adminBase %>/almacenes/crear">Registrar el primero</a>
             <% } %>
           </p>
         <% } else { %>
@@ -108,19 +109,19 @@
                     </td>
                     <td>
                       <div class="actions-cell">
-                        <a href="/almacenes/<%= a.id %>/editar" class="btn-sm btn-edit">Editar</a>
+                        <a href="<%= adminBase %>/almacenes/<%= a.id %>/editar" class="btn-sm btn-edit">Editar</a>
                         <% if (!a.activo) { %>
-                          <form method="POST" action="/almacenes/<%= a.id %>/activar" class="inline-form">
+                          <form method="POST" action="<%= adminBase %>/almacenes/<%= a.id %>/activar" class="inline-form">
                             <button type="submit" class="btn-sm btn-success">Activar</button>
                           </form>
                         <% } else { %>
-                          <form method="POST" action="/almacenes/<%= a.id %>/desactivar" class="inline-form">
+                          <form method="POST" action="<%= adminBase %>/almacenes/<%= a.id %>/desactivar" class="inline-form">
                             <button type="submit" class="btn-sm btn-warn">Desactivar</button>
                           </form>
                         <% } %>
                         <form
                           method="POST"
-                          action="/almacenes/<%= a.id %>/eliminar"
+                          action="<%= adminBase %>/almacenes/<%= a.id %>/eliminar"
                           class="inline-form"
                           onsubmit="return confirm('¿Eliminar almacén <%= a.nombre %>?');"
                         >

@@ -6,6 +6,7 @@ const {
   validateSeriesConfig,
 } = require('../utils/seriesConfig');
 const { parseListQuery, buildPageMeta } = require('../utils/pagination');
+const { adminPath } = require('../config/adminPanel');
 
 function parseFlash(req) {
   const { msg, tipo } = req.query;
@@ -23,9 +24,17 @@ function parseId(param) {
   }
 }
 
-function redirectList(res, message, type = 'success') {
+function redirectList(res, message, type = 'success', entorno) {
   const q = new URLSearchParams({ msg: message, tipo: type });
-  return res.redirect(`/companies?${q.toString()}`);
+  const db = entorno === 'beta' || entorno === 'prod'
+    ? entorno
+    : (res.locals.adminEntorno === 'beta' ? 'beta' : 'prod');
+  q.set('entorno', db);
+  return res.redirect(`${adminPath('/companies')}?${q.toString()}`);
+}
+
+function panelEntorno(res) {
+  return res.locals.adminEntorno === 'beta' ? 'beta' : 'prod';
 }
 
 function formFromBody(body) {
@@ -42,7 +51,6 @@ function formFromBody(body) {
     taxRegime: body.taxRegime || '',
     creadoEn: body.creadoEn || '',
     activo: body.activo === 'on' || body.activo === 'true',
-    isActive: body.isActive !== 'off' && body.isActive !== 'false',
     ubigeo: body.ubigeo || '',
     departamento: body.departamento || '',
     provincia: body.provincia || '',
@@ -76,7 +84,6 @@ function formFromCompany(company) {
     taxRegime: c.taxRegime || '',
     creadoEn: c.creadoEn || '',
     activo: c.activo !== false,
-    isActive: c.isActive !== false,
     ubigeo: c.address?.ubigeo || '',
     departamento: c.address?.departamento || '',
     provincia: c.address?.provincia || '',
@@ -101,19 +108,21 @@ function formFromCompany(company) {
 async function list(req, res, next) {
   try {
     const { q, page, pageSize, skip } = parseListQuery(req.query);
+    const entorno = panelEntorno(res);
     const { total, items } = await companyModel.findPaginated({
       q,
       page,
       pageSize,
       skip,
+      entorno,
     });
 
     const pagination = buildPageMeta({
       total,
       page,
       pageSize,
-      basePath: '/companies',
-      query: { q, msg: req.query.msg, tipo: req.query.tipo },
+      basePath: adminPath('/companies'),
+      query: { q, entorno, msg: req.query.msg, tipo: req.query.tipo },
     });
 
     res.render('companies/listar', {
@@ -121,10 +130,11 @@ async function list(req, res, next) {
       companies: items,
       total,
       q,
+      entorno,
       pageSize,
       pagination,
       flash: parseFlash(req),
-      searchAction: '/companies',
+      searchAction: adminPath('/companies'),
       searchPlaceholder: 'Buscar por RUC, razón social, email…',
     });
   } catch (err) {
@@ -137,7 +147,12 @@ async function showCreateForm(req, res, next) {
     res.render('companies/crear', {
       title: 'Nueva empresa',
       error: null,
-      form: formFromBody({ activo: 'on', isActive: 'on', tipoDoc: '6', entorno: 'beta', ...seriesConfigToFormFields(defaultSeriesConfig()) }),
+      form: formFromBody({
+        activo: 'on',
+        tipoDoc: '6',
+        entorno: panelEntorno(res),
+        ...seriesConfigToFormFields(defaultSeriesConfig()),
+      }),
     });
   } catch (err) {
     next(err);
@@ -154,7 +169,7 @@ async function create(req, res, next) {
     if (!form.ruc || !form.nombre) {
       return renderError('RUC y razón social son obligatorios.');
     }
-    if (await companyModel.findByRuc(form.ruc)) {
+    if (await companyModel.findByRucAcrossDbs(form.ruc)) {
       return renderError('Ya existe una empresa con ese RUC.');
     }
 
@@ -162,7 +177,8 @@ async function create(req, res, next) {
     if (seriesError) return renderError(seriesError);
 
     await companyModel.create(req.body, { certFile: req.file || null });
-    return redirectList(res, `Empresa ${form.nombre} creada correctamente.`);
+    const destino = String(form.entorno || '').toLowerCase() === 'prod' ? 'prod' : 'beta';
+    return redirectList(res, `Empresa ${form.nombre} creada correctamente.`, 'success', destino);
   } catch (err) {
     if (err.message && /certificado|R2\/S3|Cloudflare R2|\.pfx|Access Denied/i.test(err.message)) {
       return res.render('companies/crear', {
@@ -180,7 +196,7 @@ async function showEditForm(req, res, next) {
     const id = parseId(req.params.id);
     if (!id) return redirectList(res, 'Empresa no válida', 'error');
 
-    const company = await companyModel.findById(id);
+    const company = await companyModel.findById(id, panelEntorno(res));
     if (!company) return redirectList(res, 'Empresa no encontrada', 'error');
 
     res.render('companies/editar', {
@@ -199,7 +215,7 @@ async function update(req, res, next) {
     const id = parseId(req.params.id);
     if (!id) return redirectList(res, 'Empresa no válida', 'error');
 
-    const company = await companyModel.findById(id);
+    const company = await companyModel.findById(id, panelEntorno(res));
     if (!company) return redirectList(res, 'Empresa no encontrada', 'error');
 
     const form = formFromBody(req.body);
@@ -214,7 +230,7 @@ async function update(req, res, next) {
     if (!form.ruc || !form.nombre) {
       return renderError('RUC y razón social son obligatorios.');
     }
-    if (await companyModel.findByRucExceptId(form.ruc, id)) {
+    if (await companyModel.findByRucExceptIdAcrossDbs(form.ruc, id)) {
       return renderError('Ese RUC ya está registrado en otra empresa.');
     }
 
@@ -227,11 +243,24 @@ async function update(req, res, next) {
     });
     return redirectList(res, `Empresa ${form.nombre} actualizada.`);
   } catch (err) {
+    if (err.code === 'entorno_db_mismatch' || err.status === 400) {
+      const form = formFromBody(req.body);
+      const id = parseId(req.params.id);
+      const company = id ? await companyModel.findById(id, panelEntorno(res)) : null;
+      if (company) {
+        return res.status(400).render('companies/editar', {
+          title: 'Editar empresa',
+          error: err.message,
+          company: companyModel.toPublic(company),
+          form,
+        });
+      }
+    }
     if (err.message && /certificado|R2\/S3|Cloudflare R2|\.pfx|Access Denied/i.test(err.message)) {
       const form = formFromBody(req.body);
       const id = parseId(req.params.id);
       if (id) {
-        const company = await companyModel.findById(id);
+        const company = await companyModel.findById(id, panelEntorno(res));
         if (company) {
           return res.render('companies/editar', {
             title: 'Editar empresa',
@@ -256,10 +285,10 @@ async function activate(req, res, next) {
     const id = parseId(req.params.id);
     if (!id) return redirectList(res, 'Empresa no válida', 'error');
 
-    const company = await companyModel.findById(id);
+    const company = await companyModel.findById(id, panelEntorno(res));
     if (!company) return redirectList(res, 'Empresa no encontrada', 'error');
 
-    await companyModel.setActive(id, true);
+    await companyModel.setActive(id, true, panelEntorno(res));
     return redirectList(res, `Empresa ${company.nombre} activada.`);
   } catch (err) {
     next(err);
@@ -271,10 +300,10 @@ async function deactivate(req, res, next) {
     const id = parseId(req.params.id);
     if (!id) return redirectList(res, 'Empresa no válida', 'error');
 
-    const company = await companyModel.findById(id);
+    const company = await companyModel.findById(id, panelEntorno(res));
     if (!company) return redirectList(res, 'Empresa no encontrada', 'error');
 
-    await companyModel.setActive(id, false);
+    await companyModel.setActive(id, false, panelEntorno(res));
     return redirectList(res, `Empresa ${company.nombre} desactivada.`);
   } catch (err) {
     next(err);
@@ -286,14 +315,21 @@ async function destroy(req, res, next) {
     const id = parseId(req.params.id);
     if (!id) return redirectList(res, 'Empresa no válida', 'error');
 
-    const company = await companyModel.findById(id);
+    const company = await companyModel.findById(id, panelEntorno(res));
     if (!company) return redirectList(res, 'Empresa no encontrada', 'error');
 
-    const result = await companyModel.remove(id);
+    const result = await companyModel.remove(id, panelEntorno(res));
     if (result.error === 'has_users') {
       return redirectList(
         res,
         'No se puede eliminar: tiene usuarios vinculados. Desvincúlalos primero.',
+        'error'
+      );
+    }
+    if (result.error === 'has_data') {
+      return redirectList(
+        res,
+        'No se puede eliminar: la empresa tiene almacenes, catálogo, comprobantes u otros datos. Desactívala en su lugar.',
         'error'
       );
     }

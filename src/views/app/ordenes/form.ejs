@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> · Easy</title>
+  <link rel="stylesheet" href="/css/app-ios.css?v=buscador" />
+</head>
+<body class="ios-app">
+  <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
+  <main class="ios-main">
+    <header class="ios-top">
+      <div>
+        <p class="ios-eyebrow"><%= companyNombre %></p>
+        <h1><%= mode === 'edit' ? 'Editar orden' : 'Nueva orden' %></h1>
+      </div>
+      <a class="ios-btn-secondary" href="<%= appBase %>/ordenes">Lista</a>
+    </header>
+    <% if (error) { %><div class="ios-flash is-error"><%= error %></div><% } %>
+
+    <%
+                    var clientesJson = JSON.stringify((clientes || []).map(function(c) {
+        return {
+          id: c.id,
+          razon_social: c.razon_social || c.razonSocial,
+          numero_doc: c.numero_doc || c.numeroDoc,
+          address: c.address || null,
+        };
+      }));
+      var catalogoJson = JSON.stringify((catalogo || []).map(function(p) {
+        return {
+          id: p.id,
+          nombre: p.nombre,
+          codigo: p.codigo || '',
+          precio_unitario: p.precio_unitario,
+          unidad: p.unidad || '',
+          maneja_serie: p.manejaSerie === true || p.maneja_serie === true,
+        };
+      }));
+      var lineasInicialesJson = JSON.stringify((form.lineas || []).filter(function(ln) {
+        return ln.catalog_item_id || ln.nombre_linea || ln.nombre;
+      }));
+      var almacenesJson = JSON.stringify((almacenes || []).map(function(a) {
+        return { id: a.id, nombre: a.nombre, codigo: a.codigo || '' };
+      }));
+    %>
+
+    <form
+      class="ios-form"
+      method="POST"
+      action="<%= mode === 'edit' ? (appBase + '/ordenes/' + orden.id) : (appBase + '/ordenes') %>"
+      id="orden-form"
+      data-cliente-inicial="<%= form.cliente_id || '' %>"
+      data-almacen-default="<%= defaultAlmacenId || '' %>"
+      data-envio-api="<%= appBase %>/ordenes/direcciones-envio"
+      data-envio-inicial-id="<%= form.address_envio_id || '' %>"
+      data-series-api="<%= appBase %>/ordenes/catalogo"
+    >
+      <section class="ios-form-card">
+        <h3 class="ios-form-label">Cliente</h3>
+        <div class="ios-search-row">
+          <div class="ios-search">
+            <input type="search" id="clienteBusqueda" placeholder="Buscar cliente…" autocomplete="off" />
+          </div>
+          <button type="button" id="clienteAbrirLista" class="ios-icon-btn" aria-label="Ver lista de clientes">☰</button>
+        </div>
+        <div id="clienteSeleccionado" class="ios-selected-card" hidden>
+          <div class="ios-selected-card-text">
+            <strong id="clienteSelNombre"></strong>
+            <span id="clienteSelDoc"></span>
+          </div>
+          <button type="button" id="clienteSelQuitar" aria-label="Quitar cliente">×</button>
+        </div>
+        <input type="hidden" name="cliente_id" id="clienteId" value="<%= form.cliente_id || '' %>" required />
+      </section>
+
+      <section class="ios-form-card">
+        <h3 class="ios-form-label">Dirección de envío</h3>
+        <p style="font-size:13px;color:var(--ios-muted);margin:0 0 10px;">Elige una reciente o añade región, distrito y dirección (mz, lote…).</p>
+        <% var addr = form.address_envio || {}; %>
+        <input type="hidden" name="address_envio_id" id="envioAddressId" value="<%= form.address_envio_id || '' %>" />
+        <input type="hidden" name="address_envio[ubigeo]" id="envioUbigeo" value="<%= addr.ubigeo || '' %>" />
+        <input type="hidden" name="address_envio[departamento]" id="envioDepartamento" value="<%= addr.departamento || '' %>" />
+        <input type="hidden" name="address_envio[provincia]" id="envioProvincia" value="<%= addr.provincia || '' %>" />
+        <input type="hidden" name="address_envio[distrito]" id="envioDistrito" value="<%= addr.distrito || '' %>" />
+        <input type="hidden" name="address_envio[urbanizacion]" id="envioUrbanizacion" value="<%= addr.urbanizacion || '' %>" />
+        <input type="hidden" name="address_envio[direccion]" id="envioDireccion" value="<%= addr.direccion || '' %>" />
+        <div class="ios-ubic-wrap">
+          <button type="button" class="ios-ubic-pick <%= (addr.direccion || addr.ubigeo) ? 'is-on' : 'is-empty' %>" id="envioAbrirLista">
+            <span class="ios-ubic-pick-icon" aria-hidden="true">📍</span>
+            <span class="ios-ubic-pick-text">
+              <strong id="envioSelNombre"><%= addr.direccion || 'Toca para elegir ubicación' %></strong>
+              <small id="envioSelDir"><%= addr.distrito || (addr.ubigeo ? ('Ubigeo ' + addr.ubigeo) : 'Recientes o Añadir') %></small>
+            </span>
+          </button>
+          <button type="button" class="ios-ubic-clear" id="envioSelQuitar" <%= (addr.direccion || addr.ubigeo) ? '' : 'hidden' %> aria-label="Quitar">×</button>
+        </div>
+      </section>
+
+      <% if (mode === 'edit') { %>
+      <section class="ios-form-card">
+        <label class="ios-field">
+          <span>Estado</span>
+          <select name="estado">
+            <% ['BORRADOR','CONFIRMADA'].forEach(function(e) { %>
+              <option value="<%= e %>" <%= form.estado === e ? 'selected' : '' %>><%= e %></option>
+            <% }); %>
+          </select>
+        </label>
+      </section>
+      <% } else { %>
+        <input type="hidden" name="estado" value="<%= form.estado || 'BORRADOR' %>" />
+      <% } %>
+
+      <section class="ios-form-card">
+        <h3 class="ios-form-label">Productos</h3>
+        <div class="ios-search-row">
+          <div class="ios-search">
+            <input type="search" id="productoBusqueda" placeholder="Buscar producto…" autocomplete="off" />
+          </div>
+          <button type="button" id="productoAbrirLista" class="ios-icon-btn" aria-label="Ver catálogo">+</button>
+        </div>
+        <div id="lineasOrden" class="ios-orden-lineas"></div>
+        <div id="ordenTotal" class="ios-orden-totales" hidden></div>
+        <div id="lineasHidden"></div>
+        <p style="font-size:13px;color:var(--ios-muted);margin:0;">Toca + para abrir catálogo · elige almacén arriba del buscador.</p>
+      </section>
+
+      <section class="ios-form-card">
+        <label class="ios-field">
+          <span>Observación</span>
+          <textarea name="observacion" rows="2"><%= form.observacion || '' %></textarea>
+        </label>
+      </section>
+
+      <button type="submit" class="ios-btn-primary"><%= mode === 'edit' ? 'Guardar cambios' : 'Crear orden' %></button>
+    </form>
+  </main>
+
+  <div id="clientePicker" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel" role="dialog" aria-modal="true">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-back" id="clientePickerCerrar">← Volver</button>
+        <h3>Clientes</h3>
+        <span style="width:56px;"></span>
+      </div>
+      <input type="search" id="clientePickerBusqueda" class="ios-sheet-search" placeholder="Nombre, DNI, RUC…" autocomplete="off" />
+      <div class="ios-sheet-status" id="clientePickerStatus">Busca o elige un cliente</div>
+      <div class="ios-sheet-list" id="clientePickerLista"></div>
+    </div>
+  </div>
+
+  <div id="productoPicker" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel" role="dialog" aria-modal="true">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-back" id="productoPickerCerrar">← Volver</button>
+        <h3>Catálogo</h3>
+        <span style="width:56px;"></span>
+      </div>
+      <div class="ios-sheet-toolbar">
+        <input type="search" id="productoPickerBusqueda" class="ios-sheet-search" placeholder="Nombre, código o serie…" autocomplete="off" />
+        <select id="productoAlmacenSelect" class="ios-sheet-almacen-select" aria-label="Almacén"></select>
+      </div>
+      <div class="ios-sheet-status" id="productoPickerStatus">Toca un producto para agregarlo</div>
+      <div class="ios-sheet-list" id="productoPickerLista"></div>
+    </div>
+  </div>
+
+  <div id="seriePicker" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel" role="dialog" aria-modal="true">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-back" id="seriePickerCerrar">← Volver</button>
+        <h3 id="seriePickerTitulo">Elegir serie</h3>
+        <span style="width:44px;"></span>
+      </div>
+      <input type="search" id="seriePickerBusqueda" class="ios-sheet-search" placeholder="Buscar número de serie…" autocomplete="off" />
+      <div class="ios-sheet-status" id="seriePickerStatus">Cargando series…</div>
+      <div class="ios-sheet-list" id="seriePickerLista"></div>
+      <button type="button" class="ios-btn-primary ios-serie-picker-add" id="seriePickerAgregar" disabled>
+        Agregar seleccionadas
+      </button>
+    </div>
+  </div>
+
+  <script type="application/json" id="ordenes-clientes-data"><%- clientesJson %></script>
+  <script type="application/json" id="ordenes-catalogo-data"><%- catalogoJson %></script>
+  <script type="application/json" id="ordenes-almacenes-data"><%- almacenesJson %></script>
+  <script type="application/json" id="ordenes-lineas-data"><%- lineasInicialesJson %></script>
+  <%- include('../../partials/app-emit-loading') %>
+  <%- include('../../partials/ubicacion-picker', { appBase: appBase }) %>
+  <script src="/js/app-emit-loading.js"></script>
+  <%- include('../../partials/app-barcode-serie') %>
+  <script src="/js/app-barcode-serie.js?v=buscador"></script>
+  <script src="/js/app-ordenes.js?v=buscador"></script>
+</body>
+</html>

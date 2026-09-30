@@ -3,39 +3,52 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title><%= title %> · BackEnd Easy</title>
+  <title><%= title %> · Easy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/style.css" />
 </head>
 <body class="login-page">
+  <div class="login-bg" aria-hidden="true"></div>
+  <div class="login-bg-veil" aria-hidden="true"></div>
+
   <main class="login-wrap">
-    <section class="card login-card">
+    <section class="login-card" aria-label="Iniciar sesión">
       <div class="login-brand">
-        <h1>BackEnd Easy</h1>
-        <p>Panel de administración</p>
+        <img
+          class="login-logo"
+          src="/img/easy-logo.png"
+          alt="Easy"
+          width="88"
+          height="88"
+        />
+        <h1>Easy</h1>
+        <p>Plataforma de facturación y logística</p>
       </div>
 
       <% if (error) { %>
-        <div class="flash flash-error" role="alert"><%= error %></div>
+        <div class="flash flash-error login-flash" role="alert"><%= error %></div>
       <% } %>
 
-      <form class="form" method="POST" action="/login" autocomplete="on">
+      <form class="login-form" method="POST" action="/login" autocomplete="on">
         <% if (next) { %>
           <input type="hidden" name="next" value="<%= next %>" />
         <% } %>
-        <div class="field">
+        <div class="login-field">
           <label for="email">Email</label>
           <input
             type="email"
             id="email"
             name="email"
             value="<%= email || '' %>"
-            placeholder="admin@tudominio.com"
+            placeholder="tu@empresa.com"
             required
             autofocus
             autocomplete="username"
           />
         </div>
-        <div class="field">
+        <div class="login-field">
           <label for="contrasena">Contraseña</label>
           <input
             type="password"
@@ -46,13 +59,14 @@
             autocomplete="current-password"
           />
         </div>
+        <label class="login-remember">
+          <input type="checkbox" name="recordarme" value="1" <%= typeof recordarme !== 'undefined' && recordarme ? 'checked' : '' %> />
+          <span>Recordarme en este dispositivo</span>
+        </label>
         <button type="submit" class="btn-login">Entrar</button>
       </form>
 
-      <p class="login-hint">
-        Solo usuarios con rol <strong>ADMIN</strong> pueden entrar al panel.
-        La app móvil sigue usando su propio login JWT.
-      </p>
+      <p class="login-footer">Software empresarial · Operación confiable</p>
     </section>
   </main>
 </body>

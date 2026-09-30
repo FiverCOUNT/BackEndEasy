@@ -1,12 +1,19 @@
-const prisma = require('../config/prisma');
 const almacenModel = require('../models/almacenModel');
+const prisma = require('../config/prisma');
 const { parseListQuery, buildPageMeta } = require('../utils/pagination');
+const { adminPath } = require('../config/adminPanel');
+const { runWithEntorno } = require('../config/prisma');
 
-async function loadCompanies() {
-  return prisma.company.findMany({
-    select: { ruc: true, nombre: true },
-    orderBy: { nombre: 'asc' },
-  });
+function panelEntorno(res) {
+  return res.locals.adminEntorno === 'beta' ? 'beta' : 'prod';
+}
+
+async function loadCompanies(entorno) {
+  return runWithEntorno(entorno, () =>
+    prisma.company.findMany({
+      select: { id: true, nombre: true, ruc: true },
+      orderBy: { nombre: 'asc' },
+    }));
 }
 
 function parseFlash(req) {
@@ -21,9 +28,13 @@ function parseId(param) {
   return id;
 }
 
-function redirectList(res, message, type = 'success') {
+function redirectList(res, message, type = 'success', entorno) {
   const q = new URLSearchParams({ msg: message, tipo: type });
-  return res.redirect(`/almacenes?${q.toString()}`);
+  const db = entorno === 'beta' || entorno === 'prod'
+    ? entorno
+    : (res.locals.adminEntorno === 'beta' ? 'beta' : 'prod');
+  q.set('entorno', db);
+  return res.redirect(`${adminPath('/almacenes')}?${q.toString()}`);
 }
 
 function formFromBody(body) {
@@ -63,40 +74,39 @@ async function list(req, res, next) {
     const { q, page, pageSize, skip } = parseListQuery(req.query);
     const companyRuc = (req.query.company || '').trim();
 
-    const { total, items } = await almacenModel.findPaginated({
-      q,
-      companyRuc,
-      page,
-      pageSize,
-      skip,
-    });
+    const entorno = panelEntorno(res);
+    const [{ total, items }, companies] = await Promise.all([
+      runWithEntorno(entorno, () =>
+        almacenModel.findPaginated({ q, companyRuc, page, pageSize, skip })),
+      loadCompanies(entorno),
+    ]);
 
     const pagination = buildPageMeta({
       total,
       page,
       pageSize,
-      basePath: '/almacenes',
+      basePath: adminPath('/almacenes'),
       query: {
         q,
         company: companyRuc || undefined,
+        entorno,
         msg: req.query.msg,
         tipo: req.query.tipo,
       },
     });
-
-    const companies = await loadCompanies();
 
     res.render('almacenes/listar', {
       title: 'Almacenes',
       almacenes: items,
       total,
       q,
+      entorno,
       companyRuc,
       pageSize,
       pagination,
       companies,
       flash: parseFlash(req),
-      searchAction: '/almacenes',
+      searchAction: adminPath('/almacenes'),
       searchPlaceholder: 'Buscar por código, nombre, empresa o dirección…',
     });
   } catch (err) {
@@ -106,7 +116,7 @@ async function list(req, res, next) {
 
 async function showCreateForm(req, res, next) {
   try {
-    const companies = await loadCompanies();
+    const companies = await loadCompanies(panelEntorno(res));
     res.render('almacenes/crear', {
       title: 'Nuevo almacén',
       error: null,
@@ -121,7 +131,8 @@ async function showCreateForm(req, res, next) {
 
 async function create(req, res, next) {
   try {
-    const companies = await loadCompanies();
+    const entorno = panelEntorno(res);
+    const companies = await loadCompanies(entorno);
     const form = formFromBody(req.body);
 
     const renderError = (error) =>
@@ -137,15 +148,17 @@ async function create(req, res, next) {
     if (!form.codigo) return renderError('El código es obligatorio.');
     if (!form.nombre) return renderError('El nombre es obligatorio.');
 
-    const company = await prisma.company.findFirst({ where: { ruc: form.companyRuc } });
-    if (!company) return renderError('La empresa seleccionada no existe.');
+    const company = companies.find((c) => c.ruc === form.companyRuc);
+    if (!company) return renderError('La empresa seleccionada no existe en esta base.');
 
-    if (await almacenModel.findByCodigo(form.companyRuc, form.codigo)) {
+    const exists = await runWithEntorno(entorno, () =>
+      almacenModel.findByCodigo(form.companyRuc, form.codigo));
+    if (exists) {
       return renderError('Ya existe un almacén con ese código en la empresa.');
     }
 
-    await almacenModel.create(req.body);
-    return redirectList(res, `Almacén «${form.nombre}» creado.`);
+    await runWithEntorno(entorno, () => almacenModel.create(req.body));
+    return redirectList(res, `Almacén «${form.nombre}» creado.`, 'success', entorno);
   } catch (err) {
     next(err);
   }
@@ -153,13 +166,14 @@ async function create(req, res, next) {
 
 async function showEditForm(req, res, next) {
   try {
+    const entorno = panelEntorno(res);
     const id = parseId(req.params.id);
-    if (!id) return redirectList(res, 'Almacén no válido', 'error');
+    if (!id) return redirectList(res, 'Almacén no válido', 'error', entorno);
 
-    const almacen = await almacenModel.findById(id);
-    if (!almacen) return redirectList(res, 'Almacén no encontrado', 'error');
+    const almacen = await runWithEntorno(entorno, () => almacenModel.findById(id));
+    if (!almacen) return redirectList(res, 'Almacén no encontrado', 'error', entorno);
 
-    const companies = await loadCompanies();
+    const companies = await loadCompanies(entorno);
     res.render('almacenes/editar', {
       title: 'Editar almacén',
       error: null,
@@ -175,13 +189,14 @@ async function showEditForm(req, res, next) {
 
 async function update(req, res, next) {
   try {
+    const entorno = panelEntorno(res);
     const id = parseId(req.params.id);
-    if (!id) return redirectList(res, 'Almacén no válido', 'error');
+    if (!id) return redirectList(res, 'Almacén no válido', 'error', entorno);
 
-    const almacen = await almacenModel.findById(id);
-    if (!almacen) return redirectList(res, 'Almacén no encontrado', 'error');
+    const almacen = await runWithEntorno(entorno, () => almacenModel.findById(id));
+    if (!almacen) return redirectList(res, 'Almacén no encontrado', 'error', entorno);
 
-    const companies = await loadCompanies();
+    const companies = await loadCompanies(entorno);
     const form = formFromBody(req.body);
 
     const renderError = (error) =>
@@ -198,18 +213,15 @@ async function update(req, res, next) {
     if (!form.codigo) return renderError('El código es obligatorio.');
     if (!form.nombre) return renderError('El nombre es obligatorio.');
 
-    const company = await prisma.company.findFirst({ where: { ruc: form.companyRuc } });
-    if (!company) return renderError('La empresa seleccionada no existe.');
+    const company = companies.find((c) => c.ruc === form.companyRuc);
+    if (!company) return renderError('La empresa seleccionada no existe en esta base.');
 
-    const duplicate = await almacenModel.findByCodigoExceptId(
-      form.companyRuc,
-      form.codigo,
-      id,
-    );
+    const duplicate = await runWithEntorno(entorno, () =>
+      almacenModel.findByCodigoExceptId(form.companyRuc, form.codigo, id));
     if (duplicate) return renderError('Ya existe otro almacén con ese código en la empresa.');
 
-    await almacenModel.update(id, req.body);
-    return redirectList(res, `Almacén «${form.nombre}» actualizado.`);
+    await runWithEntorno(entorno, () => almacenModel.update(id, req.body));
+    return redirectList(res, `Almacén «${form.nombre}» actualizado.`, 'success', entorno);
   } catch (err) {
     next(err);
   }
@@ -217,14 +229,15 @@ async function update(req, res, next) {
 
 async function activate(req, res, next) {
   try {
+    const entorno = panelEntorno(res);
     const id = parseId(req.params.id);
-    if (!id) return redirectList(res, 'Almacén no válido', 'error');
+    if (!id) return redirectList(res, 'Almacén no válido', 'error', entorno);
 
-    const almacen = await almacenModel.findById(id);
-    if (!almacen) return redirectList(res, 'Almacén no encontrado', 'error');
+    const almacen = await runWithEntorno(entorno, () => almacenModel.findById(id));
+    if (!almacen) return redirectList(res, 'Almacén no encontrado', 'error', entorno);
 
-    await almacenModel.setActive(id, true);
-    return redirectList(res, `«${almacen.nombre}» activado.`);
+    await runWithEntorno(entorno, () => almacenModel.setActive(id, true));
+    return redirectList(res, `«${almacen.nombre}» activado.`, 'success', entorno);
   } catch (err) {
     next(err);
   }
@@ -232,14 +245,15 @@ async function activate(req, res, next) {
 
 async function deactivate(req, res, next) {
   try {
+    const entorno = panelEntorno(res);
     const id = parseId(req.params.id);
-    if (!id) return redirectList(res, 'Almacén no válido', 'error');
+    if (!id) return redirectList(res, 'Almacén no válido', 'error', entorno);
 
-    const almacen = await almacenModel.findById(id);
-    if (!almacen) return redirectList(res, 'Almacén no encontrado', 'error');
+    const almacen = await runWithEntorno(entorno, () => almacenModel.findById(id));
+    if (!almacen) return redirectList(res, 'Almacén no encontrado', 'error', entorno);
 
-    await almacenModel.setActive(id, false);
-    return redirectList(res, `«${almacen.nombre}» desactivado.`);
+    await runWithEntorno(entorno, () => almacenModel.setActive(id, false));
+    return redirectList(res, `«${almacen.nombre}» desactivado.`, 'success', entorno);
   } catch (err) {
     next(err);
   }
@@ -247,22 +261,24 @@ async function deactivate(req, res, next) {
 
 async function destroy(req, res, next) {
   try {
+    const entorno = panelEntorno(res);
     const id = parseId(req.params.id);
-    if (!id) return redirectList(res, 'Almacén no válido', 'error');
+    if (!id) return redirectList(res, 'Almacén no válido', 'error', entorno);
 
-    const almacen = await almacenModel.findById(id);
-    if (!almacen) return redirectList(res, 'Almacén no encontrado', 'error');
+    const almacen = await runWithEntorno(entorno, () => almacenModel.findById(id));
+    if (!almacen) return redirectList(res, 'Almacén no encontrado', 'error', entorno);
 
-    const result = await almacenModel.remove(id);
+    const result = await runWithEntorno(entorno, () => almacenModel.remove(id));
     if (result.error === 'has_relations') {
       return redirectList(
         res,
         'No se puede eliminar: tiene usuarios, series, movimientos o líneas vinculadas',
         'error',
+        entorno,
       );
     }
 
-    return redirectList(res, `«${almacen.nombre}» eliminado.`);
+    return redirectList(res, `«${almacen.nombre}» eliminado.`, 'success', entorno);
   } catch (err) {
     next(err);
   }

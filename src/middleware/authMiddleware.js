@@ -1,5 +1,6 @@
 const { verifyAccessToken } = require('../utils/tokens');
 const usuarioModel = require('../models/usuarioModel');
+const { enterWithEntorno, isProdEntorno } = require('../config/prisma');
 
 async function requireAuth(req, res, next) {
   try {
@@ -28,16 +29,34 @@ async function requireAuth(req, res, next) {
       return res.status(401).json({ success: false, message: 'Token inválido' });
     }
 
-    const user = await usuarioModel.findById(userId);
+    const entornoHint = payload.entorno
+      ? (isProdEntorno(payload.entorno) ? 'prod' : 'beta')
+      : null;
+
+    if (entornoHint) enterWithEntorno(entornoHint);
+
+    const user = await usuarioModel.findById(userId, entornoHint);
     if (!user) {
       return res.status(401).json({ success: false, message: 'Usuario no encontrado' });
     }
 
     if (user.estado !== 'ACTIVO') {
-      return res.status(403).json({ success: false, message: 'Usuario inactivo' });
+      return res.status(403).json({
+        success: false,
+        message: 'Tu acceso está deshabilitado. Contacta a soporte para reactivarlo.',
+        code: 'CUENTA_DESHABILITADA',
+      });
     }
 
-    // Sesión cerrada explícitamente (logout admin / usuario inactivado).
+    const company = user.company;
+    if (company && company.activo === false) {
+      return res.status(403).json({
+        success: false,
+        message: 'Tu acceso está deshabilitado. Contacta a soporte para reactivarlo.',
+        code: 'CUENTA_DESHABILITADA',
+      });
+    }
+
     if (!user.token) {
       return res.status(401).json({
         success: false,
@@ -45,12 +64,18 @@ async function requireAuth(req, res, next) {
       });
     }
 
+    const dbEntorno = user._dbEntorno
+      || (isProdEntorno(company?.entorno) ? 'prod' : 'beta');
+    enterWithEntorno(dbEntorno);
+
     req.user = usuarioModel.toPublicUser(user);
+    req.user.companyEntorno = dbEntorno;
     req.userId = user.id;
     req.userRol = user.rol;
     req.userAlmacenId = user.almacenId != null ? String(user.almacenId) : null;
     req.userAlmacenNombre = user.almacen?.nombre ?? null;
     req.userAlmacenCodigo = user.almacen?.codigo ?? null;
+    req.dbEntorno = dbEntorno;
     next();
   } catch (err) {
     next(err);

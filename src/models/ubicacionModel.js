@@ -31,9 +31,9 @@ function clienteFromInvoice(invoice) {
 
 function resolveOrigenDestino(mov) {
   if (mov.tipo === 'ENTRADA') {
-    const clienteDev = mov.referenciaTipo === 'DEVOLUCION_CLIENTE' ? clienteFromRow(mov.cliente) : null;
-    const origenNombre = clienteDev
-      ? clienteDev.razon_social?.trim() || `Doc. ${clienteDev.numero_doc}`
+    const clienteOrigen = clienteFromRow(mov.cliente);
+    const origenNombre = clienteOrigen
+      ? clienteOrigen.razon_social?.trim() || `Doc. ${clienteOrigen.numero_doc}`
       : 'Recepción externa';
     return {
       origenNombre,
@@ -86,13 +86,20 @@ function expandLineaToItems(linea, { serieFilter = null } = {}) {
     movimientoId: mov.id,
     movimientoNumero: mov.numero,
     tipoMovimiento: mov.tipo,
+    referenciaTipo: mov.referenciaTipo || null,
+    observaciones: mov.observaciones || null,
     esTraslado,
     fecha,
     catalogItemId: linea.catalogItemId,
     catalogItemNombre: nombreProducto,
+    catalogItemCodigo: linea.codigo || linea.catalogItem?.codigo || null,
     unidad,
     origenNombre,
     destinoNombre,
+    usuarioNombre: mov.usuario?.email
+      ? String(mov.usuario.email).split('@')[0].replace(/[._-]+/g, ' ')
+      : null,
+    usuarioEmail: mov.usuario?.email || null,
   };
 
   let numeros = extractSeriesFromLinea(linea);
@@ -132,20 +139,25 @@ function toApiHistorialItem(row) {
     movimiento_id: row.movimientoId,
     movimiento_numero: row.movimientoNumero,
     tipo_movimiento: row.tipoMovimiento,
+    referencia_tipo: row.referenciaTipo || null,
+    observaciones: row.observaciones || null,
     es_traslado: row.esTraslado,
     fecha: row.fecha,
     catalog_item_id: row.catalogItemId,
     catalog_item_nombre: row.catalogItemNombre,
+    catalog_item_codigo: row.catalogItemCodigo || null,
     numero_serie: row.numeroSerie,
     cantidad: row.cantidad,
     unidad: row.unidad,
     origen_nombre: row.origenNombre,
     destino_nombre: row.destinoNombre,
+    usuario_nombre: row.usuarioNombre || null,
+    usuario_email: row.usuarioEmail || null,
   };
 }
 
 const lineaInclude = {
-  catalogItem: { select: { id: true, nombre: true, unidad: true } },
+  catalogItem: { select: { id: true, nombre: true, unidad: true, codigo: true } },
   productoSerie: { select: { id: true, numeroSerie: true } },
   movimiento: {
     include: {
@@ -157,6 +169,7 @@ const lineaInclude = {
         },
       },
       cliente: { select: { tipoDoc: true, numeroDoc: true, razonSocial: true } },
+      usuario: { select: { id: true, email: true } },
     },
   },
 };
@@ -187,38 +200,153 @@ function flattenAndSort(lineas, options = {}) {
   return items;
 }
 
-async function buscarPorSerie({ companyRuc, q, almacenId, limit = 50 }) {
+async function buscarPorSerie({
+  companyRuc,
+  q,
+  almacenId,
+  catalogItemId = null,
+  limit = 50,
+  orden = 'asc',
+}) {
+  const qTrim = String(q || '').trim();
+  const itemId = String(catalogItemId || '').trim() || null;
+  if (qTrim.length < 2 && !itemId) return { items: [], series: [] };
+
+  const serieWhere = {
+    companyRuc,
+    ...(itemId ? { catalogItemId: itemId } : {}),
+    ...(qTrim.length >= 2 ? { numeroSerie: { contains: qTrim } } : {}),
+  };
+
   const series = await prisma.productoSerie.findMany({
-    where: {
-      companyRuc,
-      numeroSerie: { contains: q },
+    where: serieWhere,
+    include: {
+      catalogItem: { select: { id: true, nombre: true, codigo: true } },
+      almacen: { select: { id: true, nombre: true } },
     },
-    select: { id: true, catalogItemId: true },
+    take: qTrim.length >= 2 ? 30 : 80,
+    orderBy: { numeroSerie: 'asc' },
   });
 
   const serieIds = series.map((s) => s.id);
-  const catalogItemIds = [...new Set(series.map((s) => s.catalogItemId))];
+  if (!serieIds.length && qTrim.length < 2) {
+    return { items: [], series: [] };
+  }
 
-  const orFilters = [{ productoSerie: { companyRuc, numeroSerie: { contains: q } } }];
+  // Solo listar series del producto (sin timeline hasta elegir nº de serie).
+  if (!qTrim && itemId) {
+    return { items: [], series: series.map(mapSerieMeta) };
+  }
+
+  const orFilters = [];
   if (serieIds.length > 0) {
     orFilters.push({ productoSerieId: { in: serieIds } });
+  }
+  if (qTrim.length >= 2) {
+    orFilters.push({
+      productoSerie: {
+        companyRuc,
+        numeroSerie: { contains: qTrim },
+        ...(itemId ? { catalogItemId: itemId } : {}),
+      },
+    });
+  }
+  if (!orFilters.length) {
+    return {
+      items: [],
+      series: series.map(mapSerieMeta),
+    };
   }
 
   const lineas = await loadLineas({
     companyRuc,
     almacenId,
     whereExtra: {
-      OR: [
-        ...orFilters,
-        ...(catalogItemIds.length > 0
-          ? [{ catalogItemId: { in: catalogItemIds }, manejaSerie: true }]
-          : []),
-      ],
+      OR: orFilters,
+      ...(itemId ? { catalogItemId: itemId } : {}),
     },
-    take: 250,
+    take: 300,
   });
 
-  return flattenAndSort(lineas, { serieFilter: q }).slice(0, limit);
+  let items = flattenAndSort(lineas, { serieFilter: qTrim.length >= 2 ? qTrim : null });
+  if (orden === 'asc') {
+    items = items.slice().sort((a, b) => (a.fecha ?? 0) - (b.fecha ?? 0));
+  } else {
+    items = items.slice().sort((a, b) => (b.fecha ?? 0) - (a.fecha ?? 0));
+  }
+  items = items.slice(0, limit);
+
+  return {
+    items,
+    series: series.map(mapSerieMeta),
+  };
+}
+
+function mapSerieMeta(s) {
+  return {
+    id: s.id,
+    numero_serie: s.numeroSerie,
+    estado: s.estado,
+    catalog_item_id: s.catalogItemId,
+    catalog_item_nombre: s.catalogItem?.nombre || 'Producto',
+    catalog_item_codigo: s.catalogItem?.codigo || '',
+    almacen_id: s.almacenId || null,
+    almacen_nombre: s.almacen?.nombre || null,
+  };
+}
+
+/** Movimientos recientes de un almacén (origen o destino), sin producto. */
+async function historialPorAlmacen({
+  companyRuc,
+  almacenId = null,
+  limit = 10,
+}) {
+  const alm = String(almacenId || '').trim();
+  if (!alm) return { items: [], total: 0 };
+
+  const where = { movimiento: buildMovimientoScope(companyRuc, alm) };
+  const [total, lineas] = await Promise.all([
+    prisma.lineaCatalogoItem.count({ where }),
+    prisma.lineaCatalogoItem.findMany({
+      where,
+      include: lineaInclude,
+      orderBy: { movimiento: { fecha: 'desc' } },
+      take: Math.min(300, Math.max(10, limit)),
+    }),
+  ]);
+
+  const items = flattenAndSort(lineas).slice(0, limit);
+  return { items, total };
+}
+
+/** Movimientos de un producto (sin filtrar por serie). Más recientes primero. */
+async function historialPorProducto({
+  companyRuc,
+  catalogItemId,
+  almacenId = null,
+  limit = 10,
+}) {
+  const itemId = String(catalogItemId || '').trim();
+  if (!itemId) return { items: [], total: 0 };
+
+  const scope = buildMovimientoScope(companyRuc, almacenId);
+  const where = {
+    catalogItemId: itemId,
+    movimiento: scope,
+  };
+
+  const [total, lineas] = await Promise.all([
+    prisma.lineaCatalogoItem.count({ where }),
+    prisma.lineaCatalogoItem.findMany({
+      where,
+      include: lineaInclude,
+      orderBy: { movimiento: { fecha: 'desc' } },
+      take: Math.min(300, Math.max(10, limit)),
+    }),
+  ]);
+
+  const items = flattenAndSort(lineas).slice(0, limit);
+  return { items, total };
 }
 
 async function buscarPorNombre({ companyRuc, q, almacenId, limit = 50 }) {
@@ -247,4 +375,6 @@ async function buscarPorNombre({ companyRuc, q, almacenId, limit = 50 }) {
 module.exports = {
   buscarPorSerie,
   buscarPorNombre,
+  historialPorProducto,
+  historialPorAlmacen,
 };

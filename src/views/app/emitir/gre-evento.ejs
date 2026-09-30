@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> · Easy</title>
+  <link rel="stylesheet" href="/css/app-ios.css" />
+</head>
+<body class="ios-app">
+  <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
+  <main class="ios-main">
+    <header class="ios-top">
+      <div>
+        <p class="ios-eyebrow">GRE por evento</p>
+        <h1 id="pasoTitulo">Tipo de evento</h1>
+      </div>
+      <a class="ios-back" href="<%= appBase %>/emitir/guia/eventos">Volver</a>
+    </header>
+
+    <% if (error) { %>
+      <div class="ios-flash is-error"><%= error %></div>
+    <% } %>
+    <% if (form.comprobante_id && form.sunat_error) { %>
+      <div class="ios-flash is-error">
+        Corrigiendo <%= form.corregir_ref || 'GRE' %>: <%= form.sunat_error %>
+      </div>
+    <% } else if (form.comprobante_id) { %>
+      <div class="ios-flash is-error">
+        Corrigiendo <%= form.corregir_ref || 'GRE rechazada' %>. Cambia lo necesario y vuelve a emitir.
+      </div>
+    <% } %>
+
+    <div class="ios-wizard-steps" id="wizardSteps">
+      <% pasos.forEach(function(p) { %>
+        <button type="button" class="ios-wizard-dot <%= p.id === 1 ? 'is-on' : '' %>" data-goto="<%= p.id %>" title="<%= p.titulo %>">
+          <span><%= p.id %></span>
+          <small><%= p.corto %></small>
+        </button>
+      <% }) %>
+    </div>
+
+    <form class="ios-form" method="POST" action="<%= appBase %>/emitir/guia/eventos/GRE_POR_EVENTO" id="greEventoForm"
+      data-app-base="<%= appBase %>"
+      data-guias-api="<%= appBase %>/emitir/guia/eventos/guias"
+      data-recibidas-api="<%= appBase %>/emitir/gre-remitente-recibidas"
+      data-vehiculos-api="<%= appBase %>/emitir/vehiculos"
+      data-conductores-api="<%= appBase %>/emitir/conductores"
+    >
+      <section class="ios-wizard-pane is-on" data-step="1">
+        <p class="ios-muted">Selecciona el tipo de evento, igual que en SUNAT SOL.</p>
+        <div class="ios-choice-list">
+          <% tiposEvento.forEach(function(t) { %>
+            <label class="ios-choice <%= form.codigo_evento === t.codigo ? 'is-on' : '' %>">
+              <input
+                type="radio"
+                name="codigo_evento"
+                value="<%= t.codigo %>"
+                data-titulo="<%= t.titulo %>"
+                data-partida="<%= t.pidePartida ? '1' : '0' %>"
+                data-llegada="<%= t.pideLlegada ? '1' : '0' %>"
+                data-vehiculo="<%= t.pideVehiculo ? '1' : '0' %>"
+                data-conductor="<%= t.pideConductor ? '1' : '0' %>"
+                data-cita="<%= t.pideCita ? '1' : '0' %>"
+                data-vehiculo-nuevo="<%= t.vehiculoNuevo ? '1' : '0' %>"
+                data-llegada-nueva="<%= t.llegadaNueva ? '1' : '0' %>"
+                data-tramo-fijo="<%= t.tramoFijo ? '1' : '0' %>"
+                <%= form.codigo_evento === t.codigo ? 'checked' : '' %>
+              />
+              <strong><%= t.titulo %></strong>
+              <small><%= t.detalle %></small>
+            </label>
+          <% }) %>
+        </div>
+      </section>
+
+      <section class="ios-wizard-pane" data-step="2">
+        <p class="ios-muted">Emitidas = tus GRE. Recibidas = GRE-R donde eres el transportista.</p>
+        <section class="ios-form-card">
+          <h3 class="ios-form-label">Documento relacionado *</h3>
+          <button type="button" class="ios-picker-btn" id="grevDocAbrir">
+            <span class="ios-picker-btn-text">
+              <strong id="grevDocBtnTitulo">Seleccionar GRE</strong>
+              <small id="grevDocBtnDetalle">Emitidas, recibidas o manual</small>
+            </span>
+            <span class="ios-picker-btn-chevron" aria-hidden="true">▾</span>
+          </button>
+          <button type="button" class="ios-btn-ghost" id="grevDocManualAbrir" style="margin-top:8px;">Ingresar manualmente</button>
+          <input type="hidden" name="guia_id" id="grevGuiaId" value="<%= form.guia_id || '' %>" />
+          <input type="hidden" name="guia_origen" id="grevGuiaOrigen" value="<%= form.guia_origen || 'emitida' %>" />
+          <input type="hidden" name="guia_serie" id="grevGuiaSerie" value="<%= form.guia_serie || '' %>" />
+          <input type="hidden" name="guia_correlativo" id="grevGuiaCorrelativo" value="<%= form.guia_correlativo || '' %>" />
+          <input type="hidden" name="guia_emisor_ruc" id="grevGuiaEmisorRuc" value="<%= form.guia_emisor_ruc || '' %>" />
+          <input type="hidden" name="comprobante_id" id="grevComprobanteId" value="<%= form.comprobante_id || '' %>" />
+          <div id="grevDocSel" style="margin-top:10px;"></div>
+        </section>
+      </section>
+
+      <section class="ios-wizard-pane" data-step="3">
+        <p class="ios-muted" id="grevDetalleHint">Datos tomados de la GRE original. No se editan aquí.</p>
+        <section class="ios-form-card">
+          <h3 class="ios-form-label">Detalle del documento</h3>
+          <div class="ios-list" id="grevDetalleLista">
+            <div class="ios-row ios-row-static"><span class="ios-row-text"><strong>Guía</strong><small id="grevDetRef">Selecciona una GRE</small></span></div>
+            <div class="ios-row ios-row-static"><span class="ios-row-text"><strong>Destinatario</strong><small id="grevDetDest">—</small></span></div>
+            <div class="ios-row ios-row-static"><span class="ios-row-text"><strong>Partida original</strong><small id="grevDetPartida">—</small></span></div>
+            <div class="ios-row ios-row-static"><span class="ios-row-text"><strong>Llegada original</strong><small id="grevDetLlegada">—</small></span></div>
+            <div class="ios-row ios-row-static"><span class="ios-row-text"><strong>Bienes</strong><small id="grevDetBienes">—</small></span></div>
+          </div>
+        </section>
+        <input type="hidden" name="receptor_tipo_doc" id="grevRecTipo" value="<%= form.receptor_tipo_doc || '6' %>" />
+        <input type="hidden" name="receptor_numero_doc" id="grevRecDoc" value="<%= form.receptor_numero_doc || '' %>" />
+        <input type="hidden" name="receptor_razon_social" id="grevRecNombre" value="<%= form.receptor_razon_social || '' %>" />
+        <input type="hidden" name="remitente_tipo_doc" id="grevRemTipo" value="<%= form.remitente_tipo_doc || '6' %>" />
+        <input type="hidden" name="remitente_ruc" id="grevRemDoc" value="<%= form.remitente_ruc || '' %>" />
+        <input type="hidden" name="remitente_razon_social" id="grevRemNombre" value="<%= form.remitente_razon_social || '' %>" />
+        <input type="hidden" name="cod_traslado" id="grevCodTraslado" value="<%= form.cod_traslado || '01' %>" />
+        <input type="hidden" name="mod_traslado" id="grevModTraslado" value="<%= form.mod_traslado || '02' %>" />
+        <input type="hidden" name="peso_total" id="grevPeso" value="<%= form.peso_total || '1' %>" />
+        <input type="hidden" name="und_peso_total" id="grevUndPeso" value="<%= form.und_peso_total || 'KGM' %>" />
+        <input type="hidden" name="guia_tipo_doc" id="grevGuiaTipo" value="<%= form.guia_tipo_doc || '09' %>" />
+        <div id="grevBienesHidden">
+          <% (form.lineas || []).forEach(function(l) { %>
+            <input type="hidden" name="linea_descripcion" value="<%= (l.descripcion || 'Ítem').replace(/"/g, '&quot;') %>" />
+            <input type="hidden" name="linea_unidad" value="<%= l.unidad || 'NIU' %>" />
+            <input type="hidden" name="linea_cantidad" value="<%= l.cantidad || 1 %>" />
+            <input type="hidden" name="linea_precio_unitario" value="0" />
+            <% if (l.catalog_item_id) { %>
+              <input type="hidden" name="linea_catalog_item_id" value="<%= l.catalog_item_id %>" />
+            <% } %>
+          <% }) %>
+        </div>
+      </section>
+
+      <section class="ios-wizard-pane" data-step="4">
+        <p class="ios-muted" id="grevTramoHint">Registra el tramo donde se reinicia el traslado.</p>
+        <section class="ios-form-card" id="grevPartidaCard">
+          <h3 class="ios-form-label" id="grevPartidaLabel">Punto de inicio del tramo *</h3>
+          <input type="hidden" name="partida_ubigeo" id="partidaUbigeo" value="<%= form.partida_ubigeo || '' %>" />
+          <input type="hidden" name="partida_direccion" id="partidaDireccion" value="<%= form.partida_direccion || '' %>" />
+          <div class="ios-ubic-wrap">
+            <button type="button" class="ios-ubic-pick is-empty" id="grevPartidaAbrir">
+              <span class="ios-ubic-pick-icon" aria-hidden="true">📍</span>
+              <span class="ios-ubic-pick-text">
+                <strong id="grevPartidaBtnTitulo">Toca para elegir ubicación</strong>
+                <small id="grevPartidaBtnDetalle">Obligatorio · región, distrito y dirección</small>
+              </span>
+            </button>
+            <button type="button" class="ios-ubic-clear" id="grevPartidaQuitar" hidden aria-label="Quitar">×</button>
+          </div>
+          <p class="ios-muted" id="grevPartidaFijoHint" hidden style="margin:10px 0 0;">Se mantiene el de la GRE relacionada.</p>
+        </section>
+        <section class="ios-form-card" id="grevLlegadaCard">
+          <h3 class="ios-form-label" id="grevLlegadaLabel">Punto de llegada</h3>
+          <input type="hidden" name="llegada_ubigeo" id="llegadaUbigeo" value="<%= form.llegada_ubigeo || '' %>" />
+          <input type="hidden" name="llegada_direccion" id="llegadaDireccion" value="<%= form.llegada_direccion || '' %>" />
+          <div class="ios-ubic-wrap">
+            <button type="button" class="ios-ubic-pick is-empty" id="grevLlegadaAbrir">
+              <span class="ios-ubic-pick-icon" aria-hidden="true">📍</span>
+              <span class="ios-ubic-pick-text">
+                <strong id="grevLlegadaBtnTitulo">Toca para elegir ubicación</strong>
+                <small id="grevLlegadaBtnDetalle">Obligatorio · distinto al de la GRE original</small>
+              </span>
+            </button>
+            <button type="button" class="ios-ubic-clear" id="grevLlegadaQuitar" hidden aria-label="Quitar">×</button>
+          </div>
+          <p class="ios-muted" id="grevLlegadaFijoHint" hidden style="margin:10px 0 0;">No cambia en este evento.</p>
+          <p class="ios-muted" id="grevLlegadaNuevaHint" hidden style="margin:10px 0 0;">Debe ser distinto al punto de llegada de la GRE relacionada. El destinatario no cambia.</p>
+        </section>
+        <section class="ios-form-card" id="grevCitaWrap" hidden>
+          <h3 class="ios-form-label">Cita / orden de entrega</h3>
+          <label class="ios-field">
+            <span>Número de cita u orden *</span>
+            <input type="text" name="cita_terminal" id="grevCita" value="<%= form.cita_terminal || '' %>" placeholder="Dato del terminal portuario" />
+          </label>
+        </section>
+        <section class="ios-form-card" id="grevFechaCard">
+          <h3 class="ios-form-label">Fecha de reinicio del traslado *</h3>
+          <input type="hidden" name="fecha_traslado" id="grevFecha" value="<%= form.fecha_traslado || '' %>" />
+          <div class="ios-list ios-date-list">
+            <button type="button" class="ios-row ios-date-row" id="grevFechaBtn">
+              <span class="ios-row-text">
+                <strong>Inicio del tramo</strong>
+                <small>Cuando se reinicia el traslado</small>
+              </span>
+              <span class="ios-date-row-value" id="grevFechaLabel">Elegir</span>
+              <span class="ios-chevron" aria-hidden="true">›</span>
+            </button>
+          </div>
+        </section>
+      </section>
+
+      <section class="ios-wizard-pane" data-step="5">
+        <p class="ios-muted" id="grevTransHint">Placa y conductor del tramo (SUNAT art. 19-B). La modalidad la define la GRE relacionada.</p>
+        <section class="ios-form-card" id="grevVehCard">
+          <h3 class="ios-form-label">Vehículo</h3>
+          <button type="button" class="ios-picker-btn" id="grevVehAbrir">
+            <span class="ios-picker-btn-text">
+              <strong id="grevVehBtnTitulo">Elegir vehículo</strong>
+              <small id="grevVehBtnDetalle">Placa registrada o escríbela</small>
+            </span>
+            <span class="ios-picker-btn-chevron" aria-hidden="true">▾</span>
+          </button>
+          <input type="hidden" name="vehiculo_id" id="grevVehId" value="<%= form.vehiculo_id || '' %>" />
+          <label class="ios-field" style="margin-top:10px;">
+            <span>Placa</span>
+            <input type="text" name="vehiculo_placa" id="grevVehPlaca" value="<%= form.vehiculo_placa || '' %>" maxlength="10" placeholder="ABC123" />
+          </label>
+        </section>
+        <section class="ios-form-card" id="grevCondCard">
+          <h3 class="ios-form-label">Conductor</h3>
+          <button type="button" class="ios-picker-btn" id="grevCondAbrir">
+            <span class="ios-picker-btn-text">
+              <strong id="grevCondBtnTitulo">Elegir conductor</strong>
+              <small id="grevCondBtnDetalle">DNI registrado o escríbelo</small>
+            </span>
+            <span class="ios-picker-btn-chevron" aria-hidden="true">▾</span>
+          </button>
+          <input type="hidden" name="conductor_id" id="grevCondId" value="<%= form.conductor_id || '' %>" />
+          <input type="hidden" name="conductor_tipo_doc" value="1" />
+          <label class="ios-field" style="margin-top:10px;">
+            <span>DNI</span>
+            <input type="text" name="conductor_numero_doc" id="grevCondDoc" value="<%= form.conductor_numero_doc || '' %>" inputmode="numeric" maxlength="8" />
+          </label>
+          <label class="ios-field">
+            <span>Nombres y apellidos</span>
+            <input type="text" name="conductor_nombres" id="grevCondNombre" value="<%= form.conductor_nombres || '' %>" />
+          </label>
+          <label class="ios-field">
+            <span>Licencia MTC</span>
+            <input type="text" name="conductor_licencia" id="grevCondLic" value="<%= form.conductor_licencia || '' %>" placeholder="Ej. Q007444402" maxlength="10" autocomplete="off" style="text-transform:uppercase;" />
+          </label>
+        </section>
+      </section>
+
+      <section class="ios-wizard-pane" data-step="6">
+        <section class="ios-form-card">
+          <h3 class="ios-form-label">Observación</h3>
+          <p class="ios-muted">Opcional, como en SUNAT SOL antes de grabar.</p>
+          <label class="ios-field">
+            <span>Nota</span>
+            <textarea name="observacion" id="grevObs" rows="3" placeholder="Detalle adicional del evento"><%= form.observacion || '' %></textarea>
+          </label>
+        </section>
+        <section class="ios-form-card">
+          <h3 class="ios-form-label">Datos preliminares</h3>
+          <div class="ios-list">
+            <div class="ios-row ios-row-static"><span class="ios-row-text"><strong>Evento</strong><small id="sumEvento">—</small></span></div>
+            <div class="ios-row ios-row-static"><span class="ios-row-text"><strong>GRE relacionada</strong><small id="sumDoc">—</small></span></div>
+            <div class="ios-row ios-row-static"><span class="ios-row-text"><strong>Nuevo tramo</strong><small id="sumTramo">—</small></span></div>
+            <div class="ios-row ios-row-static"><span class="ios-row-text"><strong>Transporte</strong><small id="sumTransporte">—</small></span></div>
+          </div>
+        </section>
+      </section>
+
+      <div class="ios-wizard-nav">
+        <button type="button" class="ios-btn-secondary" id="btnPrev" hidden>Atrás</button>
+        <button type="button" class="ios-btn-primary" id="btnNext">Siguiente</button>
+        <button type="submit" class="ios-btn-primary" id="btnSubmit" hidden><%= form.comprobante_id ? 'Corregir y reenviar' : 'Emitir GRE por evento' %></button>
+      </div>
+    </form>
+  </main>
+  <%- include('../../partials/app-emit-loading') %>
+  <%- include('../../partials/app-tabbar', { active: active, appBase: appBase }) %>
+
+  <div id="grevDocPicker" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel" role="dialog" aria-modal="true">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-back" id="grevDocCerrar">← Listo</button>
+        <h3>GRE relacionadas</h3>
+        <span style="width:56px;"></span>
+      </div>
+      <div class="ios-segment" id="grevDocOrigenSeg" style="margin:0 16px 10px;">
+        <label class="is-on" data-origen="emitida">
+          <input type="radio" name="grevDocOrigenUi" value="emitida" checked />
+          Emitidas
+        </label>
+        <label data-origen="recibida">
+          <input type="radio" name="grevDocOrigenUi" value="recibida" />
+          Recibidas
+        </label>
+      </div>
+      <input type="search" id="grevDocBusqueda" class="ios-sheet-search" placeholder="Serie, destinatario…" autocomplete="off" />
+      <div class="ios-sheet-status" id="grevDocStatus">Cargando…</div>
+      <div class="ios-sheet-list" id="grevDocLista"></div>
+      <button type="button" class="ios-sheet-more" id="grevDocMas" hidden>Ver más</button>
+      <div style="padding:8px 16px 16px;">
+        <button type="button" class="ios-btn-ghost" id="grevDocManualDesdeLista" style="width:100%;">Ingresar manualmente</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="grevDocManualPicker" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel" role="dialog" aria-modal="true">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-back" id="grevDocManualCerrar">← Volver</button>
+        <h3>GRE manual</h3>
+        <span style="width:56px;"></span>
+      </div>
+      <div class="ios-sheet-status">No hace falta que esté en Easy: agrega tipo, serie, número y destinatario (p. ej. EG07-12).</div>
+      <div style="padding:0 16px 16px;display:flex;flex-direction:column;gap:12px;">
+        <label class="ios-field">
+          <span>Tipo</span>
+          <select id="grevManualTipo">
+            <option value="09">GRE remitente (09)</option>
+            <option value="31">GRE transportista (31)</option>
+          </select>
+        </label>
+        <div class="ios-inline">
+          <label class="ios-field">
+            <span>Serie</span>
+            <input type="text" id="grevManualSerie" maxlength="4" placeholder="EG07" autocomplete="off" />
+          </label>
+          <label class="ios-field">
+            <span>Número</span>
+            <input type="text" id="grevManualNumero" maxlength="8" inputmode="numeric" placeholder="12" autocomplete="off" />
+          </label>
+        </div>
+        <label class="ios-field">
+          <span>RUC emisor de esa GRE (si no eres tú)</span>
+          <input type="text" id="grevManualEmisorRuc" inputmode="numeric" maxlength="11" placeholder="Opcional · 11 dígitos" autocomplete="off" />
+        </label>
+        <label class="ios-field">
+          <span>Destinatario · RUC / DNI</span>
+          <input type="text" id="grevManualDestDoc" inputmode="numeric" maxlength="11" placeholder="Obligatorio" autocomplete="off" />
+        </label>
+        <label class="ios-field">
+          <span>Destinatario · razón social / nombre</span>
+          <input type="text" id="grevManualDestNombre" placeholder="Obligatorio" autocomplete="off" />
+        </label>
+        <div id="grevManualRemWrap" hidden>
+          <label class="ios-field">
+            <span>Remitente · RUC</span>
+            <input type="text" id="grevManualRemDoc" inputmode="numeric" maxlength="11" placeholder="Obligatorio en GRE-T" autocomplete="off" />
+          </label>
+          <label class="ios-field">
+            <span>Remitente · razón social</span>
+            <input type="text" id="grevManualRemNombre" placeholder="Obligatorio en GRE-T" autocomplete="off" />
+          </label>
+        </div>
+        <button type="button" class="ios-btn-primary" id="grevDocManualAgregar">Agregar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="grevCatPicker" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel" role="dialog" aria-modal="true">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-back" id="grevCatCerrar">← Volver</button>
+        <h3 id="grevCatTitulo">Catálogo</h3>
+        <button type="button" class="ios-sheet-action-label" id="grevCatNueva">Añadir</button>
+      </div>
+      <div id="grevCatListaWrap">
+        <input type="search" id="grevCatBusqueda" class="ios-sheet-search" placeholder="Buscar…" autocomplete="off" />
+        <div class="ios-sheet-status" id="grevCatStatus">Cargando…</div>
+        <div class="ios-sheet-list" id="grevCatLista"></div>
+        <button type="button" class="ios-sheet-more" id="grevCatMas" hidden>Ver más</button>
+      </div>
+      <div id="grevCatFormWrap" class="ios-envio-form" hidden>
+        <div id="grevCatFormFields"></div>
+        <button type="button" class="ios-btn-primary" id="grevCatGuardar">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="grevFechaSheet" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel ios-fecha-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="grevFechaSheetTitulo">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-action" id="grevFechaCancelar" aria-label="Cancelar">✕</button>
+        <h3 id="grevFechaSheetTitulo">Fecha</h3>
+        <button type="button" class="ios-sheet-action ios-sheet-action-text" id="grevFechaListo">Listo</button>
+      </div>
+      <p class="ios-fecha-sheet-hint">Fecha de reinicio del traslado</p>
+      <div class="ios-date-wheel" id="grevFechaWheel" aria-label="Selector de fecha">
+        <div class="ios-date-wheel-fade ios-date-wheel-fade-top" aria-hidden="true"></div>
+        <div class="ios-date-wheel-fade ios-date-wheel-fade-bottom" aria-hidden="true"></div>
+        <div class="ios-date-wheel-highlight" aria-hidden="true"></div>
+        <div class="ios-date-wheel-unit" data-col="day">
+          <button type="button" class="ios-date-wheel-step is-up" data-dir="-1" aria-label="Día anterior">▴</button>
+          <div class="ios-date-wheel-col">
+            <ul class="ios-date-wheel-list" id="grevFechaWheelDay"></ul>
+          </div>
+          <button type="button" class="ios-date-wheel-step is-down" data-dir="1" aria-label="Día siguiente">▾</button>
+        </div>
+        <div class="ios-date-wheel-unit" data-col="month">
+          <button type="button" class="ios-date-wheel-step is-up" data-dir="-1" aria-label="Mes anterior">▴</button>
+          <div class="ios-date-wheel-col">
+            <ul class="ios-date-wheel-list" id="grevFechaWheelMonth"></ul>
+          </div>
+          <button type="button" class="ios-date-wheel-step is-down" data-dir="1" aria-label="Mes siguiente">▾</button>
+        </div>
+        <div class="ios-date-wheel-unit" data-col="year">
+          <button type="button" class="ios-date-wheel-step is-up" data-dir="-1" aria-label="Año anterior">▴</button>
+          <div class="ios-date-wheel-col">
+            <ul class="ios-date-wheel-list" id="grevFechaWheelYear"></ul>
+          </div>
+          <button type="button" class="ios-date-wheel-step is-down" data-dir="1" aria-label="Año siguiente">▾</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <%- include('../../partials/ubicacion-picker', { appBase: appBase }) %>
+
+  <script src="/js/app-emit-loading.js"></script>
+  <script src="/js/app-gre-evento.js"></script>
+</body>
+</html>

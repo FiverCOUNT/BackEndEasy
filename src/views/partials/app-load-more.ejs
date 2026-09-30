@@ -1,0 +1,10 @@
+<% if (typeof loadMore !== 'undefined' && loadMore && loadMore.hasMore) { %>
+  <div class="ios-load-more">
+    <a class="ios-load-more-btn" href="<%= loadMore.nextUrl %>">
+      Ver más
+      <small><%= loadMore.shown %> de <%= loadMore.total %></small>
+    </a>
+  </div>
+<% } else if (typeof loadMore !== 'undefined' && loadMore && loadMore.total > 0) { %>
+  <p class="ios-load-more-end"><%= loadMore.shown %> de <%= loadMore.total %></p>
+<% } %>

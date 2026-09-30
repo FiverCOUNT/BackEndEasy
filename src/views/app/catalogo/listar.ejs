@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> · Easy</title>
+  <link rel="stylesheet" href="/css/app-ios.css?v=cat-series" />
+</head>
+<body class="ios-app">
+  <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
+
+  <main class="ios-main">
+    <header class="ios-top">
+      <div>
+        <p class="ios-eyebrow"><%= companyNombre || 'Empresa' %></p>
+        <h1>Catálogo</h1>
+      </div>
+      <% if (isWebAdmin) { %>
+      <a class="ios-fab-link" href="<%= appBase %>/catalogo/crear" aria-label="Nuevo ítem">+</a>
+      <% } %>
+    </header>
+
+    <% if (flash) { %>
+      <div class="ios-flash <%= flash.type === 'error' ? 'is-error' : 'is-ok' %>"><%= flash.text %></div>
+    <% } %>
+
+    <form class="ios-filters" method="GET" action="<%= appBase %>/catalogo">
+      <div class="ios-search">
+        <input
+          type="search"
+          name="q"
+          value="<%= q || '' %>"
+          placeholder="Buscar nombre, código o SUNAT"
+          autocomplete="off"
+        />
+      </div>
+      <div class="ios-filter-row">
+        <select name="kind" aria-label="Tipo" class="ios-select">
+          <option value="" <%= !kind ? 'selected' : '' %>>Todos</option>
+          <option value="PRODUCT" <%= kind === 'PRODUCT' ? 'selected' : '' %>>Productos</option>
+          <option value="SERVICE" <%= kind === 'SERVICE' ? 'selected' : '' %>>Servicios</option>
+        </select>
+        <% if (isWebAdmin) { %>
+        <select name="almacen" aria-label="Stock / Almacén" class="ios-select">
+          <option value="" <%= !almacenId ? 'selected' : '' %>>Stock general</option>
+          <% (almacenes || []).forEach(function(a) { %>
+            <option value="<%= a.id %>" <%= almacenId === a.id ? 'selected' : '' %>>
+              <%= a.nombre %><%= a.codigo ? ' (' + a.codigo + ')' : '' %>
+            </option>
+          <% }); %>
+        </select>
+        <% } %>
+        <button type="submit" class="ios-btn-secondary">Filtrar</button>
+      </div>
+    </form>
+
+    <p class="ios-count"><%= total %> ítem<%= total === 1 ? '' : 's' %></p>
+
+    <% if (!items.length) { %>
+      <section class="ios-card-empty">
+        <div class="ios-empty-icon">▦</div>
+        <h2>Sin resultados</h2>
+        <p>Agrega tu primer producto o servicio.</p>
+        <% if (isWebAdmin) { %>
+        <a class="ios-btn-primary" href="<%= appBase %>/catalogo/crear">Nuevo ítem</a>
+        <% } %>
+      </section>
+    <% } else { %>
+      <div class="ios-list ios-catalog-list">
+        <% items.forEach(function(it) {
+          var unidadSerie = String(it.unidad || '').toUpperCase() === 'NIU';
+          var conSerie = it.kind !== 'SERVICE' && unidadSerie && (it.manejaSerie || it.maneja_serie);
+          var serieNombre = String(it.nombre || '').replace(/"/g, '&quot;');
+        %>
+          <article
+            class="ios-catalog-row <%= it.activo === false ? 'is-inactive' : '' %><%= conSerie ? ' is-series' : '' %>"
+            <% if (conSerie) { %>
+              data-series-item="<%= it.id %>"
+              data-series-nombre="<%= serieNombre %>"
+            <% } %>
+          >
+            <% if (conSerie || !isWebAdmin) { %>
+            <div class="ios-catalog-main">
+            <% } else { %>
+            <a class="ios-catalog-main" href="<%= appBase %>/catalogo/<%= it.id %>/editar">
+            <% } %>
+              <div class="ios-catalog-title">
+                <strong><%= it.nombre %></strong>
+                <% if (it.activo === false) { %>
+                  <span class="ios-badge-warn">Inactivo</span>
+                <% } %>
+              </div>
+              <div class="ios-catalog-sub">
+                <%= it.kind === 'SERVICE' ? 'Servicio' : 'Producto' %>
+                <% if (it.unidad) { %> · <%= it.unidad %><% } %>
+                <% if (it.codigoSunat) { %> · SUNAT <%= it.codigoSunat %><% } %>
+              </div>
+              <% if (it.stockLabel) { %>
+                <div class="ios-catalog-stock"><%= it.stockLabel %></div>
+              <% } %>
+              <% if (it.compraLabel || it.venceLabel) { %>
+                <div class="ios-catalog-sub">
+                  <% if (it.compraLabel) { %>Compra <%= it.compraLabel %><% } %>
+                  <% if (it.compraLabel && it.venceLabel) { %> · <% } %>
+                  <% if (it.venceLabel) { %>Vence <%= it.venceLabel %><% } %>
+                </div>
+              <% } %>
+            <% if (conSerie || !isWebAdmin) { %></div><% } else { %></a><% } %>
+            <div class="ios-catalog-right">
+              <span class="ios-price"><%= it.precioLabel %></span>
+              <% if (!isWebAdmin && conSerie) { %>
+                <button
+                  type="button"
+                  class="ios-catalog-series-btn"
+                  data-series-item="<%= it.id %>"
+                  data-series-nombre="<%= serieNombre %>"
+                >Ver series</button>
+              <% } %>
+              <% if (isWebAdmin) { %>
+              <details class="ios-menu">
+                <summary aria-label="Acciones">⋯</summary>
+                <div class="ios-menu-panel">
+                  <a href="<%= appBase %>/catalogo/<%= it.id %>/editar">Editar</a>
+                  <% if (conSerie) { %>
+                    <button type="button" data-series-item="<%= it.id %>" data-series-nombre="<%= serieNombre %>">Ver series</button>
+                  <% } %>
+                  <% if (it.activo === false) { %>
+                    <form method="POST" action="<%= appBase %>/catalogo/<%= it.id %>/activar">
+                      <button type="submit">Activar</button>
+                    </form>
+                  <% } else { %>
+                    <form method="POST" action="<%= appBase %>/catalogo/<%= it.id %>/desactivar">
+                      <button type="submit">Desactivar</button>
+                    </form>
+                  <% } %>
+                  <form method="POST" action="<%= appBase %>/catalogo/<%= it.id %>/eliminar" onsubmit="return confirm('¿Eliminar «<%= String(it.nombre).replace(/'/g, '\\\'') %>»?');">
+                    <button type="submit" class="is-danger">Eliminar</button>
+                  </form>
+                </div>
+              </details>
+              <% } %>
+            </div>
+          </article>
+        <% }); %>
+      </div>
+
+      <%- include('../../partials/app-load-more', { loadMore: loadMore }) %>
+    <% } %>
+  </main>
+
+  <div id="seriesSheet" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel" role="dialog" aria-modal="true">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-back" id="seriesSheetCerrar">← Volver</button>
+        <h3 id="seriesSheetTitle">Series</h3>
+        <span style="width:56px;"></span>
+      </div>
+      <input type="search" id="seriesSheetBusqueda" class="ios-sheet-search" placeholder="Buscar número de serie…" autocomplete="off" />
+      <div class="ios-sheet-status" id="seriesSheetStatus">Cargando…</div>
+      <div class="ios-sheet-list" id="seriesSheetLista"></div>
+    </div>
+  </div>
+
+  <%- include('../../partials/app-tabbar', { active: active }) %>
+  <script>
+  (function () {
+    var appBase = '<%= appBase %>';
+    var almacenFiltro = '<%= typeof almacenId !== "undefined" && almacenId ? almacenId : "" %>';
+    var sheet = document.getElementById('seriesSheet');
+    var title = document.getElementById('seriesSheetTitle');
+    var statusEl = document.getElementById('seriesSheetStatus');
+    var lista = document.getElementById('seriesSheetLista');
+    var busqueda = document.getElementById('seriesSheetBusqueda');
+    var itemId = '';
+    var timer = null;
+
+    function esc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function closeSheet() {
+      if (!sheet) return;
+      sheet.hidden = true;
+      sheet.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('ios-sheet-open');
+    }
+
+    function openSheet(id, nombre) {
+      itemId = id;
+      if (title) title.textContent = nombre || 'Series';
+      if (busqueda) busqueda.value = '';
+      if (lista) lista.innerHTML = '';
+      if (statusEl) statusEl.textContent = 'Cargando…';
+      sheet.hidden = false;
+      sheet.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('ios-sheet-open');
+      loadSeries('');
+      setTimeout(function () { busqueda && busqueda.focus(); }, 50);
+    }
+
+    function loadSeries(q) {
+      if (!itemId) return;
+      if (statusEl) statusEl.textContent = 'Buscando…';
+      var url = appBase + '/catalogo/' + encodeURIComponent(itemId) + '/series?q=' + encodeURIComponent(q || '');
+      if (almacenFiltro) url += '&almacen=' + encodeURIComponent(almacenFiltro);
+      fetch(url, { headers: { Accept: 'application/json' } })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          var items = (data && data.items) || [];
+          if (!lista) return;
+          lista.innerHTML = '';
+          if (!items.length) {
+            if (statusEl) statusEl.textContent = q ? 'Sin series para esa búsqueda' : 'No hay series registradas';
+            return;
+          }
+          if (statusEl) statusEl.textContent = items.length + ' serie' + (items.length === 1 ? '' : 's');
+          items.forEach(function (s) {
+            var btn = document.createElement('div');
+            btn.className = 'ios-sheet-item';
+            var meta = [s.estado || ''];
+            if (s.almacen_nombre) meta.push(s.almacen_nombre);
+            btn.innerHTML = '<strong>' + esc(s.numero_serie || '—') + '</strong><span>' + esc(meta.filter(Boolean).join(' · ')) + '</span>';
+            lista.appendChild(btn);
+          });
+        })
+        .catch(function () {
+          if (statusEl) statusEl.textContent = 'No se pudieron cargar las series';
+        });
+    }
+
+    document.addEventListener('click', function (ev) {
+      var btn = ev.target.closest('[data-series-item]');
+      if (!btn) return;
+      var menu = ev.target.closest('details.ios-menu');
+      if (menu && btn.classList.contains('ios-catalog-row')) return;
+      ev.preventDefault();
+      var details = btn.closest('details.ios-menu');
+      if (details) details.open = false;
+      openSheet(btn.getAttribute('data-series-item'), btn.getAttribute('data-series-nombre'));
+    });
+
+    busqueda?.addEventListener('input', function () {
+      clearTimeout(timer);
+      timer = setTimeout(function () { loadSeries(busqueda.value.trim()); }, 220);
+    });
+    document.getElementById('seriesSheetCerrar')?.addEventListener('click', closeSheet);
+    sheet?.addEventListener('click', function (ev) {
+      if (ev.target === sheet) closeSheet();
+    });
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape' && sheet && !sheet.hidden) closeSheet();
+    });
+  })();
+  </script>
+</body>
+</html>

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title><%= title %> — BackEnd Easy</title>
-  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/style.css?v=20260926panel" />
 </head>
 <body>
   <header class="header">
@@ -21,14 +21,14 @@
             <h2><%= title %></h2>
             <p class="api-hint"><%= almacen.nombre %> — <%= almacen.codigo %></p>
           </div>
-          <a href="/almacenes" class="btn-link btn-secondary">← Volver</a>
+          <a href="<%= adminBase %>/almacenes" class="btn-link btn-secondary">← Volver</a>
         </div>
         <% if (error) { %><div class="message error"><%= error %></div><% } %>
-        <form class="form" method="POST" action="/almacenes/<%= almacen.id %>">
+        <form class="form" method="POST" action="<%= adminBase %>/almacenes/<%= almacen.id %>">
           <%- include('_form', { form, companies }) %>
           <div class="form-actions">
             <button type="submit">Guardar cambios</button>
-            <a href="/almacenes" class="btn-link btn-secondary">Cancelar</a>
+            <a href="<%= adminBase %>/almacenes" class="btn-link btn-secondary">Cancelar</a>
           </div>
         </form>
       </section>

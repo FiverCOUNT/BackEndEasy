@@ -8,6 +8,10 @@ function normalizePlaca(value) {
     .replace(/[\s-]+/g, '');
 }
 
+function normalizeCompanyRuc(value) {
+  return String(value || '').replace(/\D/g, '').slice(0, 11);
+}
+
 function normalizePermiso(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const tipo = String(raw.tipo || raw.tipo_permiso || raw.tipoPermiso || '')
@@ -63,27 +67,58 @@ function toApi(row) {
   const permisos = parsePermisos(row.permisos);
   return {
     id: row.id,
+    company_ruc: row.companyRuc || null,
     placa: row.placa,
     permisos,
     nro_circulacion: permisoTuce(permisos),
   };
 }
 
-async function listAll({ q = null } = {}) {
-  const query = String(q || '').trim().toUpperCase();
-  return prisma.vehiculo.findMany({
-    where: query
-      ? { placa: { contains: query.replace(/[\s-]+/g, '') } }
-      : undefined,
+function buildWhereVehiculo(companyRuc, q = null) {
+  const ruc = normalizeCompanyRuc(companyRuc);
+  const where = { companyRuc: ruc };
+  const query = String(q || '').trim().toUpperCase().replace(/[\s-]+/g, '');
+  if (query) where.placa = { contains: query };
+  return where;
+}
+
+async function listAll(companyRuc, { q = null, skip = 0, take = null } = {}) {
+  const ruc = normalizeCompanyRuc(companyRuc);
+  if (!ruc) return [];
+  const opts = {
+    where: buildWhereVehiculo(ruc, q),
     orderBy: [{ placa: 'asc' }],
-  });
+  };
+  if (take != null) {
+    opts.skip = Math.max(0, Number(skip) || 0);
+    opts.take = Math.min(Math.max(Number(take) || 10, 1), 100);
+  }
+  return prisma.vehiculo.findMany(opts);
 }
 
-async function findById(id) {
-  return prisma.vehiculo.findUnique({ where: { id } });
+async function countAll(companyRuc, { q = null } = {}) {
+  const ruc = normalizeCompanyRuc(companyRuc);
+  if (!ruc) return 0;
+  return prisma.vehiculo.count({ where: buildWhereVehiculo(ruc, q) });
 }
 
-async function create(body) {
+async function findById(id, companyRuc = null) {
+  const row = await prisma.vehiculo.findUnique({ where: { id } });
+  if (!row) return null;
+  if (companyRuc && normalizeCompanyRuc(companyRuc) !== String(row.companyRuc || '')) {
+    return null;
+  }
+  return row;
+}
+
+async function create(companyRuc, body) {
+  const ruc = normalizeCompanyRuc(companyRuc);
+  if (!ruc || ruc.length !== 11) {
+    const err = new Error('Empresa inválida para registrar el vehículo');
+    err.status = 400;
+    throw err;
+  }
+
   const placa = normalizePlaca(body?.placa);
   if (!placa) {
     const err = new Error('La placa es obligatoria');
@@ -102,13 +137,14 @@ async function create(body) {
     return await prisma.vehiculo.create({
       data: {
         id: randomUUID(),
+        companyRuc: ruc,
         placa,
         permisos,
       },
     });
   } catch (err) {
     if (err.code === 'P2002') {
-      const dup = new Error(`Ya existe un vehículo con placa ${placa}`);
+      const dup = new Error(`Ya existe un vehículo con placa ${placa} en esta empresa`);
       dup.status = 409;
       throw dup;
     }
@@ -116,8 +152,8 @@ async function create(body) {
   }
 }
 
-async function update(id, body) {
-  const existing = await findById(id);
+async function update(id, companyRuc, body) {
+  const existing = await findById(id, companyRuc);
   if (!existing) {
     const err = new Error('Vehículo no encontrado');
     err.status = 404;
@@ -148,7 +184,7 @@ async function update(id, body) {
     });
   } catch (err) {
     if (err.code === 'P2002') {
-      const dup = new Error(`Ya existe un vehículo con placa ${placa}`);
+      const dup = new Error(`Ya existe un vehículo con placa ${placa} en esta empresa`);
       dup.status = 409;
       throw dup;
     }
@@ -156,8 +192,8 @@ async function update(id, body) {
   }
 }
 
-async function remove(id) {
-  const existing = await findById(id);
+async function remove(id, companyRuc) {
+  const existing = await findById(id, companyRuc);
   if (!existing) {
     const err = new Error('Vehículo no encontrado');
     err.status = 404;
@@ -169,6 +205,7 @@ async function remove(id) {
 
 module.exports = {
   listAll,
+  countAll,
   findById,
   create,
   update,

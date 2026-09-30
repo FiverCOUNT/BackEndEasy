@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> · Easy</title>
+  <link rel="stylesheet" href="/css/app-ios.css" />
+</head>
+<body class="ios-app">
+  <%- include('../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
+
+  <main class="ios-main">
+    <header class="ios-top">
+      <div>
+        <p class="ios-eyebrow"><%= companyNombre || 'Empresa' %></p>
+        <h1><%= title %></h1>
+      </div>
+      <div class="ios-user-chip" title="<%= webUser.email %>">
+        <%= (webUser.email || '?').slice(0, 1).toUpperCase() %>
+      </div>
+    </header>
+
+    <% if (typeof flash !== 'undefined' && flash) { %>
+      <div class="ios-flash <%= flash.type === 'error' ? 'is-error' : 'is-ok' %>"><%= flash.text %></div>
+    <% } %>
+
+    <section class="ios-hero">
+      <%
+        var saludoNombre = (webUser && webUser.email)
+          ? String(webUser.email).split('@')[0]
+          : 'usuario';
+        var rolLabel = isWebAdmin ? 'Administrador' : 'Usuario';
+      %>
+      <h2>Hola, <%= saludoNombre %></h2>
+      <p><%= companyNombre || 'Tu empresa' %> · Rol: <strong><%= rolLabel %></strong></p>
+      <p class="ios-muted">Resumen de <%= mesLabel || 'este mes' %></p>
+    </section>
+
+    <section class="ios-section">
+      <h3 class="ios-section-title">Indicadores</h3>
+      <div class="ios-quick">
+        <div class="ios-quick-item ios-stat">
+          <span class="ios-stat-num"><%= stats.comprobantesMes || 0 %></span>
+          <span>Emitidos<br/>mes</span>
+        </div>
+        <% if (isWebAdmin) { %>
+          <div class="ios-quick-item ios-stat">
+            <span class="ios-stat-num"><%= stats.comprasMes || 0 %></span>
+            <span>Compras<br/>mes</span>
+          </div>
+        <% } %>
+        <div class="ios-quick-item ios-stat">
+          <span class="ios-stat-num"><%= stats.salidas || 0 %></span>
+          <span>Salidas</span>
+        </div>
+        <% if (isWebAdmin) { %>
+          <div class="ios-quick-item ios-stat">
+            <span class="ios-stat-num"><%= stats.ingresos || 0 %></span>
+            <span>Ingresos</span>
+          </div>
+        <% } %>
+      </div>
+    </section>
+
+    <section class="ios-section">
+      <h3 class="ios-section-title">Módulos</h3>
+      <div class="ios-list">
+        <% (navItems || []).filter(function(it) { return it.id !== 'inicio' && it.id !== 'ajustes'; }).forEach(function(item) { %>
+          <a class="ios-row" href="<%= appBase %><%= item.href === '/' ? '/' : item.href %>">
+            <span class="ios-row-icon" style="background:#ECEFF1;color:#37474F"><%= item.icon %></span>
+            <span class="ios-row-text">
+              <strong><%= item.label %></strong>
+              <% if (item.adminOnly) { %><small>Solo administrador</small><% } %>
+            </span>
+            <span class="ios-chevron">›</span>
+          </a>
+        <% }); %>
+      </div>
+    </section>
+  </main>
+
+  <%- include('../partials/app-tabbar', { active: active, appBase: appBase }) %>
+</body>
+</html>

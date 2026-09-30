@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> · Easy</title>
+  <link rel="stylesheet" href="/css/app-ios.css" />
+</head>
+<body class="ios-app">
+  <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
+  <main class="ios-main">
+    <header class="ios-top">
+      <div>
+        <p class="ios-eyebrow"><%= companyNombre %></p>
+        <h1>Órdenes</h1>
+      </div>
+      <div class="ios-top-actions">
+        <a class="ios-icon-refresh" href="<%= appBase %>/ordenes<%= (q || estado) ? ('?' + [q ? ('q=' + encodeURIComponent(q)) : '', estado ? ('estado=' + encodeURIComponent(estado)) : ''].filter(Boolean).join('&')) : '' %>" aria-label="Recargar" title="Recargar">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12a9 9 0 1 1-2.4-6.1"/>
+            <polyline points="21 4 21 10 15 10"/>
+          </svg>
+        </a>
+        <a class="ios-fab-link" href="<%= appBase %>/ordenes/crear" aria-label="Nueva orden">+</a>
+      </div>
+    </header>
+    <% if (flash) { %><div class="ios-flash <%= flash.type === 'error' ? 'is-error' : 'is-ok' %>"><%= flash.text %></div><% } %>
+
+    <%
+      var estados = [
+        { id: '', label: 'Todas' },
+        { id: 'BORRADOR', label: 'Borrador' },
+        { id: 'CONFIRMADA', label: 'Confirmada' },
+        { id: 'FACTURADA', label: 'Facturada' },
+        { id: 'ANULADA', label: 'Anulada' },
+      ];
+      var estadoLabel = { BORRADOR: 'Borrador', CONFIRMADA: 'Confirmada', FACTURADA: 'Facturada', ANULADA: 'Anulada' };
+      var estadoClass = { BORRADOR: 'is-draft', CONFIRMADA: 'is-ready', FACTURADA: 'is-done', ANULADA: 'is-void' };
+      function qsEstado(id) {
+        var parts = [];
+        if (q) parts.push('q=' + encodeURIComponent(q));
+        if (id) parts.push('estado=' + encodeURIComponent(id));
+        return parts.length ? ('?' + parts.join('&')) : '?';
+      }
+      function formatMoney(n) {
+        var v = Number(n);
+        if (!Number.isFinite(v)) return '—';
+        return 'S/ ' + v.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      }
+      function formatFechaOrden(value) {
+        if (!value) return '';
+        var d = value instanceof Date ? value : new Date(Number(value) || value);
+        if (isNaN(d.getTime())) return '';
+        return d.toLocaleString('es-PE', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+      }
+      function inicial(nombre) {
+        var s = String(nombre || '').trim();
+        return s ? s.charAt(0).toUpperCase() : '•';
+      }
+    %>
+
+    <form class="ios-filters ios-filters-ordenes" method="GET" action="<%= appBase %>/ordenes">
+      <% if (estado) { %><input type="hidden" name="estado" value="<%= estado %>" /><% } %>
+      <div class="ios-search">
+        <input type="search" name="q" value="<%= q || '' %>" placeholder="Cliente, RUC, observación…" autocomplete="off" />
+      </div>
+    </form>
+
+    <div class="ios-chips ios-orden-chips">
+      <% estados.forEach(function(e) { %>
+        <a class="ios-chip <%= (estado || '') === e.id ? 'is-on' : '' %>" href="<%= appBase %>/ordenes<%= qsEstado(e.id) %>"><%= e.label %></a>
+      <% }); %>
+    </div>
+
+    <p class="ios-count">
+      <%= total %> orden<%= total === 1 ? '' : 'es' %>
+      <% if (typeof noVistas === 'number' && noVistas > 0) { %>
+        · <span class="ios-count-new"><%= noVistas %> sin ver</span>
+      <% } %>
+    </p>
+
+    <% if (!items.length) { %>
+      <section class="ios-card-empty">
+        <div class="ios-empty-icon"><%= q || estado ? '🔍' : '🧾' %></div>
+        <h2><%= q || estado ? 'Sin resultados' : 'Aún no hay órdenes' %></h2>
+        <p>
+          <% if (q || estado) { %>
+            Prueba otro cliente o quita el filtro de estado.
+          <% } else { %>
+            Crea una orden para armar la venta y luego emitir factura o boleta.
+          <% } %>
+        </p>
+        <% if (!q && !estado) { %>
+          <a class="ios-btn-primary" href="<%= appBase %>/ordenes/crear" style="margin-top:16px;display:inline-block;">Nueva orden</a>
+        <% } %>
+      </section>
+    <% } else { %>
+      <div class="ios-list ios-orden-list">
+        <% items.forEach(function(o) {
+          var cliente = o.cliente || {};
+          var nombre = cliente.razon_social || 'Sin cliente';
+          var puedeVender = o.estado !== 'FACTURADA' && o.estado !== 'ANULADA' && !o.invoice_id;
+        %>
+          <a class="ios-orden-row <%= o.visto === false ? 'is-unread' : '' %>" href="<%= appBase %>/ordenes/<%= o.id %>">
+            <span class="ios-orden-avatar" aria-hidden="true"><%= inicial(nombre) %></span>
+            <span class="ios-orden-main">
+              <span class="ios-orden-title">
+                <strong><%= nombre %></strong>
+                <% if (o.visto === false) { %><span class="ios-dot-new" aria-label="Nueva"></span><% } %>
+              </span>
+              <small>
+                <%= cliente.numero_doc || 'Sin documento' %>
+                · <%= o.items_count || 0 %> ítem<%= (o.items_count || 0) === 1 ? '' : 's' %>
+              </small>
+              <small class="ios-orden-meta"><%= formatFechaOrden(o.creado_en) %></small>
+              <% if (puedeVender) { %>
+                <small class="ios-orden-cta">Toca para vender</small>
+              <% } %>
+            </span>
+            <span class="ios-orden-right">
+              <span class="ios-orden-amount"><%= formatMoney(o.mto_imp_venta) %></span>
+              <span class="ios-orden-pill <%= estadoClass[o.estado] || '' %>"><%= estadoLabel[o.estado] || o.estado %></span>
+            </span>
+            <span class="ios-chevron" aria-hidden="true">›</span>
+          </a>
+        <% }); %>
+      </div>
+      <%- include('../../partials/app-load-more', { loadMore: loadMore }) %>
+    <% } %>
+  </main>
+  <%- include('../../partials/app-tabbar', { active: active, appBase: appBase }) %>
+</body>
+</html>

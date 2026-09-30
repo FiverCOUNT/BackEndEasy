@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> · Easy</title>
+  <link rel="stylesheet" href="/css/app-ios.css" />
+</head>
+<body class="ios-app">
+  <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
+  <main class="ios-main">
+    <header class="ios-top">
+      <div>
+        <p class="ios-eyebrow">Gestión de usuarios</p>
+        <h1><%= mode === 'editar' ? 'Editar usuario' : 'Nuevo usuario' %></h1>
+      </div>
+      <a class="ios-back" href="<%= appBase %>/usuarios">Volver</a>
+    </header>
+
+    <% if (error) { %>
+      <div class="ios-flash is-error"><%= error %></div>
+    <% } %>
+
+    <form
+      class="ios-form"
+      method="POST"
+      action="<%= mode === 'editar' ? (appBase + '/usuarios/' + form.id) : (appBase + '/usuarios') %>"
+      id="formUsuarioEmpresa"
+    >
+      <section class="ios-form-card">
+        <label class="ios-field">
+          <span>Email *</span>
+          <input
+            type="email"
+            name="email"
+            value="<%= form.email || '' %>"
+            required
+            maxlength="255"
+            placeholder="usuario@empresa.com"
+            autocomplete="off"
+          />
+        </label>
+        <label class="ios-field">
+          <span><%= mode === 'editar' ? 'Contraseña (opcional)' : 'Contraseña *' %></span>
+          <input
+            type="password"
+            name="contrasena"
+            <%= mode === 'crear' ? 'required' : '' %>
+            minlength="6"
+            placeholder="<%= mode === 'editar' ? 'Dejar vacío para no cambiar' : 'Mínimo 6 caracteres' %>"
+            autocomplete="new-password"
+          />
+        </label>
+        <label class="ios-field">
+          <span>Rol *</span>
+          <select name="rol" id="rolUsuario" required>
+            <% (roles || []).forEach(function(r) { %>
+              <option value="<%= r %>" <%= form.rol === r ? 'selected' : '' %>>
+                <%= r === 'ADMIN' ? 'Administrador' : 'Usuario' %>
+              </option>
+            <% }) %>
+          </select>
+        </label>
+        <label class="ios-field">
+          <span>Estado *</span>
+          <select name="estado" required>
+            <% (estados || []).forEach(function(e) { %>
+              <option value="<%= e %>" <%= form.estado === e ? 'selected' : '' %>><%= e %></option>
+            <% }) %>
+          </select>
+        </label>
+        <label class="ios-field">
+          <span id="almacenLabel">Almacén</span>
+          <select name="almacen_id" id="almacenId">
+            <option value="">Sin asignar</option>
+            <% (almacenes || []).forEach(function(a) { %>
+              <option value="<%= a.id %>" <%= String(form.almacenId || '') === String(a.id) ? 'selected' : '' %>>
+                <%= a.nombre %><%= a.codigo ? (' (' + a.codigo + ')') : '' %><%= a.activo === false ? ' · Inactivo' : '' %>
+              </option>
+            <% }) %>
+          </select>
+        </label>
+        <p id="almacenHint" class="ios-muted" style="margin:0;font-size:12px"></p>
+      </section>
+
+      <div class="ios-form-actions">
+        <button type="submit" class="ios-btn-primary">
+          <%= mode === 'editar' ? 'Guardar cambios' : 'Crear usuario' %>
+        </button>
+      </div>
+    </form>
+
+    <% if (mode === 'editar' && form.id) { %>
+      <% if (form.estado === 'ACTIVO') { %>
+        <form method="POST" action="<%= appBase %>/usuarios/<%= form.id %>/desactivar" style="margin-top:12px">
+          <button type="submit" class="ios-btn-ghost" style="width:100%" onclick="return confirm('¿Desactivar este usuario? No podrá iniciar sesión.')">
+            Desactivar usuario
+          </button>
+        </form>
+      <% } else { %>
+        <form method="POST" action="<%= appBase %>/usuarios/<%= form.id %>/activar" style="margin-top:12px">
+          <button type="submit" class="ios-btn-ghost" style="width:100%">Activar usuario</button>
+        </form>
+      <% } %>
+      <form
+        method="POST"
+        action="<%= appBase %>/usuarios/<%= form.id %>/eliminar"
+        style="margin-top:8px"
+        onsubmit="return confirm('¿Eliminar este usuario de forma permanente?');"
+      >
+        <button type="submit" class="ios-btn-ghost" style="width:100%;color:#FF3B30">Eliminar usuario</button>
+      </form>
+    <% } %>
+  </main>
+  <%- include('../../partials/app-tabbar', { active: active, appBase: appBase }) %>
+  <script>
+    (function () {
+      var rol = document.getElementById('rolUsuario');
+      var sel = document.getElementById('almacenId');
+      var hint = document.getElementById('almacenHint');
+      var label = document.getElementById('almacenLabel');
+      function sync() {
+        var esUsuario = rol && rol.value === 'USUARIO';
+        if (sel) {
+          if (esUsuario) sel.setAttribute('required', 'required');
+          else sel.removeAttribute('required');
+        }
+        if (label) label.textContent = esUsuario ? 'Almacén *' : 'Almacén (opcional)';
+        if (hint) {
+          hint.textContent = esUsuario
+            ? 'Los usuarios operan solo en el almacén asignado.'
+            : 'El administrador puede quedar sin almacén.';
+        }
+      }
+      rol && rol.addEventListener('change', sync);
+      sync();
+    })();
+  </script>
+</body>
+</html>

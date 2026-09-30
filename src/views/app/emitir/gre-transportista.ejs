@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> · Easy</title>
+  <link rel="stylesheet" href="/css/app-ios.css" />
+</head>
+<body class="ios-app">
+  <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
+  <main class="ios-main">
+    <header class="ios-top">
+      <div>
+        <p class="ios-eyebrow">Serie <%= serie %> · GRE transportista</p>
+        <h1 id="pasoTitulo">Documento relacionado</h1>
+      </div>
+      <a class="ios-back" href="<%= appBase %>/emitir/guia">Volver</a>
+    </header>
+
+    <% if (error) { %>
+      <div class="ios-flash is-error"><%= error %></div>
+    <% } %>
+
+    <div class="ios-wizard-steps" id="wizardSteps">
+      <% pasos.forEach(function(p) { %>
+        <button type="button" class="ios-wizard-dot <%= p.id === 1 ? 'is-on' : '' %>" data-goto="<%= p.id %>" title="<%= p.titulo %>">
+          <span><%= p.id %></span>
+          <small><%= p.corto %></small>
+        </button>
+      <% }) %>
+    </div>
+
+    <form class="ios-form" method="POST" action="<%= appBase %>/emitir/GUIA_TRANSPORTISTA" id="greTransportistaForm"
+      data-company-ruc="<%= companyRuc %>"
+      data-company-nombre="<%= companyNombre || '' %>"
+      data-app-base="<%= appBase %>"
+      data-gre-r-api="<%= appBase %>/emitir/gre-remitente-recibidas"
+      data-envio-api="<%= appBase %>/ordenes/direcciones-envio"
+      data-vehiculos-api="<%= appBase %>/emitir/vehiculos"
+      data-conductores-api="<%= appBase %>/emitir/conductores"
+      data-transportistas-api="<%= appBase %>/emitir/transportistas"
+      data-periodo="<%= periodoDefault || '' %>"
+    >
+      <!-- 1 Documento relacionado -->
+      <section class="ios-wizard-pane is-on" data-step="1">
+        <p class="ios-muted">Puedes amparar una o más GRE-R solo si coinciden remitente, destinatario, partida y llegada.</p>
+        <section class="ios-form-card">
+          <h3 class="ios-form-label">GRE remitente recibidas</h3>
+          <button type="button" class="ios-picker-btn" id="gretDocAbrir">
+            <span class="ios-picker-btn-text">
+              <strong id="gretDocBtnTitulo">Seleccionar GRE remitente</strong>
+              <small id="gretDocBtnDetalle">Solo guías donde tú eres el transportista</small>
+            </span>
+            <span class="ios-picker-btn-chevron" aria-hidden="true">▾</span>
+          </button>
+          <button type="button" class="ios-btn-ghost" id="gretDocManualAbrir" style="margin-top:8px;">Ingresar GRE-R manualmente</button>
+          <div id="gretDocsSel" style="margin-top:10px;"></div>
+          <div id="gretDocsHidden"></div>
+        </section>
+      </section>
+
+      <!-- 2 Remitente -->
+      <section class="ios-wizard-pane" data-step="2">
+        <p class="ios-muted" id="gretRemHint">Quién envía la mercadería. Se precarga desde la GRE-R (editable).</p>
+        <section class="ios-form-card">
+          <h3 class="ios-form-label">Remitente</h3>
+          <label class="ios-field">
+            <span>RUC / DNI *</span>
+            <input type="text" name="remitente_ruc" id="gretRemDoc" value="<%= form.remitente_ruc || '' %>" inputmode="numeric" maxlength="11" required />
+          </label>
+          <input type="hidden" name="remitente_tipo_doc" id="gretRemTipo" value="<%= form.remitente_tipo_doc || '6' %>" />
+          <label class="ios-field">
+            <span>Razón social *</span>
+            <input type="text" name="remitente_razon_social" id="gretRemNombre" value="<%= form.remitente_razon_social || '' %>" required />
+          </label>
+        </section>
+      </section>
+
+      <!-- 3 Destinatario -->
+      <section class="ios-wizard-pane" data-step="3">
+        <p class="ios-muted" id="gretDestHint">Quién recibe. Si hay GRE-R vinculada con destinatario, queda fijado.</p>
+        <section class="ios-form-card">
+          <h3 class="ios-form-label">Destinatario</h3>
+          <label class="ios-field">
+            <span>RUC / DNI *</span>
+            <input type="text" name="receptor_numero_doc" id="gretDestDoc" value="<%= form.receptor_numero_doc || '' %>" inputmode="numeric" maxlength="11" required />
+          </label>
+          <input type="hidden" name="receptor_tipo_doc" id="gretDestTipo" value="<%= form.receptor_tipo_doc || '6' %>" />
+          <label class="ios-field">
+            <span>Razón social *</span>
+            <input type="text" name="receptor_razon_social" id="gretDestNombre" value="<%= form.receptor_razon_social || '' %>" required />
+          </label>
+        </section>
+      </section>
+
+      <!-- 4 Bienes y peso -->
+      <section class="ios-wizard-pane" data-step="4">
+        <section class="ios-form-card">
+          <h3 class="ios-form-label">Bienes trasladados</h3>
+          <p class="ios-muted" id="gretBienesStatus">Agrega ítems o cárgalos desde la GRE-R.</p>
+          <div id="gretBienesLista" class="ios-nc-items"></div>
+          <div id="gretBienesHidden"></div>
+          <button type="button" class="ios-btn-secondary" id="gretBienAgregar" style="margin-top:10px;">+ Agregar bien</button>
+        </section>
+        <section class="ios-form-card">
+          <h3 class="ios-form-label">Peso bruto</h3>
+          <div class="ios-inline">
+            <label class="ios-field">
+              <span>Peso *</span>
+              <input type="number" name="peso_total" id="gretPeso" value="<%= form.peso_total || '1' %>" min="0.01" step="0.01" required />
+            </label>
+            <label class="ios-field">
+              <span>Unidad</span>
+              <select name="und_peso_total" id="gretUndPeso">
+                <% (unidadesPeso || []).forEach(function(u) { %>
+                  <option value="<%= u.codigo %>" <%= form.und_peso_total === u.codigo ? 'selected' : '' %>><%= u.titulo %></option>
+                <% }) %>
+              </select>
+            </label>
+          </div>
+        </section>
+      </section>
+
+      <!-- 5 Ruta -->
+      <section class="ios-wizard-pane" data-step="5">
+        <p class="ios-muted" id="gretRutaHint">Partida y llegada. Si hay GRE-R compatible, se fijan desde ella.</p>
+        <section class="ios-form-card">
+          <h3 class="ios-form-label">Punto de partida *</h3>
+          <input type="hidden" name="partida_ubigeo" id="partidaUbigeo" value="<%= form.partida_ubigeo || '' %>" />
+          <input type="hidden" name="partida_direccion" id="partidaDireccion" value="<%= form.partida_direccion || '' %>" />
+          <div class="ios-ubic-row">
+            <button type="button" class="ios-ubic-pick is-empty" id="gretPartidaAbrir" data-gret-ubicar="partida">
+              <span class="ios-ubic-pick-text">
+                <strong id="gretPartidaBtnTitulo">Toca para elegir ubicación</strong>
+                <small id="gretPartidaBtnDetalle">Obligatorio</small>
+              </span>
+            </button>
+            <button type="button" class="ios-ubic-clear" id="gretPartidaQuitar" hidden aria-label="Quitar">×</button>
+          </div>
+        </section>
+        <section class="ios-form-card">
+          <h3 class="ios-form-label">Punto de llegada *</h3>
+          <input type="hidden" name="llegada_ubigeo" id="llegadaUbigeo" value="<%= form.llegada_ubigeo || '' %>" />
+          <input type="hidden" name="llegada_direccion" id="llegadaDireccion" value="<%= form.llegada_direccion || '' %>" />
+          <div class="ios-ubic-row">
+            <button type="button" class="ios-ubic-pick is-empty" id="gretLlegadaAbrir" data-gret-ubicar="llegada">
+              <span class="ios-ubic-pick-text">
+                <strong id="gretLlegadaBtnTitulo">Toca para elegir ubicación</strong>
+                <small id="gretLlegadaBtnDetalle">Obligatorio</small>
+              </span>
+            </button>
+            <button type="button" class="ios-ubic-clear" id="gretLlegadaQuitar" hidden aria-label="Quitar">×</button>
+          </div>
+        </section>
+      </section>
+
+      <!-- 6 Transporte -->
+      <section class="ios-wizard-pane" data-step="6">
+        <section class="ios-form-card">
+          <h3 class="ios-form-label">Vehículo</h3>
+          <button type="button" class="ios-picker-btn" id="gretVehAbrir">
+            <span class="ios-picker-btn-text">
+              <strong id="gretVehBtnTitulo">Elegir vehículo</strong>
+              <small id="gretVehBtnDetalle">Placa registrada o nueva</small>
+            </span>
+            <span class="ios-picker-btn-chevron" aria-hidden="true">▾</span>
+          </button>
+          <input type="hidden" name="vehiculo_id" id="gretVehId" value="<%= form.vehiculo_id || '' %>" />
+          <label class="ios-field" style="margin-top:10px;">
+            <span>Placa *</span>
+            <input type="text" name="vehiculo_placa" id="gretVehPlaca" value="<%= form.vehiculo_placa || '' %>" maxlength="10" required />
+          </label>
+          <label class="ios-field">
+            <span>Nro. circulación / TUCE</span>
+            <input type="text" name="vehiculo_nro_circulacion" id="gretVehTuce" value="<%= form.vehiculo_nro_circulacion || '' %>" />
+          </label>
+          <input type="hidden" name="vehiculo_secundarios_json" id="gretVehSecJson" value="<%= form.vehiculo_secundarios_json || '[]' %>" />
+        </section>
+        <section class="ios-form-card">
+          <h3 class="ios-form-label">Conductor</h3>
+          <button type="button" class="ios-picker-btn" id="gretCondAbrir">
+            <span class="ios-picker-btn-text">
+              <strong id="gretCondBtnTitulo">Elegir conductor</strong>
+              <small id="gretCondBtnDetalle">DNI registrado o nuevo</small>
+            </span>
+            <span class="ios-picker-btn-chevron" aria-hidden="true">▾</span>
+          </button>
+          <input type="hidden" name="conductor_id" id="gretCondId" value="<%= form.conductor_id || '' %>" />
+          <input type="hidden" name="conductor_tipo_doc" value="1" />
+          <label class="ios-field" style="margin-top:10px;">
+            <span>DNI *</span>
+            <input type="text" name="conductor_numero_doc" id="gretCondDoc" value="<%= form.conductor_numero_doc || '' %>" inputmode="numeric" maxlength="8" required />
+          </label>
+          <label class="ios-field">
+            <span>Nombres y apellidos *</span>
+            <input type="text" name="conductor_nombres" id="gretCondNombre" value="<%= form.conductor_nombres || '' %>" required />
+          </label>
+          <label class="ios-field">
+            <span>Licencia</span>
+            <input type="text" name="conductor_licencia" id="gretCondLic" value="<%= form.conductor_licencia || '' %>" />
+          </label>
+          <input type="hidden" name="conductor_secundarios_json" id="gretCondSecJson" value="<%= form.conductor_secundarios_json || '[]' %>" />
+        </section>
+        <section class="ios-form-card">
+          <h3 class="ios-form-label">MTC (tu empresa)</h3>
+          <label class="ios-field">
+            <span>Nro. MTC</span>
+            <input type="text" name="nro_mtc" id="gretMtc" value="<%= form.nro_mtc || '' %>" />
+          </label>
+        </section>
+      </section>
+
+      <!-- 7 Fecha y pagador -->
+      <section class="ios-wizard-pane" data-step="7">
+        <section class="ios-form-card">
+          <h3 class="ios-form-label">Fecha de inicio de traslado *</h3>
+          <label class="ios-field">
+            <span>Fecha</span>
+            <input type="date" name="fecha_traslado" id="gretFecha" value="<%= form.fecha_traslado || '' %>" required />
+          </label>
+        </section>
+        <section class="ios-form-card">
+          <h3 class="ios-form-label">Pagador del flete *</h3>
+          <p class="ios-muted">Quién asume el costo del transporte (solo GRE-T)</p>
+          <div class="ios-choice-list" id="gretPagadorList">
+            <% (pagadores || []).forEach(function(p) { %>
+              <label class="ios-choice <%= (form.pagador_indicador || 'REMITENTE') === p.codigo ? 'is-on' : '' %>">
+                <input type="radio" name="pagador_indicador" value="<%= p.codigo %>"
+                  <%= (form.pagador_indicador || 'REMITENTE') === p.codigo ? 'checked' : '' %> />
+                <strong><%= p.titulo %></strong>
+                <small><%= p.detalle || '' %></small>
+              </label>
+            <% }) %>
+          </div>
+          <div id="gretPagadorRemVista" class="ios-selected-card" style="margin-top:12px;">
+            <div class="ios-selected-card-text">
+              <strong>Se usan los datos del remitente</strong>
+              <span id="gretPagadorRemDetalle">Completa el paso Remitente primero</span>
+            </div>
+          </div>
+          <div id="gretPagadorExtra" hidden style="margin-top:12px;">
+            <p class="ios-muted" id="gretPagadorExtraHint"></p>
+            <div id="gretPagadorEmpBlock" hidden>
+              <button type="button" class="ios-picker-btn" id="gretPagadorEmpAbrir">
+                <span class="ios-picker-btn-text">
+                  <strong id="gretPagadorEmpTitulo">Elegir empresa de transporte</strong>
+                  <small>Quién te subcontrató</small>
+                </span>
+                <span class="ios-picker-btn-chevron" aria-hidden="true">▾</span>
+              </button>
+            </div>
+            <label class="ios-field">
+              <span>Tipo doc.</span>
+              <select name="pagador_tipo_doc" id="gretPagTipo">
+                <option value="6" <%= form.pagador_tipo_doc !== '1' ? 'selected' : '' %>>RUC</option>
+                <option value="1" <%= form.pagador_tipo_doc === '1' ? 'selected' : '' %>>DNI</option>
+              </select>
+            </label>
+            <label class="ios-field">
+              <span>Número *</span>
+              <input type="text" name="pagador_numero_doc" id="gretPagDoc" value="<%= form.pagador_numero_doc || '' %>" inputmode="numeric" maxlength="11" />
+            </label>
+            <label class="ios-field">
+              <span>Razón social *</span>
+              <input type="text" name="pagador_razon_social" id="gretPagNombre" value="<%= form.pagador_razon_social || '' %>" />
+            </label>
+          </div>
+        </section>
+      </section>
+
+      <!-- 8 Resumen -->
+      <section class="ios-wizard-pane" data-step="8">
+        <section class="ios-form-card">
+          <h3 class="ios-form-label">Resumen</h3>
+          <div class="ios-list">
+            <div class="ios-row ios-row-static"><span class="ios-row-text"><strong>GRE-R</strong><small id="sumDocs">—</small></span></div>
+            <div class="ios-row ios-row-static"><span class="ios-row-text"><strong>Remitente</strong><small id="sumRem">—</small></span></div>
+            <div class="ios-row ios-row-static"><span class="ios-row-text"><strong>Destinatario</strong><small id="sumDest">—</small></span></div>
+            <div class="ios-row ios-row-static"><span class="ios-row-text"><strong>Bienes / peso</strong><small id="sumBienes">—</small></span></div>
+            <div class="ios-row ios-row-static"><span class="ios-row-text"><strong>Ruta</strong><small id="sumRuta">—</small></span></div>
+            <div class="ios-row ios-row-static"><span class="ios-row-text"><strong>Transporte</strong><small id="sumTransporte">—</small></span></div>
+            <div class="ios-row ios-row-static"><span class="ios-row-text"><strong>Flete</strong><small id="sumFlete">—</small></span></div>
+          </div>
+        </section>
+        <%- include('../../partials/app-emit-imagenes') %>
+      </section>
+
+      <div class="ios-wizard-nav">
+        <button type="button" class="ios-btn-secondary" id="btnPrev" hidden>Atrás</button>
+        <button type="button" class="ios-btn-primary" id="btnNext">Siguiente</button>
+        <button type="submit" class="ios-btn-primary" id="btnSubmit" hidden>Emitir GRE-T</button>
+      </div>
+    </form>
+  </main>
+  <%- include('../../partials/app-emit-loading') %>
+  <%- include('../../partials/app-tabbar', { active: active, appBase: appBase }) %>
+
+  <div id="gretDocPicker" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel" role="dialog" aria-modal="true">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-back" id="gretDocPickerCerrar">← Listo</button>
+        <h3>GRE remitente</h3>
+        <span style="width:56px;"></span>
+      </div>
+      <div class="ios-periodo-card" style="margin:0 16px 8px;">
+        <button type="button" class="ios-date-row" id="gretPeriodoAbrir" style="width:100%;border:0;background:transparent;padding:0;text-align:left;">
+          <span class="ios-date-row-text">
+            <strong>Mes</strong>
+            <small>GRE remitente del mes seleccionado</small>
+          </span>
+          <span class="ios-date-row-value" id="gretPeriodoLabel">—</span>
+          <span class="ios-chevron" aria-hidden="true">›</span>
+        </button>
+        <input type="hidden" id="gretPeriodo" value="<%= (periodoDefault || '').length === 6 ? (periodoDefault.slice(0,4) + '-' + periodoDefault.slice(4)) : '' %>" />
+      </div>
+      <input type="search" id="gretDocPickerBusqueda" class="ios-sheet-search" placeholder="Serie, RUC o remitente…" autocomplete="off" />
+      <div class="ios-sheet-status" id="gretDocPickerStatus">Toca para marcar (multi si son compatibles)</div>
+      <div class="ios-sheet-list" id="gretDocPickerLista"></div>
+      <button type="button" class="ios-sheet-more" id="gretDocPickerMas" hidden>Ver más</button>
+    </div>
+  </div>
+
+  <div id="gretMesSheet" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel ios-fecha-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="gretMesSheetTitulo">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-action" id="gretMesCancelar" aria-label="Cancelar">✕</button>
+        <h3 id="gretMesSheetTitulo">Mes</h3>
+        <button type="button" class="ios-sheet-action ios-sheet-action-text" id="gretMesListo">Listo</button>
+      </div>
+      <p class="ios-fecha-sheet-hint">GRE remitente que te emitieron en el mes</p>
+      <div class="ios-date-wheel is-month-year" id="gretMesWheel" aria-label="Selector de mes">
+        <div class="ios-date-wheel-fade ios-date-wheel-fade-top" aria-hidden="true"></div>
+        <div class="ios-date-wheel-fade ios-date-wheel-fade-bottom" aria-hidden="true"></div>
+        <div class="ios-date-wheel-highlight" aria-hidden="true"></div>
+        <div class="ios-date-wheel-unit" data-col="month">
+          <button type="button" class="ios-date-wheel-step is-up" data-dir="-1" aria-label="Mes anterior">▴</button>
+          <div class="ios-date-wheel-col">
+            <ul class="ios-date-wheel-list" id="gretMesWheelMonth"></ul>
+          </div>
+          <button type="button" class="ios-date-wheel-step is-down" data-dir="1" aria-label="Mes siguiente">▾</button>
+        </div>
+        <div class="ios-date-wheel-unit" data-col="year">
+          <button type="button" class="ios-date-wheel-step is-up" data-dir="-1" aria-label="Año anterior">▴</button>
+          <div class="ios-date-wheel-col">
+            <ul class="ios-date-wheel-list" id="gretMesWheelYear"></ul>
+          </div>
+          <button type="button" class="ios-date-wheel-step is-down" data-dir="1" aria-label="Año siguiente">▾</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="gretDocManualPicker" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel" role="dialog" aria-modal="true">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-back" id="gretDocManualCerrar">← Volver</button>
+        <h3>GRE-R manual</h3>
+        <span style="width:56px;"></span>
+      </div>
+      <div style="padding:0 16px 16px;display:flex;flex-direction:column;gap:12px;">
+        <label class="ios-field">
+          <span>RUC emisor (remitente)</span>
+          <input type="text" id="gretManualEmisor" inputmode="numeric" maxlength="11" />
+        </label>
+        <div class="ios-inline">
+          <label class="ios-field">
+            <span>Serie</span>
+            <input type="text" id="gretManualSerie" maxlength="4" placeholder="T001" />
+          </label>
+          <label class="ios-field">
+            <span>Número</span>
+            <input type="text" id="gretManualNumero" maxlength="8" inputmode="numeric" />
+          </label>
+        </div>
+        <button type="button" class="ios-btn-primary" id="gretDocManualAgregar">Agregar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="gretBienSheet" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel" role="dialog" aria-modal="true">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-back" id="gretBienCerrar">← Volver</button>
+        <h3>Agregar bien</h3>
+        <span style="width:56px;"></span>
+      </div>
+      <div style="padding:0 16px 16px;display:flex;flex-direction:column;gap:12px;">
+        <label class="ios-field">
+          <span>Descripción *</span>
+          <input type="text" id="gretBienDesc" />
+        </label>
+        <div class="ios-inline">
+          <label class="ios-field">
+            <span>Cantidad</span>
+            <input type="number" id="gretBienCant" value="1" min="0.01" step="0.01" />
+          </label>
+          <label class="ios-field">
+            <span>Unidad</span>
+            <select id="gretBienUnd">
+              <% (unidadesBien || []).forEach(function(u) { %>
+                <option value="<%= u.codigo %>"><%= u.titulo %></option>
+              <% }) %>
+            </select>
+          </label>
+        </div>
+        <button type="button" class="ios-btn-primary" id="gretBienGuardar">Agregar</button>
+      </div>
+    </div>
+  </div>
+
+  <%- include('../../partials/ubicacion-picker', { appBase: appBase }) %>
+
+  <div id="gretCatPicker" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel" role="dialog" aria-modal="true">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-back" id="gretCatCerrar">← Volver</button>
+        <h3 id="gretCatTitulo">Catálogo</h3>
+        <button type="button" class="ios-sheet-action-label" id="gretCatNueva">Añadir</button>
+      </div>
+      <div id="gretCatListaWrap">
+        <input type="search" id="gretCatBusqueda" class="ios-sheet-search" placeholder="Buscar…" autocomplete="off" />
+        <div class="ios-sheet-status" id="gretCatStatus">Cargando…</div>
+        <div class="ios-sheet-list" id="gretCatLista"></div>
+      </div>
+      <div id="gretCatFormWrap" class="ios-envio-form" hidden>
+        <div id="gretCatFormFields"></div>
+        <button type="button" class="ios-btn-primary" id="gretCatGuardar">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <%
+    var vehiculosJson = JSON.stringify(vehiculos || []);
+    var conductoresJson = JSON.stringify(conductores || []);
+    var transportistasJson = JSON.stringify(transportistas || []);
+    var docsGreRJson = JSON.stringify(docsGreR || { items: [], total: 0, has_more: false });
+  %>
+  <script type="application/json" id="gret-vehiculos-data"><%- vehiculosJson %></script>
+  <script type="application/json" id="gret-conductores-data"><%- conductoresJson %></script>
+  <script type="application/json" id="gret-transportistas-data"><%- transportistasJson %></script>
+  <script type="application/json" id="gret-docs-data"><%- docsGreRJson %></script>
+  <script type="application/json" id="gret-compras-sel-data"><%- JSON.stringify(form.compra_ids || []) %></script>
+  <script type="application/json" id="gret-lineas-data"><%- JSON.stringify(form.lineas || []) %></script>
+  <script src="/js/app-emit-loading.js"></script>
+  <script src="/js/app-emit-imagenes.js"></script>
+  <script src="/js/app-gre-transportista.js"></script>
+</body>
+</html>

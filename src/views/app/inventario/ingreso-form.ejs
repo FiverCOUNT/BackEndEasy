@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> · Easy</title>
+  <link rel="stylesheet" href="/css/app-ios.css?v=buscador" />
+</head>
+<body class="ios-app">
+  <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
+  <main class="ios-main">
+    <header class="ios-top">
+      <div>
+        <p class="ios-eyebrow"><%= companyNombre %></p>
+        <h1>Nuevo ingreso</h1>
+      </div>
+      <a class="ios-btn-secondary" href="<%= appBase %>/ingresos">Lista</a>
+    </header>
+
+    <% if (error) { %><div class="ios-flash is-error"><%= error %></div><% } %>
+
+    <%
+      var catalogoJson = JSON.stringify((catalogo || []).map(function(it) {
+        return {
+          id: it.id,
+          nombre: it.nombre,
+          codigo: it.codigo || '',
+          unidad: it.unidad || 'NIU',
+          precio_unitario: it.precioUnitario != null ? it.precioUnitario : (it.precio_unitario || 0),
+          maneja_stock: it.manejaStock === true || it.maneja_stock === true,
+          maneja_serie: it.manejaSerie === true || it.maneja_serie === true,
+          stock_actual: it.stock_actual != null ? it.stock_actual : (it.stockActual != null ? it.stockActual : null),
+          kind: it.kind || 'PRODUCT',
+        };
+      }));
+      var clientesJson = JSON.stringify((clientes || []).map(function(c) {
+        return {
+          id: c.id,
+          nombre: c.nombre || '',
+          numero_doc: c.numero_doc || '',
+          tipo_doc_label: c.tipo_doc_label || '',
+        };
+      }));
+      var almacenesJson = JSON.stringify((almacenes || []).map(function(a) {
+        return { id: a.id, nombre: a.nombre, codigo: a.codigo || '' };
+      }));
+    %>
+
+    <form class="ios-form" method="POST" action="<%= appBase %>/ingresos" id="ingresoForm"
+      data-almacen-default="<%= form.almacen_id || defaultAlmacenId || '' %>">
+
+      <section class="ios-form-card">
+        <h3 class="ios-form-label">Proveedor</h3>
+        <input type="hidden" name="procedencia" id="procedencia" value="<%= form.procedencia || 'externa' %>" />
+        <input type="hidden" name="cliente_id" id="clienteId" value="<%= form.cliente_id || '' %>" />
+        <input type="hidden" name="tipo_ingreso" value="nuevo" />
+        <button type="button" class="ios-picker-btn" id="clienteAbrir">
+          <span class="ios-picker-btn-text">
+            <strong id="clienteBtnTitulo">Seleccionar proveedor</strong>
+            <small id="clienteBtnDetalle">Opcional</small>
+          </span>
+          <span class="ios-picker-btn-chevron" aria-hidden="true">▾</span>
+        </button>
+      </section>
+
+      <section class="ios-form-card">
+        <h3 class="ios-form-label">Almacén destino</h3>
+        <% if (almacenBloqueado || almacenes.length === 1) {
+          var almFijo = almacenes[0] || null;
+        %>
+          <label class="ios-field">
+            <span>Almacén *</span>
+            <% if (almFijo) { %>
+              <input type="text" value="<%= almFijo.nombre %>" readonly />
+              <input type="hidden" name="almacen_id" id="almacenId" value="<%= almFijo.id %>" />
+            <% } else { %>
+              <input type="text" value="Sin almacén asignado" readonly />
+              <input type="hidden" name="almacen_id" id="almacenId" value="" />
+            <% } %>
+          </label>
+        <% } else { %>
+          <label class="ios-field">
+            <span>Almacén *</span>
+            <select name="almacen_id" id="almacenId" required>
+              <option value="">Selecciona…</option>
+              <% almacenes.forEach(function(a) { %>
+                <option value="<%= a.id %>" <%= String(form.almacen_id || defaultAlmacenId) === String(a.id) ? 'selected' : '' %>><%= a.nombre %></option>
+              <% }); %>
+            </select>
+          </label>
+        <% } %>
+        <p style="font-size:13px;color:var(--ios-muted);margin:8px 0 0;">
+          Queda registrado a nombre de <strong><%= webUser.email || 'tu usuario' %></strong>.
+        </p>
+      </section>
+
+      <section class="ios-form-card">
+        <h3 class="ios-form-label">Productos</h3>
+        <div class="ios-search-row">
+          <div class="ios-search">
+            <input type="search" id="productoBusqueda" placeholder="Buscar producto…" autocomplete="off" />
+          </div>
+          <button type="button" id="productoAbrirLista" class="ios-icon-btn" aria-label="Ver catálogo">+</button>
+        </div>
+        <div id="lineasOrden" class="ios-orden-lineas"></div>
+        <div id="lineasHidden"></div>
+        <p style="font-size:13px;color:var(--ios-muted);margin:0;">
+          Solo referencias el producto para ingresar stock. Si maneja serie, se abre escaneo masivo (pistola / lote).
+        </p>
+      </section>
+
+      <section class="ios-form-card">
+        <h3 class="ios-form-label">Observaciones</h3>
+        <label class="ios-field">
+          <span>Nota (opcional)</span>
+          <input type="text" name="observaciones" value="<%= form.observaciones || '' %>" maxlength="255" placeholder="Ej. Compra proveedor, nota de ingreso…" />
+        </label>
+      </section>
+
+      <button type="submit" class="ios-btn-primary" style="width:100%;margin-top:8px;" <%= almacenBloqueado && !almacenes.length ? 'disabled' : '' %>>
+        Registrar ingreso
+      </button>
+    </form>
+  </main>
+
+  <div id="productoPicker" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel" role="dialog" aria-modal="true">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-back" id="productoPickerCerrar">← Volver</button>
+        <h3>Catálogo</h3>
+        <span style="width:56px;"></span>
+      </div>
+      <div class="ios-sheet-toolbar">
+        <input type="search" id="productoPickerBusqueda" class="ios-sheet-search" placeholder="Nombre, código…" autocomplete="off" />
+      </div>
+      <div class="ios-sheet-status" id="productoPickerStatus">Toca un producto para referenciarlo e ingresar</div>
+      <div class="ios-sheet-list" id="productoPickerLista"></div>
+    </div>
+  </div>
+
+  <div id="escaneoMasivoSheet" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel" role="dialog" aria-modal="true">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-back" id="escaneoMasivoCerrar">← Volver</button>
+        <div class="ios-sheet-head-titles">
+          <h3 id="escaneoMasivoTitulo">Escaneo masivo</h3>
+          <p id="escaneoMasivoSub" class="ios-sheet-head-sub"></p>
+        </div>
+        <span style="width:56px;"></span>
+      </div>
+      <p class="ios-sheet-status" style="margin:0 0 8px;">Escanea en el campo (Enter) o pega un lote de series.</p>
+      <textarea id="escaneoMasivoInput" class="ios-scan-input" rows="2" placeholder="Ej. DL-SN-2026-00489" autocomplete="off"></textarea>
+      <div class="ios-scan-actions">
+        <button type="button" class="ios-btn-secondary" id="escaneoMasivoAgregar">Agregar</button>
+        <button type="button" class="ios-btn-secondary" id="escaneoMasivoLimpiar">Limpiar lista</button>
+      </div>
+      <div class="ios-sheet-status" id="escaneoMasivoStatus">Escanea con pistola (Enter) o pega un lote</div>
+      <div class="ios-sheet-list ios-scan-serie-list" id="escaneoMasivoLista"></div>
+      <button type="button" class="ios-btn-primary ios-serie-picker-add" id="escaneoMasivoConfirmar" disabled>
+        Confirmar series
+      </button>
+    </div>
+  </div>
+
+  <div id="clienteSheet" class="ios-sheet" hidden aria-hidden="true">
+    <div class="ios-sheet-panel" role="dialog" aria-modal="true">
+      <div class="ios-sheet-head">
+        <h3>Proveedor</h3>
+        <button type="button" class="ios-btn-ghost" id="clienteSheetCerrar">Cerrar</button>
+      </div>
+      <input type="search" id="clienteBuscar" class="ios-sheet-search" placeholder="Nombre o documento…" autocomplete="off" />
+      <div class="ios-sheet-status" id="clienteStatus" hidden>Sin resultados</div>
+      <div class="ios-sheet-list" id="clienteLista"></div>
+    </div>
+  </div>
+
+  <script type="application/json" id="ingreso-catalogo-data"><%- catalogoJson.replace(/</g, '\\u003c') %></script>
+  <script type="application/json" id="ingreso-clientes-data"><%- clientesJson.replace(/</g, '\\u003c') %></script>
+  <script type="application/json" id="ingreso-almacenes-data"><%- almacenesJson.replace(/</g, '\\u003c') %></script>
+  <script type="application/json" id="ingreso-lineas-data"><%- JSON.stringify(typeof lineasIniciales !== 'undefined' && lineasIniciales ? lineasIniciales : []).replace(/</g, '\\u003c') %></script>
+  <%- include('../../partials/app-emit-loading') %>
+  <script src="/js/app-emit-loading.js"></script>
+  <%- include('../../partials/app-barcode-serie') %>
+  <script src="/js/app-barcode-serie.js?v=buscador"></script>
+  <script src="/js/app-lineas-productos.js?v=ingreso-proveedor"></script>
+  <script>
+  (function () {
+    var form = document.getElementById('ingresoForm');
+    if (!form || !window.EasyLineasProductos) return;
+
+    var almacenId = document.getElementById('almacenId');
+
+    function parseJson(id) {
+      try { return JSON.parse(document.getElementById(id).textContent || '[]'); }
+      catch (e) { return []; }
+    }
+
+    var lineasApi = EasyLineasProductos.init({
+      form: form,
+      mode: 'ingreso',
+      catalogo: parseJson('ingreso-catalogo-data'),
+      almacenes: parseJson('ingreso-almacenes-data'),
+      lineasIniciales: parseJson('ingreso-lineas-data'),
+      lockAlmacen: true,
+      showPrices: false,
+      showTotals: false,
+      validateOnSubmit: false,
+      getAlmacenId: function () {
+        return almacenId ? almacenId.value : '';
+      },
+      fields: {
+        catalog_item_id: 'catalog_item_id',
+        cantidad: 'cantidad',
+        producto_serie_id: 'producto_serie_id',
+        numero_serie: 'numero_serie',
+      },
+    });
+
+    if (almacenId && almacenId.tagName === 'SELECT') {
+      almacenId.addEventListener('change', function () {
+        if (lineasApi) lineasApi.syncAlmacenFromForm();
+      });
+    }
+
+    var procedencia = document.getElementById('procedencia');
+    var clienteId = document.getElementById('clienteId');
+    var sheet = document.getElementById('clienteSheet');
+    var lista = document.getElementById('clienteLista');
+    var buscar = document.getElementById('clienteBuscar');
+    var status = document.getElementById('clienteStatus');
+    var titulo = document.getElementById('clienteBtnTitulo');
+    var detalle = document.getElementById('clienteBtnDetalle');
+    var clientes = [];
+    try { clientes = JSON.parse(document.getElementById('ingreso-clientes-data').textContent || '[]'); }
+    catch (e) { clientes = []; }
+
+    function pintarProcedencia() {
+      if (procedencia) {
+        procedencia.value = (clienteId && clienteId.value) ? 'cliente' : 'externa';
+      }
+      var cli = clientes.find(function (c) { return String(c.id) === String(clienteId && clienteId.value); });
+      if (titulo) titulo.textContent = cli ? cli.nombre : 'Seleccionar proveedor';
+      if (detalle) {
+        detalle.textContent = cli
+          ? ((cli.tipo_doc_label || 'Doc.') + ' ' + (cli.numero_doc || ''))
+          : 'Opcional';
+      }
+    }
+
+    function pintarClientes() {
+      if (!lista) return;
+      var q = (buscar && buscar.value ? buscar.value : '').trim().toLowerCase();
+      lista.innerHTML = '';
+      var n = 0;
+      clientes.forEach(function (c) {
+        var texto = (c.nombre + ' ' + c.numero_doc).toLowerCase();
+        if (q && texto.indexOf(q) === -1) return;
+        n += 1;
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'ios-sheet-item' + (String(c.id) === String(clienteId && clienteId.value) ? ' is-selected' : '');
+        btn.innerHTML = '<strong></strong><span></span>';
+        btn.querySelector('strong').textContent = c.nombre || 'Proveedor';
+        btn.querySelector('span').textContent = (c.tipo_doc_label || 'Doc.') + ' ' + (c.numero_doc || '');
+        btn.addEventListener('click', function () {
+          if (clienteId) clienteId.value = c.id;
+          if (sheet) {
+            sheet.hidden = true;
+            sheet.setAttribute('aria-hidden', 'true');
+          }
+          pintarProcedencia();
+        });
+        lista.appendChild(btn);
+      });
+      if (status) status.hidden = n !== 0;
+    }
+
+    document.getElementById('clienteAbrir')?.addEventListener('click', function () {
+      if (!sheet) return;
+      if (buscar) buscar.value = '';
+      pintarClientes();
+      sheet.hidden = false;
+      sheet.setAttribute('aria-hidden', 'false');
+      setTimeout(function () { buscar && buscar.focus(); }, 30);
+    });
+    document.getElementById('clienteSheetCerrar')?.addEventListener('click', function () {
+      if (!sheet) return;
+      sheet.hidden = true;
+      sheet.setAttribute('aria-hidden', 'true');
+    });
+    sheet?.addEventListener('click', function (ev) {
+      if (ev.target === sheet) {
+        sheet.hidden = true;
+        sheet.setAttribute('aria-hidden', 'true');
+      }
+    });
+    buscar?.addEventListener('input', pintarClientes);
+    pintarProcedencia();
+
+    form.addEventListener('submit', function (ev) {
+      pintarProcedencia();
+      if (!(almacenId && almacenId.value)) {
+        ev.preventDefault();
+        window.alert('Selecciona el almacén de destino.');
+        return;
+      }
+      if (lineasApi && !lineasApi.validate()) {
+        ev.preventDefault();
+        return;
+      }
+      if (typeof window.showEmitLoading === 'function') {
+        window.showEmitLoading('Registrando ingreso…', 'Actualizando stock. No cierres esta ventana.');
+      }
+      var btn = form.querySelector('button[type="submit"]');
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Registrando…';
+      }
+    });
+  })();
+  </script>
+  <%- include('../../partials/app-tabbar', { active: active, appBase: appBase }) %>
+</body>
+</html>

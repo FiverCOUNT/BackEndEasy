@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> · Easy</title>
+  <link rel="stylesheet" href="/css/app-ios.css" />
+</head>
+<body class="ios-app">
+  <%- include('../partials/app-nav', { active: active }) %>
+
+  <main class="ios-main">
+    <header class="ios-top">
+      <div>
+        <p class="ios-eyebrow"><%= companyNombre || 'Empresa' %></p>
+        <h1><%= title %></h1>
+      </div>
+      <a class="ios-back" href="<%= appBase %>/">Inicio</a>
+    </header>
+
+    <section class="ios-card-empty">
+      <div class="ios-empty-icon">◌</div>
+      <h2><%= title %></h2>
+      <p><%= typeof subtitle !== 'undefined' ? subtitle : 'Próximamente en web' %></p>
+      <p class="ios-muted">RUC <%= companyRuc || '—' %></p>
+    </section>
+  </main>
+
+  <%- include('../partials/app-tabbar', { active: active }) %>
+</body>
+</html>

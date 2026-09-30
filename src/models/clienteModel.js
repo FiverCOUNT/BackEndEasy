@@ -1,5 +1,11 @@
 const { randomUUID } = require('crypto');
 const prisma = require('../config/prisma');
+const {
+  parseAddressInput,
+  toAddressSnapshot,
+  toAddressApi,
+  registerCatalogAddress,
+} = require('../utils/addressHelper');
 
 const TIPO_DOC_LABEL = {
   '1': 'DNI',
@@ -7,6 +13,10 @@ const TIPO_DOC_LABEL = {
   '4': 'CE',
   '7': 'Pasaporte',
 };
+
+function addressOf(cliente) {
+  return toAddressApi(cliente?.addressJson || cliente?.address) || undefined;
+}
 
 function toApi(cliente) {
   if (!cliente) return null;
@@ -19,22 +29,13 @@ function toApi(cliente) {
     razon_social: cliente.razonSocial,
     telefono: cliente.telefono,
     activo: cliente.activo,
-    address: cliente.address
-      ? {
-          ubigeo: cliente.address.ubigeo,
-          departamento: cliente.address.departamento,
-          provincia: cliente.address.provincia,
-          distrito: cliente.address.distrito,
-          urbanizacion: cliente.address.urbanizacion,
-          direccion: cliente.address.direccion,
-          cod_local: cliente.address.codLocal,
-        }
-      : undefined,
+    address: addressOf(cliente),
   };
 }
 
 function toPublic(cliente) {
   if (!cliente) return null;
+  const addr = addressOf(cliente) || {};
   return {
     id: cliente.id,
     companyRuc: cliente.companyRuc,
@@ -45,45 +46,8 @@ function toPublic(cliente) {
     telefono: cliente.telefono,
     activo: cliente.activo,
     comprobantesCount: cliente._count?.invoices ?? 0,
-    distrito: cliente.address?.distrito,
-    direccion: cliente.address?.direccion,
-  };
-}
-
-function parseAddressInput(body) {
-  const raw = body.address ?? body.direccion;
-  if (!raw) return null;
-  if (typeof raw === 'string') {
-    const linea = raw.trim();
-    return linea ? { direccion: linea } : null;
-  }
-  if (typeof raw === 'object') return raw;
-  return null;
-}
-
-function buildAddressData(body) {
-  if (!body || typeof body !== 'object') return null;
-
-  const ubigeo = String(body.ubigeo || '').trim();
-  const direccion = String(body.direccion || body.linea || '').trim();
-  const departamento = String(body.departamento || '').trim();
-  const provincia = String(body.provincia || '').trim();
-  const distrito = String(body.distrito || '').trim();
-  const urbanizacion = String(body.urbanizacion || '').trim();
-
-  if (!ubigeo && !direccion && !departamento && !provincia && !distrito && !urbanizacion) {
-    return null;
-  }
-
-  return {
-    id: randomUUID(),
-    ubigeo: ubigeo || null,
-    departamento: departamento || null,
-    provincia: provincia || null,
-    distrito: distrito || null,
-    urbanizacion: urbanizacion || null,
-    direccion: direccion || null,
-    codLocal: String(body.cod_local || body.codLocal || '0000').trim() || '0000',
+    distrito: addr.distrito,
+    direccion: addr.direccion,
   };
 }
 
@@ -95,6 +59,21 @@ function parseCreateBody(body) {
     telefono: (body.telefono || '').trim() || null,
     addressInput: parseAddressInput(body),
   };
+}
+
+function parseUpdateBody(body) {
+  const parsed = {};
+  if (body.razon_social != null || body.razonSocial != null) {
+    parsed.razonSocial = String(body.razon_social || body.razonSocial || '').trim();
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'telefono')) {
+    parsed.telefono = (body.telefono || '').trim() || null;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'address')
+    || Object.prototype.hasOwnProperty.call(body, 'direccion')) {
+    parsed.addressInput = parseAddressInput(body);
+  }
+  return parsed;
 }
 
 function buildSearchWhere(q) {
@@ -118,17 +97,44 @@ async function findAllByCompany(companyRuc, { soloActivos = true } = {}) {
 
   const rows = await prisma.cliente.findMany({
     where,
-    include: { address: true },
     orderBy: [{ razonSocial: 'asc' }, { numeroDoc: 'asc' }],
   });
 
   return rows.map(toApi);
 }
 
+/** Listado móvil paginado (20 por página) con búsqueda en DB. */
+async function findByCompanyPaginated(
+  companyRuc,
+  { soloActivos = true, q = '', skip = 0, take = 20 } = {},
+) {
+  const where = { companyRuc };
+  if (soloActivos) where.activo = true;
+  const qn = String(q || '').trim();
+  if (qn) {
+    where.OR = [
+      { razonSocial: { contains: qn } },
+      { numeroDoc: { contains: qn } },
+      { telefono: { contains: qn } },
+    ];
+  }
+
+  const [total, rows] = await Promise.all([
+    prisma.cliente.count({ where }),
+    prisma.cliente.findMany({
+      where,
+      orderBy: [{ razonSocial: 'asc' }, { numeroDoc: 'asc' }],
+      skip,
+      take,
+    }),
+  ]);
+
+  return { items: rows.map(toApi), total };
+}
+
 async function findById(id, companyRuc) {
   const row = await prisma.cliente.findFirst({
     where: { id, companyRuc },
-    include: { address: true },
   });
   return row ? toApi(row) : null;
 }
@@ -147,27 +153,59 @@ async function create({
   telefono = null,
   addressInput = null,
 }) {
-  const addressData = buildAddressData(addressInput);
+  const snapshot = toAddressSnapshot(addressInput);
+  const row = await prisma.$transaction(async (tx) => {
+    const created = await tx.cliente.create({
+      data: {
+        id: randomUUID(),
+        companyRuc,
+        tipoDoc,
+        numeroDoc,
+        razonSocial,
+        telefono,
+        activo: true,
+        addressJson: snapshot,
+      },
+    });
+    if (snapshot) {
+      await registerCatalogAddress(tx, {
+        companyRuc,
+        snapshot,
+        etiqueta: `${razonSocial || 'Cliente'} · ${snapshot.distrito || snapshot.direccion || ''}`.slice(0, 120),
+      });
+    }
+    return created;
+  });
+
+  return toApi(row);
+}
+
+async function update(id, companyRuc, { razonSocial, telefono, addressInput } = {}) {
+  const existing = await prisma.cliente.findFirst({
+    where: { id, companyRuc },
+  });
+  if (!existing) return null;
 
   const row = await prisma.$transaction(async (tx) => {
-    const rowData = {
-      id: randomUUID(),
-      companyRuc,
-      tipoDoc,
-      numeroDoc,
-      razonSocial,
-      telefono,
-      activo: true,
-    };
+    const data = {};
+    if (razonSocial !== undefined) data.razonSocial = razonSocial;
+    if (telefono !== undefined) data.telefono = telefono;
 
-    if (addressData) {
-      await tx.address.create({ data: addressData });
-      rowData.addressId = addressData.id;
+    if (addressInput !== undefined) {
+      const snapshot = toAddressSnapshot(addressInput);
+      data.addressJson = snapshot;
+      if (snapshot) {
+        await registerCatalogAddress(tx, {
+          companyRuc,
+          snapshot,
+          etiqueta: `${razonSocial || existing.razonSocial || 'Cliente'} · ${snapshot.distrito || snapshot.direccion || ''}`.slice(0, 120),
+        });
+      }
     }
 
-    return tx.cliente.create({
-      data: rowData,
-      include: { address: true },
+    return tx.cliente.update({
+      where: { id },
+      data,
     });
   });
 
@@ -209,7 +247,6 @@ async function findPaginated({ q = '', page = 1, pageSize = 25, skip = 0 }) {
     prisma.cliente.findMany({
       where,
       include: {
-        address: true,
         _count: { select: { invoices: true } },
       },
       orderBy: [{ companyRuc: 'asc' }, { razonSocial: 'asc' }],
@@ -225,10 +262,13 @@ module.exports = {
   toApi,
   toPublic,
   parseCreateBody,
+  parseUpdateBody,
   findAllByCompany,
+  findByCompanyPaginated,
   findById,
   findByDocumento,
   create,
+  update,
   resolveForSalida,
   findPaginated,
 };

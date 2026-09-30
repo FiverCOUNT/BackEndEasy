@@ -214,7 +214,8 @@ function resolveColumnUrlsFromLegacy(invoice, apiBaseUrl) {
 }
 
 /**
- * Decodifica xml / cdr_zip / pdf del EMISOR, sube a R2 (o disco local) y devuelve URLs en columnas.
+ * Decodifica xml / cdr_zip del EMISOR y sube a R2 (o disco local).
+ * El PDF no se guarda: se regenera on-the-fly con PDFKit al descargar.
  */
 async function persistEmisorArchivos(invoice, emisorData, apiBaseUrl) {
   const empty = {
@@ -235,16 +236,9 @@ async function persistEmisorArchivos(invoice, emisorData, apiBaseUrl) {
     'cdr',
     apiBaseUrl,
   );
-  const savedPdf = await persistFile(
-    invoice,
-    `${basename}.pdf`,
-    emisorData.pdf || emisorData.pdf_base64,
-    'pdf',
-    apiBaseUrl,
-  );
 
   return {
-    pdfUrl: savedPdf?.url || null,
+    pdfUrl: null,
     cdrZipUrl: savedCdr?.url || null,
     xmlUrlDirecto: savedXml?.url || null,
     hash: resolveHashFromEmisorData(emisorData),
@@ -426,7 +420,8 @@ function canServeGeneratedPdf(invoice, tipo) {
 module.exports = {
   persistEmisorArchivos,
   persistBuffer,
-  persistGeneratedPdf: (invoice, buffer, apiBaseUrl) => persistBuffer(invoice, buffer, 'pdf', apiBaseUrl),
+  /** No-op: el PDF se genera al descargar; no se sube a R2 ni a disco. */
+  persistGeneratedPdf: async () => null,
   getArchivoBuffer,
   resolveFileUrls,
   resolveColumnUrlsFromLegacy,

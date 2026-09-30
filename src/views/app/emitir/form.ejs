@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> · Easy</title>
+  <link rel="stylesheet" href="/css/app-ios.css?v=scan-emit" />
+</head>
+<body class="ios-app">
+  <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
+  <main class="ios-main">
+    <header class="ios-top">
+      <div>
+        <p class="ios-eyebrow">Serie <%= serie %></p>
+        <h1><%= meta.titulo %></h1>
+      </div>
+      <a class="ios-back" href="<%= (tipoKey === 'GUIA_EMISION' || tipoKey === 'GUIA_TRANSPORTISTA') ? (appBase + '/emitir/guia') : (tipoKey === 'FACTURA' ? (appBase + '/emitir/datos') : (appBase + '/emitir')) %>">Volver</a>
+    </header>
+
+    <% if (error) { %>
+      <div class="ios-flash is-error"><%= error %></div>
+    <% } %>
+    <% if (flash) { %>
+      <div class="ios-flash <%= flash.type === 'error' ? 'is-error' : '' %>"><%= flash.text %></div>
+    <% } %>
+
+    <%
+      var lineasUiOrden = (tipoKey === 'FACTURA' || tipoKey === 'BOLETA');
+      var clientesJson = JSON.stringify((clientes || []).map(function(c) {
+        return {
+          id: c.id,
+          tipo_doc: c.tipo_doc || c.tipoDoc || '6',
+          razon_social: c.razon_social || c.razonSocial,
+          numero_doc: c.numero_doc || c.numeroDoc,
+        };
+      }));
+      var catalogoJson = JSON.stringify((catalogo || []).map(function(it) {
+        return {
+          id: it.id,
+          nombre: it.nombre,
+          codigo: it.codigo || '',
+          unidad: it.unidad || 'NIU',
+          precio_unitario: it.precioUnitario != null ? it.precioUnitario : (it.precio_unitario || 0),
+          maneja_stock: it.manejaStock === true || it.maneja_stock === true,
+          maneja_serie: it.manejaSerie === true || it.maneja_serie === true,
+          stock_actual: it.stock_actual != null ? it.stock_actual : (it.stockActual != null ? it.stockActual : null),
+          kind: it.kind || 'PRODUCT',
+        };
+      }));
+      var almacenesJson = JSON.stringify((almacenes || []).map(function(a) {
+        return { id: a.id, nombre: a.nombre, codigo: a.codigo || '' };
+      }));
+      var lineasInicialesJson = JSON.stringify((form.lineas || []).filter(function(ln) {
+        return ln.catalog_item_id || ln.descripcion;
+      }).map(function(ln) {
+        return {
+          catalog_item_id: ln.catalog_item_id || '',
+          nombre: ln.descripcion || '',
+          cantidad: Number(ln.cantidad) || 1,
+          precio_unitario: ln.precio_unitario !== '' && ln.precio_unitario != null ? Number(ln.precio_unitario) : null,
+          unidad: ln.unidad || 'NIU',
+          almacen_id: ln.almacen_id || '',
+          producto_serie_id: ln.producto_serie_id || '',
+          numero_serie: ln.numero_serie || '',
+          maneja_serie: ln.maneja_serie === true || !!(ln.producto_serie_id || ln.numero_serie),
+          kind: ln.kind || '',
+          afectacion_igv: ln.afectacion_igv || '',
+          codigo: ln.codigo || '',
+          codigo_sunat: ln.codigo_sunat || '',
+        };
+      }));
+      var defaultAlmacenId = (almacenes && almacenes[0] && almacenes[0].id) || '';
+      if (form.lineas && form.lineas[0] && form.lineas[0].almacen_id) {
+        defaultAlmacenId = form.lineas[0].almacen_id;
+      }
+    %>
+
+    <form
+      class="ios-form"
+      method="POST"
+      action="<%= appBase %>/emitir/<%= tipoKey %>"
+      id="emitirForm"
+      data-lineas-ui="<%= lineasUiOrden ? 'orden' : 'classic' %>"
+      data-tipo-key="<%= tipoKey %>"
+      data-almacen-default="<%= defaultAlmacenId %>"
+      data-series-api="<%= appBase %>/ordenes/catalogo"
+      data-stock-api="<%= appBase %>/emitir/catalogo-stock"
+      data-docs-afectados-api="<%= appBase %>/emitir/documentos-afectados"
+      data-doc-lineas-api="<%= appBase %>/emitir/documento-afectado"
+    >
+      <% if (form.orden_id) { %>
+        <input type="hidden" name="orden_id" value="<%= form.orden_id %>" />
+        <div class="ios-flash is-ok">Venta desde orden · líneas y cliente precargados</div>
+      <% } %>
+      <% if (form.comprobante_id) { %>
+        <input type="hidden" name="comprobante_id" value="<%= form.comprobante_id %>" />
+        <div class="ios-flash is-error">Corregir <%= serie %>-<%= form.correlativo || '' %> · <%= form.sunat_aviso || 'SUNAT rechazó este comprobante. Ajusta las líneas y vuelve a enviarlo con el mismo número.' %></div>
+      <% } %>
+      <section class="ios-form-card">
+        <h3 class="ios-form-label">Receptor</h3>
+        <div class="ios-field">
+          <span>Cliente registrado</span>
+          <div class="ios-search-row">
+            <div class="ios-search">
+              <input type="search" id="clienteBusqueda" placeholder="Buscar o elegir cliente…" autocomplete="off" readonly />
+            </div>
+            <button type="button" id="clienteAbrirLista" class="ios-icon-btn" aria-label="Ver lista de clientes">☰</button>
+          </div>
+          <div id="clienteSeleccionado" class="ios-selected-card" hidden>
+            <div class="ios-selected-card-text">
+              <strong id="clienteSelNombre"></strong>
+              <span id="clienteSelDoc"></span>
+            </div>
+            <button type="button" id="clienteSelQuitar" aria-label="Quitar cliente">×</button>
+          </div>
+          <p style="font-size:12px;color:var(--ios-muted);margin:8px 0 0;">O escribe los datos manualmente abajo.</p>
+        </div>
+        <label class="ios-field">
+          <span>Tipo doc.</span>
+          <select name="receptor_tipo_doc" id="receptorTipoDoc">
+            <option value="6" <%= form.receptor_tipo_doc === '6' ? 'selected' : '' %>>RUC (6)</option>
+            <option value="1" <%= form.receptor_tipo_doc === '1' ? 'selected' : '' %>>DNI (1)</option>
+            <option value="4" <%= form.receptor_tipo_doc === '4' ? 'selected' : '' %>>CE (4)</option>
+          </select>
+        </label>
+        <label class="ios-field">
+          <span>Número doc. *</span>
+          <input type="text" name="receptor_numero_doc" id="receptorNumeroDoc" value="<%= form.receptor_numero_doc || '' %>" required inputmode="numeric" />
+        </label>
+        <label class="ios-field">
+          <span>Razón social / nombre *</span>
+          <input type="text" name="receptor_razon_social" id="receptorRazonSocial" value="<%= form.receptor_razon_social || '' %>" required />
+        </label>
+      </section>
+
+      <% if (tipoKey === 'NOTA_CREDITO' || tipoKey === 'NOTA_DEBITO') { %>
+      <%
+        var motivoSelCodigo = form.motivo_codigo || (motivosNota[0] && motivosNota[0].codigo) || '01';
+        var motivoSelObj = (motivosNota || []).filter(function(m) { return m.codigo === motivoSelCodigo; })[0]
+          || (motivosNota || [])[0]
+          || { codigo: motivoSelCodigo, titulo: form.motivo_nota || '' };
+        var docSelId = form.documento_afectado_id || '';
+        var docSelObj = ((docsAfectados && docsAfectados.items) || []).filter(function(d) { return d.id === docSelId; })[0] || null;
+      %>
+      <section class="ios-form-card">
+        <h3 class="ios-form-label">Documento afectado</h3>
+        <div class="ios-field">
+          <span>Factura / boleta *</span>
+          <button type="button" class="ios-picker-btn" id="docAfectadoAbrir">
+            <span class="ios-picker-btn-text">
+              <strong id="docAfectadoBtnTitulo"><%= docSelObj ? docSelObj.ref : 'Seleccionar documento' %></strong>
+              <small id="docAfectadoBtnDetalle"><%= docSelObj ? (docSelObj.cliente + ' · ' + docSelObj.total) : 'Elige entre tus últimos emitidos' %></small>
+            </span>
+            <span class="ios-picker-btn-chevron" aria-hidden="true">▾</span>
+          </button>
+          <input type="hidden" name="documento_afectado_id" id="docAfectadoId" value="<%= docSelId %>" />
+          <div id="docAfectadoSeleccionado" class="ios-selected-card" <%= docSelObj ? '' : 'hidden' %>>
+            <div class="ios-selected-card-text">
+              <strong id="docAfectadoSelRef"><%= docSelObj ? (docSelObj.ref + ' · ' + docSelObj.tipo_label) : '' %></strong>
+              <span id="docAfectadoSelInfo"><%= docSelObj ? (docSelObj.cliente + ' · ' + docSelObj.fecha) : '' %></span>
+            </div>
+            <button type="button" id="docAfectadoQuitar" aria-label="Quitar documento">×</button>
+          </div>
+        </div>
+        <div class="ios-field">
+          <span>Motivo *</span>
+          <button type="button" class="ios-picker-btn" id="motivoAbrir">
+            <span class="ios-picker-btn-text">
+              <strong id="motivoBtnTitulo"><%= motivoSelObj.titulo || 'Seleccionar motivo' %></strong>
+              <small id="motivoBtnDetalle">Motivo SUNAT de la nota</small>
+            </span>
+            <span class="ios-picker-btn-chevron" aria-hidden="true">▾</span>
+          </button>
+          <input type="hidden" name="motivo_codigo" id="motivoCodigo" value="<%= motivoSelObj.codigo %>" />
+        </div>
+        <label class="ios-field">
+          <span>Descripción del motivo *</span>
+          <input
+            type="text"
+            name="motivo_nota"
+            id="motivoNota"
+            value="<%= form.motivo_nota || motivoSelObj.titulo || '' %>"
+            maxlength="255"
+            required
+          />
+        </label>
+        <div class="ios-field" id="nuevaFacturaWrap" hidden>
+          <span>Factura que reemplaza *</span>
+          <div class="ios-inline">
+            <label class="ios-field">
+              <span>Serie</span>
+              <input type="text" name="serie_nueva_fe" id="nuevaFacturaSerie" value="<%= form.serie_nueva_fe || '' %>" placeholder="F001" maxlength="4" autocomplete="off" />
+            </label>
+            <label class="ios-field">
+              <span>Número</span>
+              <input type="text" name="numero_nueva_fe" id="nuevaFacturaNumero" value="<%= form.numero_nueva_fe || '' %>" placeholder="123" maxlength="8" inputmode="numeric" autocomplete="off" />
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <section class="ios-form-card" id="itemsAfectadosCard" hidden>
+        <h3 class="ios-form-label" id="itemsAfectadosTitulo">Ítems del documento</h3>
+        <div class="ios-nc-items-status" id="itemsAfectadosStatus">Selecciona el documento afectado.</div>
+        <div class="ios-nc-global" id="itemsAfectadosGlobal" hidden>
+          <div class="ios-nc-global-row">
+            <span id="itemsGlobalTotalLabel">Nuevo total de la venta</span>
+            <strong id="itemsGlobalTotalValor">—</strong>
+          </div>
+          <p class="ios-nc-global-info" id="itemsGlobalInfo"></p>
+        </div>
+        <div class="ios-nc-global" id="itemsAfectadosMonto" hidden>
+          <label class="ios-field">
+            <span id="itemsMontoLabel">Importe de la nota *</span>
+            <input type="number" id="itemsMontoValor" step="0.01" min="0.01" inputmode="decimal" placeholder="0.00" />
+          </label>
+          <p class="ios-nc-global-info" id="itemsMontoInfo"></p>
+        </div>
+        <div class="ios-nc-items" id="itemsAfectadosLista"></div>
+        <div id="itemsAfectadosHidden"></div>
+        <div class="ios-orden-totales" id="itemsAfectadosResumen" hidden></div>
+        <label class="ios-nc-switch" id="itemsAfectadosStockWrap" hidden>
+          <span class="ios-nc-switch-icon" aria-hidden="true">↩</span>
+          <span class="ios-nc-switch-text">
+            <strong>Devolver al almacén</strong>
+            <small id="itemsAfectadosStockDetalle">Registra el ingreso de los ítems devueltos</small>
+          </span>
+          <input type="checkbox" name="afectar_inventario" id="itemsAfectadosStock" checked />
+          <span class="ios-nc-switch-track" aria-hidden="true"></span>
+        </label>
+        <p class="ios-nc-items-nota" id="itemsAfectadosNota"></p>
+      </section>
+      <% } %>
+
+      <% if (tipoKey === 'GUIA_EMISION' || tipoKey === 'GUIA_TRANSPORTISTA') { %>
+      <section class="ios-form-card">
+        <h3 class="ios-form-label">Traslado</h3>
+        <label class="ios-field">
+          <span>Motivo traslado</span>
+          <input type="text" name="motivo_traslado" value="<%= form.motivo_traslado || '01' %>" maxlength="2" />
+        </label>
+        <label class="ios-field">
+          <span>Glosa motivo</span>
+          <input type="text" name="motivo_nota" value="<%= form.motivo_nota || 'VENTA' %>" />
+        </label>
+        <label class="ios-field">
+          <span>Peso bruto (kg)</span>
+          <input type="number" name="peso_bruto" value="<%= form.peso_bruto || '1' %>" min="0.01" step="0.01" />
+        </label>
+        <label class="ios-field">
+          <span>Partida ubigeo</span>
+          <input type="text" name="partida_ubigeo" value="<%= form.partida_ubigeo || '' %>" maxlength="6" inputmode="numeric" />
+        </label>
+        <label class="ios-field">
+          <span>Partida dirección</span>
+          <input type="text" name="partida_direccion" value="<%= form.partida_direccion || '' %>" />
+        </label>
+        <label class="ios-field">
+          <span>Llegada ubigeo *</span>
+          <input type="text" name="llegada_ubigeo" value="<%= form.llegada_ubigeo || '' %>" maxlength="6" required inputmode="numeric" />
+        </label>
+        <label class="ios-field">
+          <span>Llegada dirección *</span>
+          <input type="text" name="llegada_direccion" value="<%= form.llegada_direccion || '' %>" required />
+        </label>
+        <label class="ios-field">
+          <span>Placa vehículo</span>
+          <input type="text" name="vehiculo_placa" value="<%= form.vehiculo_placa || '' %>" maxlength="10" />
+        </label>
+        <label class="ios-field">
+          <span>Conductor doc.</span>
+          <input type="text" name="conductor_numero_doc" value="<%= form.conductor_numero_doc || '' %>" inputmode="numeric" />
+        </label>
+        <input type="hidden" name="conductor_tipo_doc" value="<%= form.conductor_tipo_doc || '1' %>" />
+        <label class="ios-field">
+          <span>Conductor nombres</span>
+          <input type="text" name="conductor_nombres" value="<%= form.conductor_nombres || '' %>" />
+        </label>
+        <label class="ios-field">
+          <span>Conductor apellidos</span>
+          <input type="text" name="conductor_apellidos" value="<%= form.conductor_apellidos || '' %>" />
+        </label>
+        <label class="ios-field">
+          <span>Licencia</span>
+          <input type="text" name="conductor_licencia" value="<%= form.conductor_licencia || '' %>" />
+        </label>
+      </section>
+      <% } %>
+
+      <% if (tipoKey === 'GUIA_TRANSPORTISTA') { %>
+      <section class="ios-form-card">
+        <h3 class="ios-form-label">Remitente</h3>
+        <label class="ios-field">
+          <span>RUC remitente *</span>
+          <input type="text" name="remitente_ruc" value="<%= form.remitente_ruc || '' %>" required inputmode="numeric" maxlength="11" />
+        </label>
+        <label class="ios-field">
+          <span>Razón social *</span>
+          <input type="text" name="remitente_razon_social" value="<%= form.remitente_razon_social || '' %>" required />
+        </label>
+      </section>
+      <% } %>
+
+      <% if (tipoKey === 'FACTURA' || tipoKey === 'BOLETA') { %>
+      <section class="ios-form-card" id="feDocsRelCard">
+        <h3 class="ios-form-label">Documentos relacionados</h3>
+        <p class="ios-muted" style="margin:0 0 10px;font-size:13px;">
+          GRE de terceros u otros CPE que quieras vincular a esta factura (salen en el PDF).
+        </p>
+        <button type="button" class="ios-btn-ghost" id="feDocManualAbrir">Ingresar manualmente</button>
+        <div id="feDocsSel" style="margin-top:10px;"></div>
+        <div id="feDocsHidden"></div>
+      </section>
+      <% } %>
+
+      <% if (lineasUiOrden) { %>
+      <section class="ios-form-card">
+        <h3 class="ios-form-label">Productos</h3>
+        <div class="ios-search-row">
+          <div class="ios-search">
+            <input type="search" id="productoBusqueda" placeholder="Buscar producto…" autocomplete="off" />
+          </div>
+          <button type="button" id="productoAbrirLista" class="ios-icon-btn" aria-label="Ver catálogo">+</button>
+          <button type="button" id="productoPuntualAbrir" class="ios-btn-secondary ios-search-btn">Puntual</button>
+        </div>
+        <div id="lineasOrden" class="ios-orden-lineas"></div>
+        <div id="ordenTotal" class="ios-orden-totales" hidden></div>
+        <div id="lineasHidden"></div>
+        <p style="font-size:13px;color:var(--ios-muted);margin:0;">+ catálogo del almacén · Puntual si el bien o servicio no está guardado.</p>
+      </section>
+      <% } else if (tipoKey !== 'NOTA_CREDITO' && tipoKey !== 'NOTA_DEBITO') { %>
+      <section class="ios-form-card" id="lineasClassicCard">
+        <h3 class="ios-form-label">Líneas</h3>
+        <div id="lineasWrap">
+          <% (form.lineas || []).forEach(function(linea, idx) { %>
+            <div class="ios-emit-linea" data-linea>
+              <label class="ios-field">
+                <span>Del catálogo</span>
+                <select name="linea_catalog_item_id" data-catalog>
+                  <option value="">— Libre —</option>
+                  <% (catalogo || []).forEach(function(it) { %>
+                    <option value="<%= it.id %>"
+                      data-nombre="<%= it.nombre %>"
+                      data-unidad="<%= it.unidad || 'NIU' %>"
+                      data-precio="<%= it.precioUnitario || it.precio_unitario || 0 %>"
+                      <%= linea.catalog_item_id === it.id ? 'selected' : '' %>
+                    ><%= it.nombre %></option>
+                  <% }) %>
+                </select>
+              </label>
+              <label class="ios-field">
+                <span>Descripción *</span>
+                <input type="text" name="linea_descripcion" value="<%= linea.descripcion || '' %>" data-desc required />
+              </label>
+              <div class="ios-inline">
+                <label class="ios-field">
+                  <span>Cant.</span>
+                  <input type="number" name="linea_cantidad" value="<%= linea.cantidad || '1' %>" min="0.01" step="0.01" required />
+                </label>
+                <label class="ios-field">
+                  <span>Unidad</span>
+                  <input type="text" name="linea_unidad" value="<%= linea.unidad || 'NIU' %>" data-unidad maxlength="6" />
+                </label>
+                <label class="ios-field">
+                  <span>P. unit.</span>
+                  <input type="number" name="linea_precio" value="<%= linea.precio_unitario || '' %>" min="0" step="0.01" data-precio <%= (tipoKey === 'GUIA_EMISION' || tipoKey === 'GUIA_TRANSPORTISTA') ? '' : 'required' %> />
+                </label>
+              </div>
+              <% if (idx > 0) { %>
+                <button type="button" class="ios-btn-ghost" data-remove-linea>Quitar línea</button>
+              <% } %>
+            </div>
+          <% }) %>
+        </div>
+        <button type="button" class="ios-btn-secondary" id="btnAddLinea">+ Agregar línea</button>
+      </section>
+      <% } %>
+
+      <% if (tipoKey === 'FACTURA' || tipoKey === 'BOLETA') { %>
+      <section class="ios-form-card">
+        <h3 class="ios-form-label">Método de pago</h3>
+        <label class="ios-field">
+          <span>Medio de cobro</span>
+          <select name="metodo_pago_id" id="metodoPagoId">
+            <option value="">— Sin especificar —</option>
+            <% (metodosPago || []).forEach(function(m) { %>
+              <option value="<%= m.id %>" <%= form.metodo_pago_id === m.id ? 'selected' : '' %>>
+                <%= m.nombre %> · <%= m.tipo %> · <%= m.valor %>
+              </option>
+            <% }) %>
+          </select>
+        </label>
+        <% if (!(metodosPago || []).length) { %>
+          <p class="ios-muted" style="margin:6px 0 0;font-size:12px;">
+            No hay métodos activos.
+            <% if (typeof isWebAdmin !== 'undefined' && isWebAdmin) { %>
+              <a href="<%= appBase %>/metodos-pago">Configurar en Ajustes</a>
+            <% } %>
+          </p>
+        <% } %>
+      </section>
+      <% } %>
+
+      <% if (tipoKey === 'FACTURA' || tipoKey === 'BOLETA') { %>
+      <section class="ios-form-card">
+        <label class="ios-check">
+          <input type="checkbox" name="afectar_inventario" <%= form.afectar_inventario ? 'checked' : '' %> />
+          <span>Descontar inventario al emitir</span>
+        </label>
+      </section>
+      <% } %>
+
+      <%- include('../../partials/app-emit-imagenes') %>
+
+      <div class="ios-form-actions">
+        <p class="ios-flash is-error" id="emitirBloqueo" hidden></p>
+        <button type="submit" class="ios-btn-primary">Emitir <%= meta.titulo %></button>
+      </div>
+    </form>
+  </main>
+
+  <% if (tipoKey === 'NOTA_CREDITO' || tipoKey === 'NOTA_DEBITO') { %>
+  <div id="docAfectadoPicker" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel" role="dialog" aria-modal="true">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-back" id="docAfectadoPickerCerrar">← Volver</button>
+        <h3>Documentos emitidos</h3>
+        <span style="width:56px;"></span>
+      </div>
+      <input type="search" id="docAfectadoPickerBusqueda" class="ios-sheet-search" placeholder="Serie, número o cliente…" autocomplete="off" />
+      <div class="ios-sheet-status" id="docAfectadoPickerStatus">Últimos emitidos</div>
+      <div class="ios-sheet-list" id="docAfectadoPickerLista"></div>
+      <button type="button" class="ios-sheet-more" id="docAfectadoPickerMas" hidden>Ver más</button>
+    </div>
+  </div>
+
+  <div id="motivoPicker" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel" role="dialog" aria-modal="true">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-back" id="motivoPickerCerrar">← Volver</button>
+        <h3>Motivo</h3>
+        <span style="width:56px;"></span>
+      </div>
+      <div class="ios-sheet-status">Elige el motivo de la nota</div>
+      <div class="ios-sheet-list" id="motivoPickerLista"></div>
+    </div>
+  </div>
+  <% } %>
+
+  <div id="clientePicker" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel" role="dialog" aria-modal="true">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-back" id="clientePickerCerrar">← Volver</button>
+        <h3>Clientes</h3>
+        <span style="width:56px;"></span>
+      </div>
+      <input type="search" id="clientePickerBusqueda" class="ios-sheet-search" placeholder="Nombre, DNI, RUC…" autocomplete="off" />
+      <div class="ios-sheet-status" id="clientePickerStatus">Busca o elige un cliente</div>
+      <div class="ios-sheet-list" id="clientePickerLista"></div>
+    </div>
+  </div>
+
+  <% if (lineasUiOrden) { %>
+  <div id="productoPicker" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel" role="dialog" aria-modal="true">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-back" id="productoPickerCerrar">← Volver</button>
+        <h3>Catálogo</h3>
+        <span style="width:56px;"></span>
+      </div>
+      <div class="ios-sheet-toolbar">
+        <input type="search" id="productoPickerBusqueda" class="ios-sheet-search" placeholder="Nombre, código o serie…" autocomplete="off" />
+        <select id="productoAlmacenSelect" class="ios-sheet-almacen-select" aria-label="Almacén"></select>
+        <button type="button" id="barcodeSerieBtn" class="ios-sheet-scan-btn" aria-label="Escanear serie" title="Escanear serie">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M4 7V5a1 1 0 0 1 1-1h2M20 7V5a1 1 0 0 0-1-1h-2M4 17v2a1 1 0 0 0 1 1h2M20 17v2a1 1 0 0 1-1 1h-2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M4 12h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+      <div class="ios-sheet-status" id="productoPickerStatus">Toca un producto para agregarlo</div>
+      <div class="ios-sheet-list" id="productoPickerLista"></div>
+    </div>
+  </div>
+
+  <div id="seriePicker" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel" role="dialog" aria-modal="true">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-back" id="seriePickerCerrar">← Volver</button>
+        <h3 id="seriePickerTitulo">Elegir serie</h3>
+        <span style="width:44px;"></span>
+      </div>
+      <input type="search" id="seriePickerBusqueda" class="ios-sheet-search" placeholder="Buscar número de serie…" autocomplete="off" />
+      <div class="ios-sheet-status" id="seriePickerStatus">Cargando series…</div>
+      <div class="ios-sheet-list" id="seriePickerLista"></div>
+      <button type="button" class="ios-btn-primary ios-serie-picker-add" id="seriePickerAgregar" disabled>
+        Agregar seleccionadas
+      </button>
+    </div>
+  </div>
+  <% } %>
+
+  <% if (lineasUiOrden) { %>
+  <div id="itemPuntualSheet" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="itemPuntualTitulo">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-back" id="itemPuntualCerrar">Cancelar</button>
+        <h3 id="itemPuntualTitulo">Nuevo ítem</h3>
+        <span style="width:56px;"></span>
+      </div>
+      <div class="ios-item-sunat">
+        <div class="ios-item-radios" role="radiogroup" aria-label="Tipo">
+          <label><input type="radio" name="item_kind" value="PRODUCT" /> Bien</label>
+          <label><input type="radio" name="item_kind" value="SERVICE" checked /> Servicio</label>
+        </div>
+        <label class="ios-field"><span>Cantidad</span>
+          <input type="number" id="itemCantidad" min="0.01" step="0.01" value="1" />
+        </label>
+        <label class="ios-field"><span>Unidad de medida</span>
+          <select id="itemUnidad">
+            <option value="NIU">UNIDAD (NIU)</option>
+            <option value="ZZ" selected>SERVICIO (ZZ)</option>
+            <option value="KGM">KILOGRAMO (KGM)</option>
+            <option value="LTR">LITRO (LTR)</option>
+            <option value="MTR">METRO (MTR)</option>
+            <option value="BX">CAJA (BX)</option>
+            <option value="SET">JUEGO (SET)</option>
+          </select>
+        </label>
+        <div class="ios-item-radios" role="radiogroup" aria-label="Código">
+          <label><input type="radio" name="item_codigo_tipo" value="usuario" checked /> Código de usuario</label>
+          <label><input type="radio" name="item_codigo_tipo" value="sunat" /> Código SUNAT</label>
+          <label><input type="radio" name="item_codigo_tipo" value="gtin" /> Código GTIN</label>
+        </div>
+        <label class="ios-field"><span>Código</span>
+          <input type="text" id="itemCodigo" maxlength="32" autocomplete="off" />
+        </label>
+        <label class="ios-field"><span>Descripción</span>
+          <textarea id="itemDescripcion" rows="3" maxlength="500"></textarea>
+        </label>
+        <div class="ios-item-radios">
+          <span>Impuesto bolsas plásticas</span>
+          <label><input type="radio" name="item_bolsas" value="si" /> SI</label>
+          <label><input type="radio" name="item_bolsas" value="no" checked /> NO</label>
+        </div>
+        <label class="ios-field"><span>Valor unitario (sin IGV)</span>
+          <input type="number" id="itemValor" min="0" step="0.01" value="0" />
+        </label>
+        <label class="ios-field"><span>Descuento</span>
+          <input type="number" id="itemDescuento" min="0" step="0.01" value="0" />
+        </label>
+        <label class="ios-field"><span>ISC</span>
+          <select id="itemIsc">
+            <option value="">— Sin ISC —</option>
+            <option value="01">Sistema al valor</option>
+            <option value="02">Aplicación del monto fijo</option>
+          </select>
+        </label>
+        <div class="ios-item-radios" role="radiogroup" aria-label="IGV">
+          <span>IGV</span>
+          <label><input type="radio" name="item_igv_pct" value="18" checked /> 18 %</label>
+          <label><input type="radio" name="item_igv_pct" value="10.5" /> 10.5 %</label>
+          <label><input type="radio" name="item_afe" value="10" checked /> Gravado</label>
+          <label><input type="radio" name="item_afe" value="20" /> Exonerado</label>
+          <label><input type="radio" name="item_afe" value="30" /> Inafecto</label>
+        </div>
+        <label class="ios-field"><span>ICBPER (bolsas)</span>
+          <select id="itemIcbper">
+            <option value="">— Sin ICBPER —</option>
+            <option value="icbper">Con impuesto a las bolsas</option>
+          </select>
+        </label>
+        <p class="ios-item-total" id="itemTotalLbl">Importe total del ítem: S/ 0.00</p>
+        <p class="ios-field-hint" id="itemPuntualAviso">Si marcas bolsas, descuento, ISC, IGV 10.5 % o ICBPER, el ítem no se agrega: el XML todavía no los declara.</p>
+        <button type="button" class="ios-btn-primary" id="itemPuntualAceptar">Aceptar</button>
+      </div>
+    </div>
+  </div>
+  <% } %>
+
+  <% if (tipoKey === 'FACTURA' || tipoKey === 'BOLETA') { %>
+  <div id="feDocManualPicker" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel" role="dialog" aria-modal="true">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-back" id="feDocManualCerrar">← Volver</button>
+        <h3>Documento manual</h3>
+        <span style="width:56px;"></span>
+      </div>
+      <div class="ios-sheet-status">Tipo, RUC emisor, serie y número · útil para GRE de otras empresas</div>
+      <div style="padding:0 16px 16px;display:flex;flex-direction:column;gap:12px;">
+        <label class="ios-field">
+          <span>Tipo</span>
+          <select id="feManualTipo">
+            <option value="09">GRE remitente</option>
+            <option value="31">GRE transportista</option>
+            <option value="01">Factura electrónica</option>
+            <option value="03">Boleta de venta</option>
+          </select>
+        </label>
+        <label class="ios-field">
+          <span>RUC emisor</span>
+          <input type="text" id="feManualEmisor" inputmode="numeric" maxlength="11" value="<%= (typeof companyRuc !== 'undefined' && companyRuc) ? companyRuc : '' %>" />
+          <small class="ios-field-hint">RUC de quien emitió el documento (tercero si no lo tienes en Easy).</small>
+        </label>
+        <div class="ios-inline">
+          <label class="ios-field">
+            <span>Serie</span>
+            <input type="text" id="feManualSerie" maxlength="4" placeholder="T001" autocomplete="off" />
+          </label>
+          <label class="ios-field">
+            <span>Número</span>
+            <input type="text" id="feManualNumero" maxlength="8" inputmode="numeric" placeholder="123" autocomplete="off" />
+          </label>
+        </div>
+        <button type="button" class="ios-btn-primary" id="feDocManualAgregar">Agregar</button>
+      </div>
+    </div>
+  </div>
+  <% } %>
+
+  <%- include('../../partials/app-emit-loading') %>
+  <%- include('../../partials/app-tabbar', { active: active, appBase: appBase }) %>
+  <script type="application/json" id="emitir-clientes-data"><%- clientesJson %></script>
+  <script type="application/json" id="emitir-catalogo-data"><%- catalogoJson %></script>
+  <script type="application/json" id="emitir-almacenes-data"><%- almacenesJson %></script>
+  <script type="application/json" id="emitir-lineas-data"><%- lineasInicialesJson %></script>
+  <script type="application/json" id="emitir-docs-afectados-data"><%- JSON.stringify(docsAfectados || { items: [], total: 0, has_more: false, next_offset: 0 }) %></script>
+  <script type="application/json" id="emitir-motivos-data"><%- JSON.stringify(motivosNota || []) %></script>
+  <script src="/js/app-emit-loading.js"></script>
+  <script src="/js/app-emit-imagenes.js"></script>
+  <%- include('../../partials/app-barcode-serie') %>
+  <script src="/js/app-barcode-serie.js?v=scan-emit"></script>
+  <script src="/js/app-emitir.js?v=scan-emit"></script>
+</body>
+</html>

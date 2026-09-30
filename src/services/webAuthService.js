@@ -1,11 +1,14 @@
 const bcrypt = require('bcryptjs');
 const usuarioModel = require('../models/usuarioModel');
 
+const ROLES_WEB = new Set(['SUPER_ADMIN', 'ADMIN', 'USUARIO']);
+
 /**
- * Login del panel web: misma tabla usuarios, solo rol ADMIN activo.
- * No usa JWT (eso es la app móvil); usa sesión cookie.
+ * Login web compartido (/login):
+ * - SUPER_ADMIN → panel /admin
+ * - ADMIN / USUARIO (empresa) → dashboard /app
  */
-async function loginWebAdmin({ email, contrasena }) {
+async function loginWebUser({ email, contrasena }) {
   const normalizedEmail = String(email || '').trim().toLowerCase();
   const user = await usuarioModel.findByEmail(normalizedEmail);
 
@@ -21,8 +24,20 @@ async function loginWebAdmin({ email, contrasena }) {
     throw err;
   }
 
-  if (user.rol !== 'ADMIN') {
-    const err = new Error('Solo administradores pueden acceder al panel web');
+  if (!ROLES_WEB.has(user.rol)) {
+    const err = new Error('Tu rol no tiene acceso al panel web');
+    err.status = 403;
+    throw err;
+  }
+
+  if (user.rol === 'ADMIN' && !user.company?.ruc) {
+    const err = new Error('Tu usuario ADMIN no tiene empresa asignada');
+    err.status = 403;
+    throw err;
+  }
+
+  if (user.rol === 'USUARIO' && !user.company?.ruc) {
+    const err = new Error('Tu usuario no tiene empresa asignada');
     err.status = 403;
     throw err;
   }
@@ -34,12 +49,29 @@ async function loginWebAdmin({ email, contrasena }) {
     throw err;
   }
 
+  const entornoRaw = user._dbEntorno || user.company?.entorno || 'beta';
+  const companyEntorno = (String(entornoRaw).toLowerCase() === 'prod'
+    || String(entornoRaw).toLowerCase() === 'production')
+    ? 'prod'
+    : 'beta';
+
   return {
     id: user.id,
     email: user.email,
     rol: user.rol,
     estado: user.estado,
+    companyId: user.companyId ? String(user.companyId) : null,
+    companyRuc: user.company?.ruc || null,
+    companyNombre: user.company?.nombreComercial || user.company?.nombre || null,
+    companyEntorno,
+    almacenId: user.almacenId != null ? String(user.almacenId) : null,
+    almacenNombre: user.almacen?.nombre || null,
   };
 }
 
-module.exports = { loginWebAdmin };
+/** @deprecated alias */
+async function loginWebAdmin(opts) {
+  return loginWebUser(opts);
+}
+
+module.exports = { loginWebUser, loginWebAdmin, ROLES_WEB };

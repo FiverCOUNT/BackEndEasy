@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title><%= title %> — BackEnd Easy</title>
-  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/style.css?v=20260926panel" />
 </head>
 <body>
   <header class="header">
@@ -22,18 +22,19 @@
           <h2><%= title %></h2>
           <p class="api-hint">ID #<%= usuario.id %> — <%= usuario.email %></p>
         </div>
-        <a href="/usuarios" class="btn-link btn-secondary">← Volver al listado</a>
+        <a href="<%= adminBase %>/usuarios" class="btn-link btn-secondary">← Volver al listado</a>
       </div>
 
       <% if (error) { %>
         <div class="message error"><%= error %></div>
       <% } %>
 
-      <form class="form" method="POST" action="/usuarios/<%= usuario.id %>" autocomplete="off">
+      <form class="form" method="POST" action="<%= adminBase %>/usuarios/<%= usuario.id %>" autocomplete="off">
+        <input type="hidden" name="entorno" value="<%= typeof entorno !== 'undefined' ? entorno : 'prod' %>" />
         <%- include('_form', { form, companies, almacenes, estados, roles, isEdit }) %>
         <div class="form-actions">
           <button type="submit">Guardar cambios</button>
-          <a href="/usuarios" class="btn-link btn-secondary">Cancelar</a>
+          <a href="<%= adminBase %>/usuarios" class="btn-link btn-secondary">Cancelar</a>
         </div>
       </form>
     </section>

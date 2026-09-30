@@ -154,28 +154,49 @@ function parseBody(body) {
   };
 }
 
-async function getSingleton() {
-  let row = await prisma.configuracion.findUnique({ where: { id: CONFIG_ID } });
-  if (!row) {
-    row = await prisma.configuracion.create({
-      data: { id: CONFIG_ID, ...DEFAULTS, actualizadoEn: new Date().toISOString().slice(0, 19) },
-    });
-  }
-  return row;
+async function getSingleton(entorno) {
+  const { runWithEntorno } = require('../config/prisma');
+  const db = entorno === 'beta' ? 'beta' : 'prod';
+  return runWithEntorno(db, async () => {
+    let row = await prisma.configuracion.findUnique({ where: { id: CONFIG_ID } });
+    if (!row) {
+      row = await prisma.configuracion.create({
+        data: { id: CONFIG_ID, ...DEFAULTS, actualizadoEn: new Date().toISOString().slice(0, 19) },
+      });
+    }
+    return row;
+  });
 }
 
-async function updateFromBody(body) {
-  const data = parseBody(body);
-  return prisma.configuracion.upsert({
-    where: { id: CONFIG_ID },
-    create: { id: CONFIG_ID, ...data },
-    update: data,
+async function updateFromBody(body, { logoFile = null, entorno = 'prod' } = {}) {
+  const { runWithEntorno } = require('../config/prisma');
+  const db = entorno === 'beta' ? 'beta' : 'prod';
+  return runWithEntorno(db, async () => {
+    const data = parseBody(body);
+
+    if (logoFile?.buffer?.length) {
+      const easyLogoService = require('../services/easyLogoService');
+      const uploaded = await easyLogoService.uploadEasyLogo(logoFile);
+      if (uploaded?.url) {
+        data.urlLogo = uploaded.url;
+      }
+    }
+
+    return prisma.configuracion.upsert({
+      where: { id: CONFIG_ID },
+      create: { id: CONFIG_ID, ...data },
+      update: data,
+    });
   });
 }
 
 function toApiMobile(row) {
   const c = toPublic(row);
   return {
+    nombre_app: c.nombreApp,
+    mensaje_bienvenida: c.mensajeBienvenida,
+    url_logo: c.urlLogo,
+    logo_url: c.urlLogo,
     soporte: {
       telefonos: c.telefonosSoporte || [],
       whatsapp: c.whatsappSoporte,

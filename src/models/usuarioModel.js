@@ -1,6 +1,16 @@
 const prisma = require('../config/prisma');
+const { runWithEntorno, isProdEntorno } = require('../config/prisma');
 
-const ROLES = ['ADMIN', 'USUARIO'];
+const ROLES = ['SUPER_ADMIN', 'ADMIN', 'USUARIO'];
+
+const COMPANY_SELECT = {
+  id: true,
+  nombre: true,
+  nombreComercial: true,
+  ruc: true,
+  activo: true,
+  entorno: true,
+};
 
 function toPublicUser(user) {
   if (!user) return null;
@@ -14,30 +24,77 @@ function toPublicUser(user) {
     almacenNombre: user.almacen?.nombre ?? null,
     almacenCodigo: user.almacen?.codigo ?? null,
     lastUpdated: user.lastUpdated.toString(),
+    companyEntorno: user._dbEntorno || user.company?.entorno || 'beta',
   };
 }
 
-async function findByEmail(email) {
+function attachDbEntorno(user, entorno) {
+  if (!user) return null;
+  user._dbEntorno = isProdEntorno(entorno) ? 'prod' : 'beta';
+  return user;
+}
+
+async function findByEmailInClient(email) {
   const trimmed = (email || '').trim();
   const normalized = trimmed.toLowerCase();
   const include = {
-    company: { select: { id: true, nombre: true, ruc: true } },
+    company: { select: COMPANY_SELECT },
     almacen: { select: { id: true, nombre: true, codigo: true, companyRuc: true } },
   };
 
-  let user = await prisma.usuario.findUnique({
+  const findUniqueUser = () => prisma.usuario.findUnique({
     where: { email: normalized },
     include,
   });
+  let user = prisma.withDbRetry
+    ? await prisma.withDbRetry(findUniqueUser)
+    : await findUniqueUser();
 
-  if (!user && trimmed !== normalized) {
+  // Compat: emails guardados con mayúsculas (p. ej. Mili@gmail.com).
+  if (!user && trimmed) {
+    user = await prisma.usuario.findFirst({
+      where: { email: { equals: normalized } },
+      include,
+    });
+  }
+  if (!user && trimmed && trimmed !== normalized) {
     user = await prisma.usuario.findUnique({
       where: { email: trimmed },
       include,
     });
   }
+  if (!user && normalized) {
+    const candidates = await prisma.usuario.findMany({
+      where: { email: { contains: normalized.split('@')[0] || normalized } },
+      include,
+      take: 20,
+    });
+    user = candidates.find((u) => String(u.email || '').toLowerCase() === normalized) || null;
+  }
 
   return user;
+}
+
+/**
+ * Busca en beta y prod. Prefiere el match cuyo company.entorno coincide con la DB.
+ * SUPER_ADMIN sin empresa → prod.
+ */
+async function findByEmail(email) {
+  const [betaUser, prodUser] = await Promise.all([
+    runWithEntorno('beta', () => findByEmailInClient(email)).then((u) => attachDbEntorno(u, 'beta')),
+    runWithEntorno('prod', () => findByEmailInClient(email)).then((u) => attachDbEntorno(u, 'prod')),
+  ]);
+
+  const candidates = [betaUser, prodUser].filter(Boolean);
+  if (!candidates.length) return null;
+  if (candidates.length === 1) return candidates[0];
+
+  const matched = candidates.find((u) => {
+    if (!u.company) return u._dbEntorno === 'prod'; // SUPER_ADMIN → prod
+    const companyProd = isProdEntorno(u.company.entorno);
+    return companyProd === (u._dbEntorno === 'prod');
+  });
+  return matched || prodUser || betaUser;
 }
 
 async function findByEmailExceptId(email, id) {
@@ -46,24 +103,47 @@ async function findByEmailExceptId(email, id) {
   });
 }
 
-async function findById(id) {
+async function findByIdInActive(id) {
   return prisma.usuario.findUnique({
     where: { id },
     include: {
-      company: { select: { id: true, nombre: true, ruc: true } },
+      company: { select: COMPANY_SELECT },
       almacen: { select: { id: true, nombre: true, codigo: true, companyRuc: true } },
     },
   });
 }
 
+async function findById(id, entornoHint) {
+  if (entornoHint) {
+    const user = await runWithEntorno(entornoHint, () => findByIdInActive(id));
+    return attachDbEntorno(user, entornoHint);
+  }
+  // Si ya hay contexto ALS (middleware), usarlo.
+  const active = await findByIdInActive(id);
+  if (active) return attachDbEntorno(active, active.company?.entorno || 'prod');
+
+  const [betaUser, prodUser] = await Promise.all([
+    runWithEntorno('beta', () => findByIdInActive(id)).then((u) => attachDbEntorno(u, 'beta')),
+    runWithEntorno('prod', () => findByIdInActive(id)).then((u) => attachDbEntorno(u, 'prod')),
+  ]);
+  return prodUser || betaUser;
+}
+
 async function findByRefreshToken(refreshToken) {
-  return prisma.usuario.findFirst({
+  const include = {
+    company: { select: COMPANY_SELECT },
+    almacen: { select: { id: true, nombre: true, codigo: true, companyRuc: true } },
+  };
+  const findOne = () => prisma.usuario.findFirst({
     where: { refreshToken },
-    include: {
-      company: { select: { id: true, nombre: true, ruc: true } },
-      almacen: { select: { id: true, nombre: true, codigo: true, companyRuc: true } },
-    },
+    include,
   });
+
+  const [betaUser, prodUser] = await Promise.all([
+    runWithEntorno('beta', findOne).then((u) => attachDbEntorno(u, 'beta')),
+    runWithEntorno('prod', findOne).then((u) => attachDbEntorno(u, 'prod')),
+  ]);
+  return prodUser || betaUser;
 }
 
 function buildSearchWhere(q) {
@@ -100,12 +180,29 @@ function mapListRow(row) {
     ...toPublicUser(row),
     companyNombre: row.company?.nombre ?? null,
     companyRuc: row.company?.ruc ?? null,
+    companyEntornoReal: row.company?.entorno || null,
     hasSession: Boolean(row.token),
   };
 }
 
-async function findPaginated({ q = '', page = 1, pageSize = 25, skip = 0 }) {
-  const where = buildSearchWhere(q);
+async function findPaginated({
+  q = '',
+  companyId = null,
+  page = 1,
+  pageSize = 25,
+  skip = 0,
+}) {
+  const searchWhere = buildSearchWhere(q);
+  const where = { ...searchWhere };
+
+  if (companyId === 'none') {
+    where.companyId = null;
+  } else if (companyId != null && companyId !== '') {
+    const id = Number(companyId);
+    if (Number.isInteger(id) && id > 0) {
+      where.companyId = BigInt(id);
+    }
+  }
 
   const [total, rows] = await Promise.all([
     prisma.usuario.count({ where }),
@@ -115,7 +212,7 @@ async function findPaginated({ q = '', page = 1, pageSize = 25, skip = 0 }) {
       skip,
       take: pageSize,
       include: {
-        company: { select: { id: true, nombre: true, ruc: true } },
+        company: { select: { id: true, nombre: true, ruc: true, entorno: true } },
         almacen: { select: { id: true, nombre: true, codigo: true } },
       },
     }),
@@ -177,6 +274,101 @@ async function setEstado(id, estado) {
   return prisma.usuario.update({ where: { id }, data });
 }
 
+/** Usuarios de la empresa (para filtros de salidas/ingresos). */
+async function findByCompanyRuc(companyRuc, { soloActivos = true } = {}) {
+  const ruc = String(companyRuc || '').trim();
+  if (!ruc) return [];
+  const company = await prisma.company.findUnique({
+    where: { ruc },
+    select: { id: true },
+  });
+  if (!company) return [];
+
+  const rows = await prisma.usuario.findMany({
+    where: {
+      companyId: company.id,
+      ...(soloActivos ? { estado: 'ACTIVO' } : {}),
+    },
+    orderBy: { email: 'asc' },
+    select: { id: true, email: true, rol: true },
+  });
+
+  return rows.map((u) => {
+    const email = String(u.email || '').trim();
+    const local = email.split('@')[0] || email;
+    const nombre = local
+      .replace(/[._-]+/g, ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase())
+      .trim();
+    return {
+      id: u.id,
+      email,
+      nombre: nombre || email,
+      rol: u.rol,
+    };
+  });
+}
+
+function nombreDesdeEmail(email) {
+  const value = String(email || '').trim();
+  const local = value.split('@')[0] || value;
+  return local
+    .replace(/[._-]+/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+    .trim() || value;
+}
+
+function toGestionApi(row) {
+  if (!row) return null;
+  const email = String(row.email || '').trim();
+  return {
+    id: row.id,
+    email,
+    nombre: nombreDesdeEmail(email),
+    rol: row.rol,
+    estado: row.estado,
+    almacen_id: row.almacenId != null ? String(row.almacenId) : null,
+    almacen_nombre: row.almacen?.nombre ?? null,
+    almacenId: row.almacenId != null ? String(row.almacenId) : null,
+    almacenNombre: row.almacen?.nombre ?? null,
+  };
+}
+
+/** Usuarios de la empresa para gestión (ADMIN de empresa). Excluye SUPER_ADMIN. */
+async function findGestionByCompanyRuc(companyRuc) {
+  const ruc = String(companyRuc || '').trim();
+  if (!ruc) return [];
+  const company = await prisma.company.findUnique({
+    where: { ruc },
+    select: { id: true },
+  });
+  if (!company) return [];
+
+  const rows = await prisma.usuario.findMany({
+    where: {
+      companyId: company.id,
+      rol: { not: 'SUPER_ADMIN' },
+    },
+    orderBy: [{ rol: 'asc' }, { email: 'asc' }],
+    include: {
+      almacen: { select: { id: true, nombre: true, codigo: true } },
+    },
+  });
+  return rows.map(toGestionApi);
+}
+
+async function countAdminsActivos(companyId, exceptUserId = null) {
+  if (!companyId) return 0;
+  return prisma.usuario.count({
+    where: {
+      companyId: BigInt(companyId),
+      rol: 'ADMIN',
+      estado: 'ACTIVO',
+      ...(exceptUserId != null ? { id: { not: Number(exceptUserId) } } : {}),
+    },
+  });
+}
+
 async function remove(id) {
   return prisma.usuario.delete({ where: { id } });
 }
@@ -211,6 +403,10 @@ module.exports = {
   findById,
   findByRefreshToken,
   findPaginated,
+  findByCompanyRuc,
+  findGestionByCompanyRuc,
+  toGestionApi,
+  countAdminsActivos,
   create,
   update,
   setEstado,

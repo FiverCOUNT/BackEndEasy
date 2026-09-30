@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> · Easy</title>
+  <link rel="stylesheet" href="/css/app-ios.css" />
+</head>
+<body class="ios-app">
+  <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
+  <main class="ios-main">
+    <header class="ios-top">
+      <div>
+        <p class="ios-eyebrow"><%= companyNombre || 'Empresa' %></p>
+        <h1>Compras</h1>
+      </div>
+    </header>
+    <% if (flash) { %><div class="ios-flash <%= flash.type === 'error' ? 'is-error' : 'is-ok' %>"><%= flash.text %></div><% } %>
+
+    <%
+      function qs(extra) {
+        var p = (extra && extra.periodo != null) ? extra.periodo : periodo;
+        var params = {
+          periodo: p,
+          fecha: (extra && Object.prototype.hasOwnProperty.call(extra, 'fecha')) ? extra.fecha : (fecha || ''),
+          desde: (extra && Object.prototype.hasOwnProperty.call(extra, 'desde'))
+            ? extra.desde
+            : ((p === 'rango' || p === 'mes') ? (desde || '') : ''),
+          hasta: (extra && Object.prototype.hasOwnProperty.call(extra, 'hasta'))
+            ? extra.hasta
+            : ((p === 'rango' || p === 'mes') ? (hasta || '') : ''),
+          q: (extra && Object.prototype.hasOwnProperty.call(extra, 'q')) ? extra.q : (q || ''),
+          doc: (extra && Object.prototype.hasOwnProperty.call(extra, 'doc')) ? extra.doc : (doc || ''),
+        };
+        var parts = [];
+        Object.keys(params).forEach(function(k) {
+          if (params[k] == null || params[k] === '') return;
+          parts.push(encodeURIComponent(k) + '=' + encodeURIComponent(params[k]));
+        });
+        return parts.length ? ('?' + parts.join('&')) : '?';
+      }
+      var tipoIcon = { fact: '🧾', bol: '📄', nc: '↩', nd: '+', gre: '🚚', grt: '🚛', doc: '📋' };
+      var mesOn = periodo === 'rango' || periodo === 'mes' || periodo === 'fecha';
+    %>
+
+    <section class="ios-periodo-card">
+      <div class="ios-periodo-card-head">
+        <div>
+          <p class="ios-periodo-card-label">Periodo</p>
+          <strong class="ios-periodo-card-value"><%= periodoLabel %></strong>
+        </div>
+      </div>
+      <div class="ios-periodo-chips">
+        <a class="ios-chip <%= periodo === 'hoy' ? 'is-on' : '' %>" href="<%= appBase %>/compras<%= qs({ periodo: 'hoy', fecha: '', desde: '', hasta: '' }) %>">Hoy</a>
+        <a class="ios-chip <%= periodo === 'ayer' ? 'is-on' : '' %>" href="<%= appBase %>/compras<%= qs({ periodo: 'ayer', fecha: '', desde: '', hasta: '' }) %>">Ayer</a>
+        <a class="ios-chip <%= periodo === '7d' ? 'is-on' : '' %>" href="<%= appBase %>/compras<%= qs({ periodo: '7d', fecha: '', desde: '', hasta: '' }) %>">7 días</a>
+        <button type="button" class="ios-chip ios-chip-fecha <%= mesOn ? 'is-on' : '' %>" id="btnAbrirFecha" aria-haspopup="dialog">
+          Mes
+        </button>
+      </div>
+    </section>
+
+    <div class="ios-inline-actions ios-compras-sync" id="comprasSyncBar"
+      data-sync-url="<%= appBase %>/compras/sync"
+      data-periodo="<%= syncPeriodo || '' %>"
+      data-doc="<%= doc || '' %>">
+      <button type="button" class="ios-btn-primary" data-compras-sync data-force="1">
+        Sincronizar SUNAT<%= doc ? ' · ' + doc : '' %>
+      </button>
+    </div>
+
+    <form class="ios-filters ios-filters-comprobantes" method="GET" action="<%= appBase %>/compras" id="filtrosCompras">
+      <input type="hidden" name="periodo" id="filtroPeriodo" value="<%= periodo || 'hoy' %>" />
+      <input type="hidden" name="fecha" id="filtroFechaHidden" value="<%= fecha || '' %>" />
+      <input type="hidden" name="desde" id="filtroDesdeHidden" value="<%= desde || '' %>" />
+      <input type="hidden" name="hasta" id="filtroHastaHidden" value="<%= hasta || '' %>" />
+      <input type="hidden" name="doc" value="<%= doc || '' %>" />
+      <div class="ios-search">
+        <input type="search" name="q" value="<%= q || '' %>" placeholder="Buscar proveedor, serie…" autocomplete="off" />
+      </div>
+    </form>
+
+    <div class="ios-tipo-chips-row">
+      <div class="ios-tipo-chips" role="tablist" aria-label="Tipo de compra" id="compraTipoChips">
+        <% tiposFiltro.forEach(function(t) {
+          var on = doc === t.siglas;
+          var href = appBase + '/compras' + qs({ doc: t.siglas });
+        %>
+          <a class="ios-tipo-chip is-<%= t.siglas.toLowerCase() %> <%= on ? 'is-on' : '' %>" href="<%= href %>"<%= on ? ' aria-current="true"' : '' %>>
+            <span class="ios-tipo-dot" aria-hidden="true"></span>
+            <strong><%= t.siglas %></strong>
+            <small><%= t.label %></small>
+          </a>
+        <% }) %>
+      </div>
+      <% if (isWebAdmin) { %>
+      <button type="button" class="ios-comp-select-toggle" id="btnCompSelectMode" aria-pressed="false" title="Seleccionar para eliminar">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="3 6 5 6 21 6"/>
+          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+          <path d="M10 11v6M14 11v6"/>
+          <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+        </svg>
+      </button>
+      <% } %>
+    </div>
+
+    <% if (isWebAdmin) { %>
+    <div class="ios-comp-bulk-bar" id="compBulkBar" hidden>
+      <span id="compBulkCount">0 seleccionados</span>
+      <div class="ios-comp-bulk-actions">
+        <button type="button" class="ios-btn-secondary" id="btnCompSelectCancel">Cancelar</button>
+        <button type="button" class="ios-btn-danger" id="btnCompDelete" disabled>Eliminar</button>
+      </div>
+    </div>
+    <% } %>
+
+    <p class="ios-count"><%= total %> compra<%= total === 1 ? '' : 's' %></p>
+    <% if (!items.length) { %>
+      <section class="ios-card-empty">
+        <h2>Sin compras</h2>
+        <p><%= doc ? 'No hay compras de este tipo en el periodo.' : 'No hay compras en el periodo.' %></p>
+        <% if (periodo === 'hoy') { %>
+          <p class="ios-muted-hint">Prueba <a href="<%= appBase %>/compras<%= qs({ periodo: 'ayer', fecha: '', desde: '', hasta: '' }) %>">Ayer</a>, <a href="<%= appBase %>/compras<%= qs({ periodo: '7d', fecha: '', desde: '', hasta: '' }) %>">7 días</a> o <button type="button" class="ios-linkish" id="btnAbrirFechaEmpty">Mes</button>.</p>
+        <% } %>
+      </section>
+    <% } else { %>
+      <div class="ios-list ios-comp-list" id="compList">
+        <% items.forEach(function(it) {
+          var tipoClass = ({
+            '01': 'fact', '03': 'bol', '07': 'nc', '08': 'nd', '09': 'gre', '31': 'grt'
+          })[it.tipoDoc] || 'doc';
+          var estadoClass = String(it.estado || '').toUpperCase();
+          if (estadoClass.indexOf('ACEPT') >= 0) estadoClass = 'ok';
+          else if (estadoClass.indexOf('RECHAZ') >= 0) estadoClass = 'bad';
+          else if (estadoClass.indexOf('ENVIA') >= 0 || estadoClass.indexOf('PEND') >= 0) estadoClass = 'warn';
+          else estadoClass = 'muted';
+        %>
+          <button
+            type="button"
+            class="ios-comp-card is-<%= tipoClass %>"
+            data-comp-open
+            data-id="<%= it.id %>"
+            data-ref="<%= it.ref %>"
+            data-tipo="<%= it.tipoLabel %>"
+            data-tipo-class="<%= tipoClass %>"
+            data-proveedor="<%= it.proveedor %>"
+            data-proveedor-doc="<%= it.proveedorDoc || '' %>"
+            data-fecha="<%= it.fecha %>"
+            data-estado="<%= it.estado %>"
+            data-total="<%= it.total %>"
+            data-subtotal="<%= it.subtotal || '' %>"
+            data-igv="<%= it.igv || '' %>"
+            data-lineas="<%= it.lineas || 0 %>"
+            data-es-gre="<%= it.esGre ? '1' : '0' %>"
+            data-pdf="<%= it.pdfUrl || '' %>"
+            data-xml="<%= it.xmlUrl || '' %>"
+            data-obs="<%= (it.observacion || '').replace(/"/g, '&quot;') %>"
+          >
+            <% if (isWebAdmin) { %><span class="ios-comp-check" aria-hidden="true"></span><% } %>
+            <span class="ios-comp-accent" aria-hidden="true"></span>
+            <span class="ios-comp-card-main">
+              <span class="ios-comp-card-top">
+                <span class="ios-comp-identity">
+                  <span class="ios-comp-avatar" aria-hidden="true"><%= tipoIcon[tipoClass] || '📋' %></span>
+                  <span class="ios-comp-identity-text">
+                    <strong class="ios-comp-cliente"><%= it.proveedor %></strong>
+                    <small class="ios-comp-ref-tipo"><%= it.ref %> · <%= it.tipoLabel %></small>
+                  </span>
+                </span>
+                <span class="ios-comp-total"><%= it.total %></span>
+              </span>
+              <span class="ios-comp-meta">
+                <% if (it.proveedorDoc) { %><span><%= it.proveedorDoc %></span><span>·</span><% } %>
+                <span><%= it.fecha %></span>
+                <% if (it.lineas) { %><span>·</span><span><%= it.lineas %> línea(s)</span><% } %>
+              </span>
+              <span class="ios-comp-foot">
+                <span class="ios-comp-estado is-<%= estadoClass %>"><%= it.estado %></span>
+                <span class="ios-comp-open-hint">Ver detalle ›</span>
+              </span>
+            </span>
+          </button>
+        <% }); %>
+      </div>
+      <%- include('../../partials/app-load-more', { loadMore: loadMore }) %>
+    <% } %>
+  </main>
+
+  <div id="fechaSheet" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel ios-fecha-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="fechaSheetTitulo">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-action" id="fechaSheetCancelar" aria-label="Cancelar">✕</button>
+        <h3 id="fechaSheetTitulo">Mes</h3>
+        <button type="button" class="ios-sheet-action ios-sheet-action-text" id="fechaSheetListo">Listo</button>
+      </div>
+      <p class="ios-fecha-sheet-hint">Del 1 al último día (o hoy si es el mes actual)</p>
+      <div class="ios-date-wheel is-month-year" id="fechaWheel" aria-label="Selector de mes">
+        <div class="ios-date-wheel-fade ios-date-wheel-fade-top" aria-hidden="true"></div>
+        <div class="ios-date-wheel-fade ios-date-wheel-fade-bottom" aria-hidden="true"></div>
+        <div class="ios-date-wheel-highlight" aria-hidden="true"></div>
+        <div class="ios-date-wheel-unit" data-col="month">
+          <button type="button" class="ios-date-wheel-step is-up" data-dir="-1" aria-label="Mes anterior">▴</button>
+          <div class="ios-date-wheel-col">
+            <ul class="ios-date-wheel-list" id="fechaWheelMonth"></ul>
+          </div>
+          <button type="button" class="ios-date-wheel-step is-down" data-dir="1" aria-label="Mes siguiente">▾</button>
+        </div>
+        <div class="ios-date-wheel-unit" data-col="year">
+          <button type="button" class="ios-date-wheel-step is-up" data-dir="-1" aria-label="Año anterior">▴</button>
+          <div class="ios-date-wheel-col">
+            <ul class="ios-date-wheel-list" id="fechaWheelYear"></ul>
+          </div>
+          <button type="button" class="ios-date-wheel-step is-down" data-dir="1" aria-label="Año siguiente">▾</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="compSheet" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel ios-comp-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="compSheetTitulo">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-back" id="compSheetCerrar">← Volver</button>
+        <h3 id="compSheetTitulo">Detalle</h3>
+        <span style="width:56px;"></span>
+      </div>
+      <div class="ios-comp-sheet-body" id="compSheetBody">
+        <div class="ios-comp-sheet-hero" id="compSheetHero">
+          <span class="ios-comp-avatar" id="compSheetAvatar">📋</span>
+          <div>
+            <strong id="compSheetCliente">—</strong>
+            <small id="compSheetRef">—</small>
+          </div>
+          <div class="ios-comp-sheet-total" id="compSheetTotal">—</div>
+        </div>
+        <div class="ios-comp-sheet-meta" id="compSheetMeta"></div>
+        <div class="ios-comp-sheet-totales" id="compSheetTotales"></div>
+        <div class="ios-comp-sheet-lineas" id="compSheetLineas">
+          <p class="ios-comp-sheet-loading">Cargando detalle…</p>
+        </div>
+        <div class="ios-comp-sheet-actions" id="compShareBar">
+          <a class="ios-comp-action ios-comp-action-icon" id="compActionPdf" target="_blank" rel="noopener" title="PDF">
+            <span class="ios-comp-action-glyph" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <path d="M9 13h6M9 17h4"/>
+              </svg>
+            </span>
+            <strong>PDF</strong>
+          </a>
+          <a class="ios-comp-action ios-comp-action-icon" id="compActionXml" target="_blank" rel="noopener" title="XML" hidden>
+            <span class="ios-comp-action-glyph" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 7l8 5 8-5"/>
+                <path d="M4 7v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7"/>
+                <path d="M4 7l8-4 8 4"/>
+              </svg>
+            </span>
+            <strong>XML</strong>
+          </a>
+        </div>
+        <p class="ios-comp-sheet-status" id="compSheetStatus" hidden></p>
+      </div>
+    </div>
+  </div>
+
+  <%- include('../../partials/app-tabbar', { active: active, appBase: appBase }) %>
+  <script>
+    (function () {
+      var form = document.getElementById('filtrosCompras');
+      var periodoHidden = document.getElementById('filtroPeriodo');
+      var fechaHidden = document.getElementById('filtroFechaHidden');
+      var desdeHidden = document.getElementById('filtroDesdeHidden');
+      var hastaHidden = document.getElementById('filtroHastaHidden');
+      var btnFecha = document.getElementById('btnAbrirFecha');
+      var btnFechaEmpty = document.getElementById('btnAbrirFechaEmpty');
+      var fechaSheet = document.getElementById('fechaSheet');
+      var appBase = '<%= appBase %>';
+      var hoyIso = '<%= hoyIso || "" %>';
+      var desdeInicial = (desdeHidden && desdeHidden.value) || hoyIso;
+
+      var syncBar = document.getElementById('comprasSyncBar');
+      if (syncBar) {
+        syncBar.addEventListener('click', function (e) {
+          var btn = e.target.closest('[data-compras-sync]');
+          if (!btn) return;
+          var url = syncBar.getAttribute('data-sync-url');
+          if (!url) return;
+          var force = btn.getAttribute('data-force') === '1';
+          var periodo = syncBar.getAttribute('data-periodo') || '';
+          var doc = syncBar.getAttribute('data-doc') || '';
+          var buttons = syncBar.querySelectorAll('[data-compras-sync]');
+          var prevLabels = [];
+          buttons.forEach(function (b, i) {
+            prevLabels[i] = b.textContent;
+            b.disabled = true;
+            if (b === btn) b.textContent = 'Sincronizando…';
+          });
+          if (typeof window.showEmitLoading === 'function') {
+            window.showEmitLoading(
+              'Sincronizando SUNAT…',
+              'Descargando comprobantes. No salgas ni cierres esta ventana.',
+              { lockNav: true }
+            );
+          }
+          fetch(url, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+              Accept: 'application/json',
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ periodo: periodo, force: force, doc: doc || 'FACT' }),
+          })
+            .then(function (res) {
+              var ctype = (res.headers.get('content-type') || '').toLowerCase();
+              if (ctype.indexOf('application/json') === -1) {
+                // Nginx 504 / login HTML cuando el scrape tarda o la sesión cayó.
+                if (res.status === 504 || res.status === 502) {
+                  throw new Error(
+                    'La sincronización tardó demasiado (proxy). Espera 1–2 min y vuelve a intentar; el scrape GRE puede pasar de 1 minuto.'
+                  );
+                }
+                if (res.status === 401 || res.status === 403 || res.redirected) {
+                  throw new Error('Tu sesión expiró. Recarga e inicia sesión de nuevo.');
+                }
+                throw new Error(
+                  'El servidor no respondió JSON (HTTP ' + res.status + '). Si tardó mucho, reintenta; si no, recarga e inicia sesión.'
+                );
+              }
+              return res.json().then(function (body) {
+                if (!res.ok) throw new Error((body && body.message) || 'Error al sincronizar');
+                return body;
+              });
+            })
+            .then(function (body) {
+              var msg = (body && body.message) || 'Sincronización OK';
+              var params = new URLSearchParams(window.location.search);
+              params.set('msg', msg);
+              params.set('tipo', 'success');
+              params.set('doc', doc || 'FACT');
+              // Quitar beforeunload antes de redirigir (si no, el navegador pide confirmación).
+              if (typeof window.releaseEmitLoadingNav === 'function') {
+                window.releaseEmitLoadingNav();
+              }
+              window.location.href = appBase + '/compras?' + params.toString();
+            })
+            .catch(function (err) {
+              if (typeof window.hideEmitLoading === 'function') {
+                window.hideEmitLoading();
+              }
+              buttons.forEach(function (b, i) {
+                b.disabled = false;
+                b.textContent = prevLabels[i] || b.textContent;
+              });
+              window.alert(err.message || 'Error al sincronizar');
+            });
+        });
+      }
+
+      var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'set', 'oct', 'nov', 'dic'];
+      var ITEM_H = 40;
+      var wheelState = { month: 1, year: 2026 };
+
+      function pad2(n) { return String(n).padStart(2, '0'); }
+
+      function parseIso(iso) {
+        var m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!m) return null;
+        return { year: +m[1], month: +m[2], day: +m[3] };
+      }
+
+      function daysInMonth(year, month) {
+        return new Date(Date.UTC(year, month, 0)).getUTCDate();
+      }
+
+      function toIso(y, m, d) {
+        return y + '-' + pad2(m) + '-' + pad2(d);
+      }
+
+      function buildCol(listEl, values, formatter) {
+        if (!listEl) return;
+        var html = '<li class="ios-date-wheel-spacer" aria-hidden="true"></li><li class="ios-date-wheel-spacer" aria-hidden="true"></li>';
+        values.forEach(function (v) {
+          html += '<li class="ios-date-wheel-item" data-value="' + v + '">' + (formatter ? formatter(v) : v) + '</li>';
+        });
+        html += '<li class="ios-date-wheel-spacer" aria-hidden="true"></li><li class="ios-date-wheel-spacer" aria-hidden="true"></li>';
+        listEl.innerHTML = html;
+      }
+
+      function rebuildAll() {
+        var months = [];
+        for (var m = 1; m <= 12; m++) months.push(m);
+        buildCol(document.getElementById('fechaWheelMonth'), months, function (v) { return MESES[v - 1]; });
+
+        var years = [];
+        var yMax = (parseIso(hoyIso) || { year: new Date().getFullYear() }).year;
+        for (var y = yMax - 8; y <= yMax; y++) years.push(y);
+        buildCol(document.getElementById('fechaWheelYear'), years);
+
+        snapTo('month', wheelState.month, true);
+        snapTo('year', wheelState.year, true);
+      }
+
+      function colEl(name) {
+        return document.querySelector('#fechaWheel .ios-date-wheel-unit[data-col="' + name + '"] .ios-date-wheel-col');
+      }
+
+      function snapTo(name, value, instant) {
+        var col = colEl(name);
+        if (!col) return;
+        var item = col.querySelector('.ios-date-wheel-item[data-value="' + value + '"]');
+        if (!item) return;
+        var top = item.offsetTop - ITEM_H * 2;
+        col._snapLock = true;
+        if (instant) col.scrollTop = top;
+        else col.scrollTo({ top: top, behavior: 'smooth' });
+        wheelState[name] = Number(value);
+        window.setTimeout(function () { col._snapLock = false; }, instant ? 0 : 180);
+      }
+
+      function readCol(name) {
+        var col = colEl(name);
+        if (!col) return wheelState[name];
+        var idx = Math.round(col.scrollTop / ITEM_H);
+        var items = col.querySelectorAll('.ios-date-wheel-item');
+        var item = items[Math.max(0, Math.min(items.length - 1, idx))];
+        if (!item) return wheelState[name];
+        return Number(item.getAttribute('data-value'));
+      }
+
+      function syncWheelFromDom() {
+        wheelState.month = readCol('month');
+        wheelState.year = readCol('year');
+      }
+
+      function stepCol(name, dir) {
+        var col = colEl(name);
+        if (!col) return;
+        var items = Array.prototype.slice.call(col.querySelectorAll('.ios-date-wheel-item'));
+        if (!items.length) return;
+        syncWheelFromDom();
+        var current = Number(wheelState[name]);
+        var idx = items.findIndex(function (el) {
+          return Number(el.getAttribute('data-value')) === current;
+        });
+        if (idx < 0) idx = 0;
+        var next = Math.max(0, Math.min(items.length - 1, idx + dir));
+        var val = Number(items[next].getAttribute('data-value'));
+        snapTo(name, val, false);
+      }
+
+      function onColScroll(name) {
+        var col = colEl(name);
+        if (!col || col._snapLock) return;
+        window.clearTimeout(col._scrollEndTimer);
+        col._scrollEndTimer = window.setTimeout(function () {
+          if (col._snapLock) return;
+          var v = readCol(name);
+          wheelState[name] = v;
+          snapTo(name, v, true);
+        }, 80);
+      }
+
+      function abrirFechaSheet() {
+        if (!fechaSheet) return;
+        var base = parseIso(desdeHidden && desdeHidden.value)
+          || parseIso(hastaHidden && hastaHidden.value)
+          || parseIso(desdeInicial)
+          || parseIso(hoyIso)
+          || { year: new Date().getFullYear(), month: new Date().getMonth() + 1, day: 1 };
+        // No permitir mes futuro
+        var hoy = parseIso(hoyIso);
+        if (hoy && (base.year > hoy.year || (base.year === hoy.year && base.month > hoy.month))) {
+          base = { year: hoy.year, month: hoy.month, day: 1 };
+        }
+        wheelState = { month: base.month, year: base.year };
+        fechaSheet.hidden = false;
+        fechaSheet.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('ios-sheet-open');
+        document.body.style.overflow = 'hidden';
+        rebuildAll();
+        requestAnimationFrame(function () {
+          snapTo('month', wheelState.month, true);
+          snapTo('year', wheelState.year, true);
+        });
+      }
+
+      function cerrarFechaSheet() {
+        if (!fechaSheet) return;
+        fechaSheet.hidden = true;
+        fechaSheet.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('ios-sheet-open');
+        document.body.style.overflow = '';
+      }
+
+      function aplicarFecha() {
+        syncWheelFromDom();
+        var y = Number(wheelState.year);
+        var m = Number(wheelState.month);
+        if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12) {
+          window.alert('Elige un mes válido.');
+          return;
+        }
+        var hoy = parseIso(hoyIso);
+        // Evitar mes futuro
+        if (hoy && (y > hoy.year || (y === hoy.year && m > hoy.month))) {
+          y = hoy.year;
+          m = hoy.month;
+        }
+        var desdeIso = toIso(y, m, 1);
+        var last = daysInMonth(y, m);
+        var hastaIso = toIso(y, m, last);
+        if (hoy && y === hoy.year && m === hoy.month) {
+          hastaIso = hoyIso;
+        }
+        if (periodoHidden) periodoHidden.value = 'rango';
+        if (fechaHidden) fechaHidden.value = hastaIso;
+        if (desdeHidden) desdeHidden.value = desdeIso;
+        if (hastaHidden) hastaHidden.value = hastaIso;
+        cerrarFechaSheet();
+        var url = appBase + '/compras?periodo=rango'
+          + '&desde=' + encodeURIComponent(desdeIso)
+          + '&hasta=' + encodeURIComponent(hastaIso);
+        var qInput = form && form.querySelector('input[name="q"]');
+        var docInput = form && form.querySelector('input[name="doc"]');
+        if (qInput && qInput.value) url += '&q=' + encodeURIComponent(qInput.value);
+        if (docInput && docInput.value) url += '&doc=' + encodeURIComponent(docInput.value);
+        window.location.href = url;
+      }
+
+      if (btnFecha) btnFecha.addEventListener('click', abrirFechaSheet);
+      if (btnFechaEmpty) btnFechaEmpty.addEventListener('click', abrirFechaSheet);
+      var btnCancel = document.getElementById('fechaSheetCancelar');
+      var btnListo = document.getElementById('fechaSheetListo');
+      if (btnCancel) btnCancel.addEventListener('click', cerrarFechaSheet);
+      if (btnListo) btnListo.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        aplicarFecha();
+      });
+      if (fechaSheet) {
+        fechaSheet.addEventListener('click', function (ev) {
+          if (ev.target === fechaSheet) cerrarFechaSheet();
+        });
+        ['month', 'year'].forEach(function (name) {
+          var unit = document.querySelector('#fechaWheel .ios-date-wheel-unit[data-col="' + name + '"]');
+          var col = colEl(name);
+          if (!col) return;
+          var wheelLock = false;
+          function onWheel(ev) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            if (wheelLock) return;
+            wheelLock = true;
+            stepCol(name, ev.deltaY > 0 ? 1 : -1);
+            setTimeout(function () { wheelLock = false; }, 60);
+          }
+          col.addEventListener('scroll', function () { onColScroll(name); }, { passive: true });
+          col.addEventListener('wheel', onWheel, { passive: false });
+          if (unit) unit.addEventListener('wheel', onWheel, { passive: false });
+        });
+        fechaSheet.querySelectorAll('#fechaWheel .ios-date-wheel-step').forEach(function (btn) {
+          btn.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            var unit = btn.closest('.ios-date-wheel-unit');
+            var name = unit && unit.getAttribute('data-col');
+            var dir = Number(btn.getAttribute('data-dir') || 0);
+            if (name && dir) stepCol(name, dir);
+          });
+        });
+      }
+
+      var sheet = document.getElementById('compSheet');
+      var apiBase = '<%= detalleApiBase || (appBase + "/compras") %>';
+      var icons = { fact: '🧾', bol: '📄', nc: '↩', nd: '+', gre: '🚚', grt: '🚛', doc: '📋' };
+      var current = null;
+
+      function setStatus(text, isError) {
+        var el = document.getElementById('compSheetStatus');
+        if (!el) return;
+        if (!text) { el.hidden = true; el.textContent = ''; return; }
+        el.hidden = false;
+        el.textContent = text;
+        el.classList.toggle('is-error', !!isError);
+      }
+
+      function cerrarSheet() {
+        if (!sheet) return;
+        sheet.hidden = true;
+        sheet.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+        current = null;
+      }
+
+      function abrirSheet(data) {
+        current = data;
+        document.getElementById('compSheetCliente').textContent = data.proveedor || '—';
+        document.getElementById('compSheetRef').textContent = (data.ref || '') + (data.tipo ? ' · ' + data.tipo : '');
+        document.getElementById('compSheetTotal').textContent = data.total || '—';
+        document.getElementById('compSheetAvatar').textContent = icons[data.tipoClass] || '📋';
+        document.getElementById('compSheetTitulo').textContent = data.ref || 'Detalle';
+
+        var meta = document.getElementById('compSheetMeta');
+        meta.innerHTML =
+          '<div><span>Estado</span><strong>' + (data.estado || '—') + '</strong></div>' +
+          '<div><span>Fecha</span><strong>' + (data.fecha || '—') + '</strong></div>' +
+          '<div><span>RUC</span><strong>' + (data.proveedorDoc || '—') + '</strong></div>' +
+          '<div><span>Líneas</span><strong>' + (data.lineas || '—') + '</strong></div>';
+
+        var tot = document.getElementById('compSheetTotales');
+        tot.innerHTML =
+          '<div class="ios-orden-totales-row"><span>Subtotal</span><strong>' + (data.subtotal || '—') + '</strong></div>' +
+          '<div class="ios-orden-totales-row"><span>IGV</span><strong>' + (data.igv || '—') + '</strong></div>' +
+          '<div class="ios-orden-totales-row is-total"><span>Total</span><strong>' + (data.total || '—') + '</strong></div>';
+
+        var pdfA = document.getElementById('compActionPdf');
+        var xmlA = document.getElementById('compActionXml');
+        if (pdfA) {
+          // Siempre PDF generado desde lineasJson (igual que la app)
+          pdfA.href = apiBase + '/' + encodeURIComponent(data.id) + '/pdf';
+          pdfA.hidden = false;
+        }
+        if (xmlA) {
+          if (data.xml) { xmlA.href = data.xml; xmlA.hidden = false; }
+          else { xmlA.removeAttribute('href'); xmlA.hidden = true; }
+        }
+
+        var lineasBox = document.getElementById('compSheetLineas');
+        lineasBox.innerHTML = '<p class="ios-comp-sheet-loading">Cargando detalle…</p>';
+        setStatus('');
+
+        sheet.hidden = false;
+        sheet.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+
+        fetch(apiBase + '/' + encodeURIComponent(data.id), {
+          credentials: 'same-origin',
+          headers: { Accept: 'application/json' },
+        })
+          .then(function (res) {
+            return res.json().then(function (body) {
+              if (!res.ok) throw new Error((body && body.message) || 'Error');
+              return body;
+            });
+          })
+          .then(function (body) {
+            var c = body.compra || {};
+            if (c.proveedor) document.getElementById('compSheetCliente').textContent = c.proveedor;
+            var esGre = Boolean(c.esGre);
+            document.getElementById('compSheetTotal').textContent = c.total || data.total || '—';
+            meta.innerHTML =
+              '<div><span>Estado</span><strong>' + (c.estado || data.estado || '—') + '</strong></div>' +
+              '<div><span>Fecha</span><strong>' + (c.fecha || data.fecha || '—') + '</strong></div>' +
+              '<div><span>RUC</span><strong>' + (c.proveedorDoc || data.proveedorDoc || '—') + '</strong></div>' +
+              '<div><span>' + (esGre ? 'Bienes' : 'Líneas') + '</span><strong>' + ((c.lineas && c.lineas.length) || data.lineas || '—') + '</strong></div>';
+            if (esGre) {
+              var docsHtml = '';
+              if (c.documentosRelacionados && c.documentosRelacionados.length) {
+                docsHtml = c.documentosRelacionados.map(function (d) {
+                  return '<div class="ios-orden-totales-row"><span>Doc. relacionado</span><strong>' + (d.ref || '—') + '</strong></div>';
+                }).join('');
+              }
+              tot.innerHTML = docsHtml
+                || '<p class="ios-muted" style="margin:0;font-size:13px">Guía de remisión: sin montos (los precios van en la factura vinculada).</p>';
+            } else {
+              tot.innerHTML =
+                '<div class="ios-orden-totales-row"><span>Subtotal</span><strong>' + (c.subtotal || data.subtotal || '—') + '</strong></div>' +
+                '<div class="ios-orden-totales-row"><span>IGV</span><strong>' + (c.igv || data.igv || '—') + '</strong></div>' +
+                '<div class="ios-orden-totales-row is-total"><span>Total</span><strong>' + (c.total || data.total || '—') + '</strong></div>';
+            }
+            if (pdfA) {
+              pdfA.href = c.pdfUrl || (apiBase + '/' + encodeURIComponent(data.id) + '/pdf');
+              pdfA.hidden = false;
+            }
+            if (xmlA && c.xmlUrl) { xmlA.href = c.xmlUrl; xmlA.hidden = false; }
+
+            var lines = c.lineas || [];
+            if (!lines.length) {
+              lineasBox.innerHTML = '<p class="ios-muted">Sin líneas registradas.</p>';
+              return;
+            }
+            lineasBox.innerHTML = lines.map(function (l) {
+              if (esGre && !l.precio) {
+                return '<div class="ios-comp-linea">' +
+                  '<div><strong>' + (l.nombre || 'Bien') + '</strong>' +
+                  '<small>' + (l.cantidad || '') + ' ' + (l.unidad || '') + '</small></div></div>';
+              }
+              return '<div class="ios-comp-linea">' +
+                '<div><strong>' + (l.nombre || 'Ítem') + '</strong>' +
+                '<small>' + (l.cantidad || '') + ' ' + (l.unidad || '') + ' · ' + (l.precio || '') + '</small></div>' +
+                '<strong>' + (l.total || '') + '</strong></div>';
+            }).join('');
+          })
+          .catch(function () {
+            lineasBox.innerHTML = '<p class="ios-muted">No se pudo cargar el detalle.</p>';
+          });
+      }
+
+      var selectMode = false;
+      var selectedIds = {};
+      var btnSelectMode = document.getElementById('btnCompSelectMode');
+      var bulkBar = document.getElementById('compBulkBar');
+      var bulkCount = document.getElementById('compBulkCount');
+      var btnSelectCancel = document.getElementById('btnCompSelectCancel');
+      var btnDelete = document.getElementById('btnCompDelete');
+      var deleteUrl = '<%= appBase %>/compras/eliminar';
+
+      function selectedList() {
+        return Object.keys(selectedIds).filter(function (id) { return selectedIds[id]; });
+      }
+
+      function updateBulkBar() {
+        var ids = selectedList();
+        var n = ids.length;
+        if (bulkCount) {
+          bulkCount.textContent = n === 1 ? '1 seleccionado' : n + ' seleccionados';
+        }
+        if (btnDelete) btnDelete.disabled = n === 0;
+      }
+
+      function setSelectMode(on) {
+        selectMode = !!on;
+        document.body.classList.toggle('ios-comp-selecting', selectMode);
+        if (btnSelectMode) btnSelectMode.setAttribute('aria-pressed', selectMode ? 'true' : 'false');
+        if (btnSelectMode) btnSelectMode.classList.toggle('is-on', selectMode);
+        if (bulkBar) bulkBar.hidden = !selectMode;
+        if (!selectMode) {
+          selectedIds = {};
+          document.querySelectorAll('.ios-comp-card.is-selected').forEach(function (el) {
+            el.classList.remove('is-selected');
+          });
+        }
+        updateBulkBar();
+        if (selectMode && sheet && !sheet.hidden) cerrarSheet();
+      }
+
+      function toggleSelectCard(btn) {
+        var id = btn.dataset.id;
+        if (!id) return;
+        if (selectedIds[id]) {
+          delete selectedIds[id];
+          btn.classList.remove('is-selected');
+        } else {
+          selectedIds[id] = true;
+          btn.classList.add('is-selected');
+        }
+        updateBulkBar();
+      }
+
+      function eliminarSeleccionados() {
+        var ids = selectedList();
+        if (!ids.length) return;
+        var msg = ids.length === 1
+          ? '¿Eliminar esta compra de la base de datos?'
+          : '¿Eliminar ' + ids.length + ' compras de la base de datos?';
+        if (!window.confirm(msg)) return;
+        if (btnDelete) {
+          btnDelete.disabled = true;
+          btnDelete.textContent = 'Eliminando…';
+        }
+        fetch(deleteUrl, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ ids: ids }),
+        })
+          .then(function (res) {
+            return res.json().then(function (data) {
+              if (!res.ok) throw new Error((data && data.message) || 'Error al eliminar');
+              return data;
+            });
+          })
+          .then(function (data) {
+            var failedMap = {};
+            (data.fallidos || []).forEach(function (f) {
+              if (f && f.id) failedMap[String(f.id)] = f.message || 'Error';
+            });
+            ids.forEach(function (id) {
+              if (failedMap[String(id)]) return;
+              document.querySelectorAll('#compList .ios-comp-card[data-id]').forEach(function (card) {
+                if (String(card.dataset.id) === String(id)) card.remove();
+              });
+              delete selectedIds[id];
+            });
+            var left = document.querySelectorAll('#compList .ios-comp-card[data-id]').length;
+            var countEl = document.querySelector('.ios-count');
+            if (countEl) {
+              countEl.textContent = left + ' compra' + (left === 1 ? '' : 's');
+            }
+            if (btnDelete) btnDelete.textContent = 'Eliminar';
+            updateBulkBar();
+            if (!selectedList().length) setSelectMode(false);
+            if (data.fallidos && data.fallidos.length) {
+              window.alert(
+                (data.message || 'Algunas no se eliminaron') + '\n' +
+                data.fallidos.map(function (f) { return (f.id || '') + ': ' + (f.message || ''); }).join('\n')
+              );
+            }
+            if (!left) window.location.reload();
+          })
+          .catch(function (err) {
+            if (btnDelete) {
+              btnDelete.textContent = 'Eliminar';
+              btnDelete.disabled = selectedList().length === 0;
+            }
+            window.alert(err.message || 'No se pudo eliminar');
+          });
+      }
+
+      document.getElementById('compList') && document.getElementById('compList').addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-comp-open]');
+        if (!btn) return;
+        if (selectMode) {
+          e.preventDefault();
+          toggleSelectCard(btn);
+          return;
+        }
+        abrirSheet({
+          id: btn.dataset.id,
+          ref: btn.dataset.ref,
+          tipo: btn.dataset.tipo,
+          tipoClass: btn.dataset.tipoClass,
+          proveedor: btn.dataset.proveedor,
+          proveedorDoc: btn.dataset.proveedorDoc,
+          fecha: btn.dataset.fecha,
+          estado: btn.dataset.estado,
+          total: btn.dataset.total,
+          subtotal: btn.dataset.subtotal,
+          igv: btn.dataset.igv,
+          lineas: btn.dataset.lineas,
+          pdf: btn.dataset.pdf,
+          xml: btn.dataset.xml,
+          obs: btn.dataset.obs,
+        });
+      });
+
+      if (btnSelectMode) {
+        btnSelectMode.addEventListener('click', function () {
+          setSelectMode(!selectMode);
+        });
+      }
+      if (btnSelectCancel) {
+        btnSelectCancel.addEventListener('click', function () {
+          setSelectMode(false);
+        });
+      }
+      if (btnDelete) {
+        btnDelete.addEventListener('click', eliminarSeleccionados);
+      }
+
+      document.getElementById('compSheetCerrar') && document.getElementById('compSheetCerrar').addEventListener('click', cerrarSheet);
+      sheet && sheet.addEventListener('click', function (e) {
+        if (e.target === sheet) cerrarSheet();
+      });
+      document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Escape') return;
+        if (fechaSheet && !fechaSheet.hidden) { cerrarFechaSheet(); return; }
+        if (sheet && !sheet.hidden) { cerrarSheet(); return; }
+        if (selectMode) setSelectMode(false);
+      });
+    })();
+  </script>
+  <%- include('../../partials/app-emit-loading') %>
+  <script src="/js/app-emit-loading.js"></script>
+</body>
+</html>

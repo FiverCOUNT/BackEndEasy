@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> · Easy</title>
+  <link rel="stylesheet" href="/css/app-ios.css?v=client-menu" />
+</head>
+<body class="ios-app">
+  <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
+  <main class="ios-main">
+    <header class="ios-top">
+      <div><p class="ios-eyebrow"><%= companyNombre %></p><h1>Clientes</h1></div>
+      <% if (items.length) { %>
+        <a class="ios-fab-link" href="<%= appBase %>/clientes/crear" aria-label="Nuevo cliente">+</a>
+      <% } %>
+    </header>
+    <% if (flash) { %><div class="ios-flash <%= flash.type === 'error' ? 'is-error' : 'is-ok' %>"><%= flash.text %></div><% } %>
+    <form class="ios-filters" method="GET" action="<%= appBase %>/clientes">
+      <div class="ios-search-row">
+        <div class="ios-search">
+          <input type="search" name="q" value="<%= q || '' %>" placeholder="Nombre, DNI, teléfono…" autocomplete="off" />
+        </div>
+        <button type="submit" class="ios-btn-secondary ios-search-btn">Buscar</button>
+      </div>
+    </form>
+    <% if (items.length) { %>
+      <p class="ios-count"><%= total %> cliente<%= total === 1 ? '' : 's' %></p>
+    <% } %>
+
+    <% if (!items.length) { %>
+      <section class="ios-card-empty ios-client-empty">
+        <div class="ios-empty-icon ios-client-empty-icon"><%= q ? '🔍' : '👤' %></div>
+        <h2><%= q ? 'Sin resultados' : 'Aún no hay clientes' %></h2>
+        <p>
+          <% if (q) { %>
+            Prueba otro nombre, DNI o teléfono.
+          <% } else { %>
+            Registra personas con DNI para boletas y entregas.
+          <% } %>
+        </p>
+        <% if (!q) { %>
+          <a class="ios-btn-primary" href="<%= appBase %>/clientes/crear">Agregar cliente</a>
+          <p class="ios-client-empty-hint">Los clientes con RUC se crean al emitir facturas.</p>
+        <% } %>
+      </section>
+    <% } else { %>
+      <div class="ios-list ios-client-list">
+        <% items.forEach(function(c) {
+          var nombre = c.razon_social || c.razonSocial || '—';
+          var tipoDoc = c.tipo_doc || c.tipoDoc || '';
+          var numeroDoc = c.numero_doc || c.numeroDoc || '';
+          var docLabel = c.tipo_doc_label || (tipoDoc === '1' ? 'DNI' : tipoDoc === '6' ? 'RUC' : 'Doc.');
+          var esPersona = tipoDoc === '1';
+          var avatar = esPersona ? '👤' : '🏢';
+          var addr = c.address || {};
+          var dirLinea = addr.direccion || addr.linea || '';
+          var detalleParts = [];
+          if (c.telefono) detalleParts.push(c.telefono);
+          if (dirLinea) detalleParts.push(dirLinea);
+        %>
+          <article class="ios-catalog-row ios-client-row">
+            <span class="ios-row-icon ios-client-avatar" aria-hidden="true"><%= avatar %></span>
+            <div class="ios-catalog-main">
+              <div class="ios-catalog-title">
+                <strong><%= nombre %></strong>
+              </div>
+              <div class="ios-catalog-sub"><%= docLabel %> <%= numeroDoc %></div>
+              <% if (detalleParts.length) { %>
+                <div class="ios-catalog-stock"><%= detalleParts.join(' · ') %></div>
+              <% } %>
+              <% if (!esPersona) { %>
+                <div class="ios-catalog-sub">Desde venta / facturación</div>
+              <% } %>
+            </div>
+            <div class="ios-catalog-right">
+              <details class="ios-menu">
+                <summary aria-label="Opciones del cliente">⋯</summary>
+                <div class="ios-menu-panel">
+                  <a href="<%= appBase %>/clientes/<%= c.id %>/editar">Editar</a>
+                  <a href="<%= appBase %>/clientes/<%= c.id %>">Ver entregas</a>
+                </div>
+              </details>
+            </div>
+          </article>
+        <% }); %>
+      </div>
+      <%- include('../../partials/app-load-more', { loadMore: loadMore }) %>
+    <% } %>
+  </main>
+  <%- include('../../partials/app-tabbar', { active: active, appBase: appBase }) %>
+</body>
+</html>

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> · Easy</title>
+  <link rel="stylesheet" href="/css/app-ios.css" />
+</head>
+<body class="ios-app">
+  <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
+  <main class="ios-main">
+    <header class="ios-top">
+      <div>
+        <p class="ios-eyebrow"><%= companyNombre %></p>
+        <h1>Almacenes</h1>
+      </div>
+      <% if ((items || []).length) { %>
+        <a class="ios-fab-link" href="<%= appBase %>/almacenes/crear" aria-label="Nuevo almacén">+</a>
+      <% } %>
+    </header>
+
+    <% if (flash) { %>
+      <div class="ios-flash <%= flash.type === 'error' ? 'is-error' : 'is-ok' %>"><%= flash.text %></div>
+    <% } %>
+
+    <form class="ios-filters" method="GET" action="<%= appBase %>/almacenes">
+      <div class="ios-search-row">
+        <div class="ios-search">
+          <input type="search" name="q" value="<%= q || '' %>" placeholder="Nombre, código o dirección…" autocomplete="off" />
+        </div>
+        <button type="submit" class="ios-btn-secondary" style="flex-shrink:0;white-space:nowrap">Buscar</button>
+      </div>
+    </form>
+
+    <% if ((items || []).length) { %>
+      <p class="ios-count"><%= total %> almacén<%= total === 1 ? '' : 'es' %></p>
+    <% } %>
+
+    <% if (!(items || []).length) { %>
+      <section class="ios-card-empty">
+        <div class="ios-empty-icon" aria-hidden="true">📦</div>
+        <h2><%= q ? 'Sin resultados' : 'Aún no hay almacenes' %></h2>
+        <p>
+          <% if (q) { %>
+            Prueba otro nombre o código.
+          <% } else { %>
+            Crea el primer almacén para controlar stock y salidas.
+          <% } %>
+        </p>
+        <% if (!q) { %>
+          <a class="ios-btn-primary" href="<%= appBase %>/almacenes/crear">Nuevo almacén</a>
+        <% } %>
+      </section>
+    <% } else { %>
+      <div class="ios-list ios-catalog-list">
+        <% items.forEach(function(a) {
+          var activo = a.activo !== false;
+          var addr = a.address || {};
+          var dirParts = [addr.direccion, addr.distrito].filter(Boolean);
+          var counts = [];
+          if (a.usuariosCount) counts.push(a.usuariosCount + (a.usuariosCount === 1 ? ' usuario' : ' usuarios'));
+          if (a.seriesCount) counts.push(a.seriesCount + (a.seriesCount === 1 ? ' serie' : ' series'));
+          if (a.movimientosCount) counts.push(a.movimientosCount + ' mov.');
+        %>
+          <article class="ios-catalog-row <%= activo ? '' : 'is-inactive' %>">
+            <span class="ios-row-icon" style="background:<%= activo ? '#E8F1FF' : '#F2F2F7' %>;color:<%= activo ? '#007AFF' : '#8E8E93' %>" aria-hidden="true">📦</span>
+            <div class="ios-catalog-main">
+              <div class="ios-catalog-title">
+                <strong><%= a.nombre %></strong>
+                <% if (!activo) { %><span class="ios-badge-warn">Inactivo</span><% } %>
+              </div>
+              <div class="ios-catalog-sub"><%= a.codigo || 'Sin código' %></div>
+              <% if (dirParts.length) { %>
+                <div class="ios-catalog-stock"><%= dirParts.join(' · ') %></div>
+              <% } %>
+              <% if (counts.length) { %>
+                <div class="ios-catalog-sub"><%= counts.join(' · ') %></div>
+              <% } %>
+            </div>
+            <div class="ios-catalog-right">
+              <details class="ios-menu">
+                <summary aria-label="Opciones del almacén">⋯</summary>
+                <div class="ios-menu-panel">
+                  <a href="<%= appBase %>/almacenes/<%= a.id %>/editar">Editar</a>
+                  <% if (activo) { %>
+                    <form method="POST" action="<%= appBase %>/almacenes/<%= a.id %>/desactivar">
+                      <button type="submit">Desactivar</button>
+                    </form>
+                  <% } else { %>
+                    <form method="POST" action="<%= appBase %>/almacenes/<%= a.id %>/activar">
+                      <button type="submit">Activar</button>
+                    </form>
+                  <% } %>
+                  <form method="POST" action="<%= appBase %>/almacenes/<%= a.id %>/eliminar" onsubmit="return confirm('¿Eliminar este almacén? Solo si no tiene movimientos ni stock.');">
+                    <button type="submit" class="is-danger">Eliminar</button>
+                  </form>
+                </div>
+              </details>
+            </div>
+          </article>
+        <% }); %>
+      </div>
+      <%- include('../../partials/app-load-more', { loadMore: typeof loadMore !== 'undefined' ? loadMore : null }) %>
+    <% } %>
+  </main>
+  <%- include('../../partials/app-tabbar', { active: active, appBase: appBase }) %>
+  <script>
+    document.addEventListener('click', function (e) {
+      document.querySelectorAll('.ios-menu[open]').forEach(function (d) {
+        if (!d.contains(e.target)) d.removeAttribute('open');
+      });
+    });
+  </script>
+</body>
+</html>

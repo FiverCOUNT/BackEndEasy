@@ -1,4 +1,37 @@
 <fieldset class="fieldset">
+  <legend>Logo Easy</legend>
+  <p class="field-hint field-full">
+    Logo de marca de la app Easy. Se guarda en Cloudflare R2 en
+    <code>configuracion/easy/</code> (o local si R2 no está activo) y se usa en el panel y la app móvil.
+  </p>
+  <div class="form-grid">
+    <% if (form.urlLogo) { %>
+      <div class="field field-full">
+        <label>Logo actual</label>
+        <div class="logo-easy-preview">
+          <img src="<%= form.urlLogo %>" alt="Logo Easy" />
+        </div>
+      </div>
+    <% } %>
+    <div class="field field-full">
+      <label for="logoEasy">Subir logo</label>
+      <input
+        type="file"
+        id="logoEasy"
+        name="logoEasy"
+        accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif,.png,.jpg,.jpeg,.webp,.svg,.gif"
+      />
+      <p class="field-hint">PNG, JPG, WEBP, SVG o GIF · máx. 2 MB. Al guardar se sube a Cloudflare.</p>
+    </div>
+    <div class="field field-full">
+      <label for="urlLogo">URL pública del logo</label>
+      <input type="url" id="urlLogo" name="urlLogo" value="<%= form.urlLogo %>" placeholder="https://..." />
+      <p class="field-hint">Se completa sola al subir el archivo. También puedes pegar una URL pública.</p>
+    </div>
+  </div>
+</fieldset>
+
+<fieldset class="fieldset">
   <legend>Identidad de la app</legend>
   <div class="form-grid">
     <div class="field">
@@ -12,10 +45,6 @@
     <div class="field field-full">
       <label for="mensajeBienvenida">Mensaje de bienvenida</label>
       <textarea id="mensajeBienvenida" name="mensajeBienvenida" rows="2" maxlength="500"><%= form.mensajeBienvenida %></textarea>
-    </div>
-    <div class="field field-full">
-      <label for="urlLogo">URL del logo</label>
-      <input type="url" id="urlLogo" name="urlLogo" value="<%= form.urlLogo %>" placeholder="https://..." />
     </div>
   </div>
 </fieldset>
@@ -102,11 +131,12 @@
     <div class="field field-full">
       <label for="urlTerminos">Términos y condiciones</label>
       <input type="url" id="urlTerminos" name="urlTerminos" value="<%= form.urlTerminos %>" placeholder="https://tudominio.com/terminosycondiciones/easy" />
-      <p class="field-hint">Públicas: /terminosycondiciones/easy · /terminosycondiciones/cardumen</p>
+      <p class="field-hint">Una URL por aplicación (no mezclar productos en la misma página).</p>
     </div>
     <div class="field field-full">
       <label for="urlPrivacidad">Política de privacidad</label>
-      <input type="url" id="urlPrivacidad" name="urlPrivacidad" value="<%= form.urlPrivacidad %>" placeholder="https://..." />
+      <input type="url" id="urlPrivacidad" name="urlPrivacidad" value="<%= form.urlPrivacidad %>" placeholder="https://esy.lat/politicadeprivacidad/easy" />
+      <p class="field-hint">Debe ser una página cuyo título sea “Política de Privacidad”, sin mezclar otras apps.</p>
     </div>
   </div>
 </fieldset>

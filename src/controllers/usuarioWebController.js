@@ -1,23 +1,42 @@
 const bcrypt = require('bcryptjs');
-const prisma = require('../config/prisma');
 const usuarioModel = require('../models/usuarioModel');
 const { parseListQuery, buildPageMeta } = require('../utils/pagination');
+const { adminPath } = require('../config/adminPanel');
+const {
+  loadCompaniesMerged,
+  loadAlmacenesMerged,
+  runWithCompanyId,
+} = require('../utils/adminDualDb');
+const { runWithEntorno } = require('../config/prisma');
+const prisma = require('../config/prisma');
 
 const ESTADOS = ['ACTIVO', 'INACTIVO', 'PENDIENTE', 'BLOQUEADO'];
 const ROLES = usuarioModel.ROLES;
 
 async function loadCompanies() {
-  return prisma.company.findMany({
-    select: { id: true, nombre: true, ruc: true },
-    orderBy: { id: 'asc' },
-  });
+  return loadCompaniesMerged();
+}
+
+async function loadEntornoCatalog(entorno) {
+  const db = entorno === 'beta' ? 'beta' : 'prod';
+  const [companies, almacenes] = await runWithEntorno(db, () => Promise.all([
+    prisma.company.findMany({
+      select: { id: true, nombre: true, ruc: true },
+      orderBy: { nombre: 'asc' },
+    }),
+    prisma.almacen.findMany({
+      select: { id: true, nombre: true, codigo: true, companyRuc: true, activo: true },
+      orderBy: [{ companyRuc: 'asc' }, { nombre: 'asc' }],
+    }),
+  ]));
+  return {
+    companies: companies.map((c) => ({ ...c, id: c.id.toString() })),
+    almacenes,
+  };
 }
 
 async function loadAlmacenes() {
-  return prisma.almacen.findMany({
-    select: { id: true, nombre: true, codigo: true, companyRuc: true, activo: true },
-    orderBy: [{ companyRuc: 'asc' }, { nombre: 'asc' }],
-  });
+  return loadAlmacenesMerged();
 }
 
 function parseFlash(req) {
@@ -32,9 +51,20 @@ function parseId(param) {
   return id;
 }
 
-function redirectList(res, message, type = 'success') {
+function redirectList(res, message, type = 'success', entorno) {
   const q = new URLSearchParams({ msg: message, tipo: type });
-  return res.redirect(`/usuarios?${q.toString()}`);
+  const db = entorno === 'beta' || entorno === 'prod'
+    ? entorno
+    : (res.locals.adminEntorno === 'beta' ? 'beta' : 'prod');
+  q.set('entorno', db);
+  return res.redirect(`${adminPath('/usuarios')}?${q.toString()}`);
+}
+
+function parseEntorno(req) {
+  const raw = String(
+    req.query.entorno || req.body?.entorno || req.session?.adminEntorno || 'prod',
+  ).trim().toLowerCase();
+  return raw === 'beta' ? 'beta' : 'prod';
 }
 
 function normalizeForm(body) {
@@ -48,9 +78,9 @@ function normalizeForm(body) {
   };
 }
 
-async function validateUsuarioForm(form) {
-  const companies = await loadCompanies();
-  const almacenes = await loadAlmacenes();
+async function validateUsuarioForm(form, companies, almacenes) {
+  const companyList = companies || await loadCompanies();
+  const almacenList = almacenes || await loadAlmacenes();
 
   if (!form.email) return 'El email es obligatorio.';
   if (!ESTADOS.includes(form.estado)) return 'Estado no válido.';
@@ -58,26 +88,31 @@ async function validateUsuarioForm(form) {
   const companyId =
     form.companyId && form.companyId !== '' ? Number(form.companyId) : null;
   const company = companyId
-    ? companies.find((c) => Number(c.id) === companyId)
+    ? companyList.find((c) => Number(c.id) === companyId)
     : null;
 
-  // Admin de plataforma: puede no tener empresa ni almacén (solo panel web).
-  if (form.rol === 'ADMIN' && !companyId) {
+  // Super admin de plataforma: panel /admin, sin empresa ni almacén.
+  if (form.rol === 'SUPER_ADMIN') {
+    if (companyId) {
+      return 'SUPER_ADMIN no debe tener empresa (solo panel de plataforma).';
+    }
     if (form.almacenId) {
-      return 'Un admin sin empresa no puede tener almacén asignado.';
+      return 'SUPER_ADMIN no puede tener almacén asignado.';
     }
     return null;
   }
 
   if (!companyId || !company) {
-    return 'La empresa es obligatoria (salvo admin de plataforma sin empresa).';
+    return 'La empresa es obligatoria (salvo SUPER_ADMIN de plataforma).';
   }
 
   if (!form.almacenId) {
-    return 'El almacén es obligatorio.';
+    const hayEnEstaBase = almacenList.some((a) => a.companyRuc === company.ruc);
+    if (hayEnEstaBase) return 'El almacén es obligatorio.';
+    return null;
   }
 
-  const almacen = almacenes.find((a) => a.id === form.almacenId);
+  const almacen = almacenList.find((a) => a.id === form.almacenId);
   if (!almacen || almacen.companyRuc !== company.ruc) {
     return 'El almacén debe pertenecer a la empresa seleccionada.';
   }
@@ -88,19 +123,38 @@ async function validateUsuarioForm(form) {
 async function list(req, res, next) {
   try {
     const { q, page, pageSize, skip } = parseListQuery(req.query);
-    const { total, items } = await usuarioModel.findPaginated({
-      q,
-      page,
-      pageSize,
-      skip,
-    });
+    const companyRaw = String(req.query.company || '').trim();
+    const companyId =
+      companyRaw === 'none'
+        ? 'none'
+        : Number.isInteger(Number(companyRaw)) && Number(companyRaw) > 0
+          ? Number(companyRaw)
+          : null;
 
+    const entorno = parseEntorno(req);
+    const [{ total, items }, companies] = await Promise.all([
+      runWithEntorno(entorno, () =>
+        usuarioModel.findPaginated({ q, companyId, page, pageSize, skip })),
+      runWithEntorno(entorno, () =>
+        prisma.company.findMany({
+          select: { id: true, nombre: true, ruc: true },
+          orderBy: { nombre: 'asc' },
+        })),
+    ]);
+
+    const listPath = adminPath('/usuarios');
     const pagination = buildPageMeta({
       total,
       page,
       pageSize,
-      basePath: '/usuarios',
-      query: { q, msg: req.query.msg, tipo: req.query.tipo },
+      basePath: listPath,
+      query: {
+        q,
+        company: companyRaw || undefined,
+        entorno,
+        msg: req.query.msg,
+        tipo: req.query.tipo,
+      },
     });
 
     res.render('usuarios/listar', {
@@ -108,11 +162,14 @@ async function list(req, res, next) {
       usuarios: items,
       total,
       q,
+      entorno,
+      companyId: companyRaw || '',
+      companies,
       pageSize,
       pagination,
       flash: parseFlash(req),
-      searchAction: '/usuarios',
-      searchPlaceholder: 'Buscar por email, empresa, almacén o rol…',
+      searchAction: listPath,
+      searchPlaceholder: 'Buscar por email, rol, almacén…',
     });
   } catch (err) {
     next(err);
@@ -121,7 +178,8 @@ async function list(req, res, next) {
 
 async function showCreateForm(req, res, next) {
   try {
-    const [companies, almacenes] = await Promise.all([loadCompanies(), loadAlmacenes()]);
+    const entorno = parseEntorno(req);
+    const { companies, almacenes } = await loadEntornoCatalog(entorno);
     res.render('usuarios/crear', {
       title: 'Crear usuario',
       error: null,
@@ -129,6 +187,7 @@ async function showCreateForm(req, res, next) {
       almacenes,
       estados: ESTADOS,
       roles: ROLES,
+      entorno,
       form: { estado: 'ACTIVO', rol: 'USUARIO' },
       isEdit: false,
     });
@@ -139,7 +198,8 @@ async function showCreateForm(req, res, next) {
 
 async function create(req, res, next) {
   try {
-    const [companies, almacenes] = await Promise.all([loadCompanies(), loadAlmacenes()]);
+    const entorno = parseEntorno(req);
+    const { companies, almacenes } = await loadEntornoCatalog(entorno);
     const form = normalizeForm(req.body);
     const contrasena = req.body.contrasena || '';
 
@@ -151,11 +211,12 @@ async function create(req, res, next) {
         almacenes,
         estados: ESTADOS,
         roles: ROLES,
+        entorno,
         form,
         isEdit: false,
       });
 
-    const validationError = await validateUsuarioForm(form);
+    const validationError = await validateUsuarioForm(form, companies, almacenes);
     if (validationError) return renderError(validationError);
 
     if (!contrasena) return renderError('Email y contraseña son obligatorios.');
@@ -170,7 +231,7 @@ async function create(req, res, next) {
       form.companyId && form.companyId !== '' ? Number(form.companyId) : null;
     const contrasenaHash = await bcrypt.hash(contrasena, 10);
 
-    await usuarioModel.create({
+    const createUser = () => usuarioModel.create({
       email: form.email,
       contrasenaHash,
       companyId,
@@ -179,7 +240,12 @@ async function create(req, res, next) {
       almacenId: form.almacenId || null,
     });
 
-    return redirectList(res, `Usuario ${form.email} creado correctamente.`);
+    if (form.rol === 'SUPER_ADMIN' || !companyId) {
+      await runWithEntorno('prod', createUser);
+      return redirectList(res, `Usuario ${form.email} creado en producción.`, 'success', 'prod');
+    }
+    await runWithEntorno(entorno, createUser);
+    return redirectList(res, `Usuario ${form.email} creado correctamente.`, 'success', entorno);
   } catch (err) {
     next(err);
   }
@@ -187,13 +253,16 @@ async function create(req, res, next) {
 
 async function showEditForm(req, res, next) {
   try {
+    const entorno = parseEntorno(req);
     const id = parseId(req.params.id);
-    if (!id) return redirectList(res, 'Usuario no válido', 'error');
+    if (!id) return redirectList(res, 'Usuario no válido', 'error', entorno);
 
-    const user = await usuarioModel.findById(id);
-    if (!user) return redirectList(res, 'Usuario no encontrado', 'error');
+    const user = await usuarioModel.findById(id, entorno);
+    if (!user) return redirectList(res, 'Usuario no encontrado', 'error', entorno);
 
-    const [companies, almacenes] = await Promise.all([loadCompanies(), loadAlmacenes()]);
+    const catalog = await loadEntornoCatalog(entorno);
+    const { companies, almacenes } = catalog;
+    const almacenOk = almacenes.some((a) => a.id === user.almacenId);
     res.render('usuarios/editar', {
       title: 'Editar usuario',
       error: null,
@@ -202,13 +271,14 @@ async function showEditForm(req, res, next) {
       estados: ESTADOS,
       roles: ROLES,
       isEdit: true,
+      entorno,
       usuario: usuarioModel.toPublicUser(user),
       form: {
         email: user.email,
         estado: user.estado,
         rol: user.rol,
         companyId: user.companyId ? String(user.companyId) : '',
-        almacenId: user.almacenId || '',
+        almacenId: almacenOk ? (user.almacenId || '') : '',
       },
     });
   } catch (err) {
@@ -218,13 +288,14 @@ async function showEditForm(req, res, next) {
 
 async function update(req, res, next) {
   try {
+    const entorno = parseEntorno(req);
     const id = parseId(req.params.id);
-    if (!id) return redirectList(res, 'Usuario no válido', 'error');
+    if (!id) return redirectList(res, 'Usuario no válido', 'error', entorno);
 
-    const user = await usuarioModel.findById(id);
-    if (!user) return redirectList(res, 'Usuario no encontrado', 'error');
+    const user = await usuarioModel.findById(id, entorno);
+    if (!user) return redirectList(res, 'Usuario no encontrado', 'error', entorno);
 
-    const [companies, almacenes] = await Promise.all([loadCompanies(), loadAlmacenes()]);
+    const { companies, almacenes } = await loadEntornoCatalog(entorno);
     const form = normalizeForm(req.body);
     const nuevaContrasena = (req.body.nuevaContrasena || '').trim();
 
@@ -237,18 +308,19 @@ async function update(req, res, next) {
         estados: ESTADOS,
         roles: ROLES,
         isEdit: true,
+      entorno,
         usuario: usuarioModel.toPublicUser(user),
         form,
       });
 
-    const validationError = await validateUsuarioForm(form);
+    const validationError = await validateUsuarioForm(form, companies, almacenes);
     if (validationError) return renderError(validationError);
 
     if (nuevaContrasena.length > 0 && nuevaContrasena.length < 6) {
       return renderError('La contraseña debe tener al menos 6 caracteres.');
     }
 
-    const duplicate = await usuarioModel.findByEmailExceptId(form.email, id);
+    const duplicate = await runWithEntorno(entorno, () => usuarioModel.findByEmailExceptId(form.email, id));
     if (duplicate) return renderError('Ese email ya está en uso.');
 
     const companyId =
@@ -266,11 +338,19 @@ async function update(req, res, next) {
     }
 
     if (estadoChangedToInactive(form.estado, user.estado)) {
-      await usuarioModel.clearTokens(id);
+      await runWithEntorno(user._dbEntorno || 'prod', () => usuarioModel.clearTokens(id));
     }
 
-    await usuarioModel.update(id, updateData);
-    return redirectList(res, `Usuario ${form.email} actualizado.`);
+    const doUpdate = () => usuarioModel.update(id, updateData);
+    try {
+      await runWithEntorno(entorno, doUpdate);
+    } catch (err) {
+      if (err?.code === 'P2003') {
+        return renderError('El almacén o la empresa no existen en esta base. Elige un almacén de este entorno.');
+      }
+      throw err;
+    }
+    return redirectList(res, `Usuario ${form.email} actualizado.`, 'success', entorno);
   } catch (err) {
     next(err);
   }
@@ -282,14 +362,15 @@ function estadoChangedToInactive(estado, prev) {
 
 async function activate(req, res, next) {
   try {
+    const entorno = parseEntorno(req);
     const id = parseId(req.params.id);
-    if (!id) return redirectList(res, 'Usuario no válido', 'error');
+    if (!id) return redirectList(res, 'Usuario no válido', 'error', entorno);
 
-    const user = await usuarioModel.findById(id);
-    if (!user) return redirectList(res, 'Usuario no encontrado', 'error');
+    const user = await usuarioModel.findById(id, entorno);
+    if (!user) return redirectList(res, 'Usuario no encontrado', 'error', entorno);
 
-    await usuarioModel.setEstado(id, 'ACTIVO');
-    return redirectList(res, `Usuario ${user.email} activado.`);
+    await runWithEntorno(user._dbEntorno || 'prod', () => usuarioModel.setEstado(id, 'ACTIVO'));
+    return redirectList(res, `Usuario ${user.email} activado.`, 'success', entorno);
   } catch (err) {
     next(err);
   }
@@ -297,14 +378,15 @@ async function activate(req, res, next) {
 
 async function deactivate(req, res, next) {
   try {
+    const entorno = parseEntorno(req);
     const id = parseId(req.params.id);
-    if (!id) return redirectList(res, 'Usuario no válido', 'error');
+    if (!id) return redirectList(res, 'Usuario no válido', 'error', entorno);
 
-    const user = await usuarioModel.findById(id);
-    if (!user) return redirectList(res, 'Usuario no encontrado', 'error');
+    const user = await usuarioModel.findById(id, entorno);
+    if (!user) return redirectList(res, 'Usuario no encontrado', 'error', entorno);
 
-    await usuarioModel.setEstado(id, 'INACTIVO');
-    return redirectList(res, `Usuario ${user.email} desactivado. Sesión cerrada.`);
+    await runWithEntorno(user._dbEntorno || 'prod', () => usuarioModel.setEstado(id, 'INACTIVO'));
+    return redirectList(res, `Usuario ${user.email} desactivado. Sesión cerrada.`, 'success', entorno);
   } catch (err) {
     next(err);
   }
@@ -312,14 +394,15 @@ async function deactivate(req, res, next) {
 
 async function destroy(req, res, next) {
   try {
+    const entorno = parseEntorno(req);
     const id = parseId(req.params.id);
-    if (!id) return redirectList(res, 'Usuario no válido', 'error');
+    if (!id) return redirectList(res, 'Usuario no válido', 'error', entorno);
 
-    const user = await usuarioModel.findById(id);
-    if (!user) return redirectList(res, 'Usuario no encontrado', 'error');
+    const user = await usuarioModel.findById(id, entorno);
+    if (!user) return redirectList(res, 'Usuario no encontrado', 'error', entorno);
 
-    await usuarioModel.remove(id);
-    return redirectList(res, `Usuario ${user.email} eliminado.`);
+    await runWithEntorno(entorno, () => usuarioModel.remove(id));
+    return redirectList(res, `Usuario ${user.email} eliminado.`, 'success', entorno);
   } catch (err) {
     next(err);
   }

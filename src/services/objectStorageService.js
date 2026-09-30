@@ -43,6 +43,21 @@ function buildCertificadoKey(companyRuc, filename) {
   return `${getPrefix('certificados')}/${companyRuc}/${safeName}`;
 }
 
+/** configuracion/easy/logo.{ext} — logo de marca Easy */
+function buildEasyLogoKey(filename = 'logo.png') {
+  const base = path.basename(String(filename || 'logo.png')).replace(/[^\w.\-]+/g, '_').slice(0, 80);
+  const safeName = base || 'logo.png';
+  return `${getPrefix('configuracion')}/easy/${safeName}`;
+}
+
+/** logos/{RUC}/logo.{ext} — foto/logo de la empresa */
+function buildCompanyLogoKey(companyRuc, filename = 'logo.png') {
+  const ruc = String(companyRuc || '').replace(/\D/g, '') || 'sin-ruc';
+  const base = path.basename(String(filename || 'logo.png')).replace(/[^\w.\-]+/g, '_').slice(0, 80);
+  const safeName = base || 'logo.png';
+  return `${getPrefix('logos')}/${ruc}/${safeName}`;
+}
+
 /** adjuntos/{RUC}/{uuid}-{nombreSeguro} */
 function buildAdjuntoKey(companyRuc, filename) {
   const ruc = String(companyRuc || '').replace(/\D/g, '') || 'sin-ruc';
@@ -167,6 +182,26 @@ async function uploadCertificado(companyRuc, buffer, filename) {
   return uploadBuffer(key, buffer, contentType);
 }
 
+async function uploadEasyLogo(buffer, filename, contentType) {
+  const key = buildEasyLogoKey(filename);
+  const uploaded = await uploadBuffer(key, buffer, contentType || 'image/png');
+  return {
+    key: uploaded.key,
+    url: uploaded.url,
+    nombre: path.basename(String(filename || 'logo.png')),
+  };
+}
+
+async function uploadCompanyLogo(companyRuc, buffer, filename, contentType) {
+  const key = buildCompanyLogoKey(companyRuc, filename);
+  const uploaded = await uploadBuffer(key, buffer, contentType || 'image/png');
+  return {
+    key: uploaded.key,
+    url: uploaded.url,
+    nombre: path.basename(String(filename || 'logo.png')),
+  };
+}
+
 async function uploadAdjunto(companyRuc, buffer, filename, contentType) {
   const key = buildAdjuntoKey(companyRuc, filename);
   const uploaded = await uploadBuffer(key, buffer, contentType || 'application/octet-stream');
@@ -235,6 +270,8 @@ module.exports = {
   buildComprobanteKeyForInvoice,
   buildCertificadoKey,
   buildAdjuntoKey,
+  buildEasyLogoKey,
+  buildCompanyLogoKey,
   buildKey: buildComprobanteKeyForInvoice,
   buildPublicUrl,
   extractObjectKey,
@@ -242,14 +279,16 @@ module.exports = {
   assertPublicBaseUrlConfigured,
   isHttpUrl,
   isAdjuntoKeyForCompany,
+  isObjectKey,
   uploadBuffer,
   uploadAdjunto,
+  uploadEasyLogo,
+  uploadCompanyLogo,
   deleteObject,
   getObjectBuffer,
   uploadCertificado,
   getPresignedUrl,
   resolveCertificadoUrl,
-  isObjectKey,
   isEnabled: () => storageConfig.r2.enabled,
   getPrefixes: () => storageConfig.r2.prefixes,
 };

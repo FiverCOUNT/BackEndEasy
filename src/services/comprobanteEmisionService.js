@@ -4,7 +4,13 @@ const credencialesSunatService = require('./credencialesSunatService');
 const comprobanteInventarioService = require('./comprobanteInventarioService');
 const emisorClient = require('./emisorClient');
 
-const INVENTARIO_OMITIR = new Set(['tipo_no_aplica', 'sin_lineas_inventario']);
+const INVENTARIO_OMITIR = new Set([
+  'tipo_no_aplica',
+  'sin_lineas_inventario',
+  'sin_salida_origen',
+  'sunat_no_aceptada',
+]);
+const TIPOS_VENTA_INVENTARIO = new Set(['01', '03']);
 
 function inventarioDebeBloquearEmision(inventario) {
   if (!inventario || inventario.aplicado || inventario.motivo === 'ya_registrado') return false;
@@ -63,10 +69,37 @@ async function aplicarInventarioPostEmision(invoiceId, companyRuc, comprobanteAp
   const invoice = await comprobanteModel.findByIdForEmission(invoiceId, companyRuc);
   if (!invoice) return null;
 
+  const estadoOk = ['ACEPTADO', 'ENVIADO'].includes(comprobanteApi.estado);
+
+  if (invoice.tipoDoc === '07') {
+    if (!estadoOk) return { aplicado: false, motivo: 'sunat_no_aceptada' };
+    return comprobanteInventarioService.registrarEntradaPorNotaCredito(
+      { ...invoice, estado: comprobanteApi.estado },
+      options,
+    );
+  }
+
   return comprobanteInventarioService.registrarSalidaPorComprobante(
     { ...invoice, estado: comprobanteApi.estado },
     options,
   );
+}
+
+/** Tras registrar inventario, re-enriquece el comprobante para exponer movimiento_entrada_id / inventario_estado. */
+async function comprobanteConInventario(invoiceId, companyRuc, comprobante, inventario, emitOpts) {
+  if (!inventario?.aplicado && !inventario?.motivo) return comprobante;
+
+  let api = comprobante;
+  if (inventario.aplicado) {
+    const fresh = await comprobanteModel.findByIdForEmission(invoiceId, companyRuc);
+    if (fresh) {
+      api = await comprobanteModel.toApiInvoiceEnriched(fresh, {
+        ...emitOpts,
+        companyRuc,
+      });
+    }
+  }
+  return { ...api, inventario };
 }
 
 async function emitirBoletaConResumen(invoice, options = {}) {
@@ -83,7 +116,7 @@ async function emitirBoletaConResumen(invoice, options = {}) {
       emitOpts,
     );
     const inventario = await aplicarInventarioPostEmision(invoice.id, invoice.companyRuc, comprobante, emitOpts);
-    return inventario?.aplicado || inventario?.motivo ? { ...comprobante, inventario } : comprobante;
+    return comprobanteConInventario(invoice.id, invoice.companyRuc, comprobante, inventario, emitOpts);
   }
 
   const resumenPayload = await payloadResumenParaEmision(
@@ -106,7 +139,7 @@ async function emitirBoletaConResumen(invoice, options = {}) {
       emitOpts,
     );
     const inventario = await aplicarInventarioPostEmision(invoice.id, invoice.companyRuc, comprobante, emitOpts);
-    return inventario?.aplicado || inventario?.motivo ? { ...comprobante, inventario } : comprobante;
+    return comprobanteConInventario(invoice.id, invoice.companyRuc, comprobante, inventario, emitOpts);
   }
 
   const finalData = mergeBoletaConResumen(boletaData, resumenData);
@@ -118,7 +151,7 @@ async function emitirBoletaConResumen(invoice, options = {}) {
     emitOpts,
   );
   const inventario = await aplicarInventarioPostEmision(invoice.id, invoice.companyRuc, comprobante, emitOpts);
-  return inventario?.aplicado || inventario?.motivo ? { ...comprobante, inventario } : comprobante;
+  return comprobanteConInventario(invoice.id, invoice.companyRuc, comprobante, inventario, emitOpts);
 }
 
 async function emitirComprobanteExistente(invoice, options = {}) {
@@ -126,7 +159,7 @@ async function emitirComprobanteExistente(invoice, options = {}) {
   const afectarInventario = quiereAfectarInventario(emitOpts);
 
   let inventarioReserva = null;
-  if (afectarInventario) {
+  if (afectarInventario && TIPOS_VENTA_INVENTARIO.has(invoice.tipoDoc)) {
     inventarioReserva = await comprobanteInventarioService.registrarSalidaPorComprobante(
       invoice,
       emitOpts,
@@ -153,9 +186,13 @@ async function emitirComprobanteExistente(invoice, options = {}) {
       emitOpts,
     );
     const inventario = await aplicarInventarioPostEmision(invoice.id, invoice.companyRuc, comprobante, emitOpts);
-    comprobante = inventario?.aplicado || inventario?.motivo
-      ? { ...comprobante, inventario }
-      : comprobante;
+    comprobante = await comprobanteConInventario(
+      invoice.id,
+      invoice.companyRuc,
+      comprobante,
+      inventario,
+      emitOpts,
+    );
   }
 
   if (inventarioReserva?.aplicado && !comprobante.inventario) {
@@ -187,7 +224,14 @@ async function enviarResumenDiario(companyRuc, { fecha = null, apiBaseUrl = null
 }
 
 async function crearYEmitirDesdeMobile(companyRuc, body, options = {}) {
-  const invoice = await comprobanteModel.createFromMobileRequest(companyRuc, body);
+  let invoice;
+  try {
+    invoice = await comprobanteModel.createFromMobileRequest(companyRuc, body);
+  } catch (err) {
+    const e = new Error(err.message || 'No se pudo registrar el comprobante.');
+    e.status = 400;
+    throw e;
+  }
 
   if (!TIPOS_EMITIBLES.has(invoice.tipoDoc)) {
     return {
@@ -207,6 +251,7 @@ async function crearYEmitirDesdeMobile(companyRuc, body, options = {}) {
     // Inventario es opt-in: por defecto la venta solo se registra/envía a SUNAT.
     afectarInventario: body.afectar_inventario === true || body.afectarInventario === true
       || options.afectarInventario === true,
+    usuarioId: options.usuarioId != null ? Number(options.usuarioId) : null,
   });
 
   try {
@@ -234,10 +279,16 @@ async function crearYEmitirDesdeMobile(companyRuc, body, options = {}) {
       };
     }
 
-    const guardado = await comprobanteModel.toApiInvoiceEnriched(
-      (await comprobanteModel.findByIdForEmission(invoice.id, companyRuc)) || invoice,
-      options,
-    );
+    let guardado;
+    try {
+      guardado = await comprobanteModel.toApiInvoiceEnriched(
+        (await comprobanteModel.findByIdForEmission(invoice.id, companyRuc)) || invoice,
+        options,
+      );
+    } catch (enrichErr) {
+      console.error('[emision] toApiInvoiceEnriched', enrichErr);
+      guardado = { id: invoice.id, serie: invoice.serie, correlativo: invoice.correlativo };
+    }
 
     const isEmisor = err.name === 'EmisorClientError';
     const isSunatConfig = /SUNAT|certificado|SOL|credenciales/i.test(String(err.message || ''));

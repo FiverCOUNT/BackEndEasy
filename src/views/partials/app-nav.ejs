@@ -1,0 +1,61 @@
+<aside class="ios-side" aria-label="Menú">
+  <div class="ios-brand">
+    <div class="ios-brand-mark" aria-hidden="true">
+      <% if (typeof companyLogoUrl === 'string' && companyLogoUrl) { %>
+        <img
+          class="ios-brand-logo"
+          src="<%= companyLogoUrl %>"
+          alt=""
+          loading="lazy"
+          onerror="this.hidden=true;this.nextElementSibling.hidden=false;"
+        />
+        <span class="ios-brand-initials" hidden><%= companyInitials || 'E' %></span>
+      <% } else { %>
+        <span class="ios-brand-initials"><%= companyInitials || 'E' %></span>
+      <% } %>
+    </div>
+    <div class="ios-brand-copy">
+      <strong class="ios-brand-name" title="<%= companyNombre || 'Empresa' %>"><%= companyNombre || 'Empresa' %></strong>
+      <small class="ios-brand-sub">Panel empresa</small>
+      <span class="ios-env-pill <%= companyEsProd ? 'is-prod' : 'is-beta' %>">
+        <span class="ios-env-dot" aria-hidden="true"></span>
+        <%= companyEntornoLabel || (companyEsProd ? 'Producción' : 'Beta') %>
+      </span>
+    </div>
+  </div>
+  <nav class="ios-side-nav">
+    <% (navItems || []).forEach(function(item) { %>
+      <a
+        href="<%= appBase %><%= item.href === '/' ? '/' : item.href %>"
+        class="<%= active === item.id ? 'is-active' : '' %>"
+      >
+        <span class="ios-side-ico"><%= item.icon %></span>
+        <%= item.label %>
+        <% if (item.id === 'ordenes' && typeof ordenesNoVistas === 'number' && ordenesNoVistas > 0) { %>
+          <span class="ios-nav-badge"><%= ordenesNoVistas > 99 ? '99+' : ordenesNoVistas %></span>
+        <% } %>
+      </a>
+    <% }); %>
+  </nav>
+  <div class="ios-side-foot">
+    <div class="ios-side-user">
+      <span class="ios-side-user-avatar" aria-hidden="true"><%= (webUser.email || '?').slice(0, 1).toUpperCase() %></span>
+      <div class="ios-side-user-text">
+        <strong>Cuenta</strong>
+        <span class="ios-side-email" title="<%= webUser.email %>"><%= webUser.email %></span>
+      </div>
+    </div>
+    <form method="POST" action="<%= appBase %>/logout" class="ios-side-logout-form">
+      <button type="submit" class="ios-logout">Salir</button>
+    </form>
+    <div class="ios-side-easy">
+      <img
+        class="ios-side-easy-logo"
+        src="/img/easy-logo.png"
+        alt="Easy App móvil"
+        loading="lazy"
+      />
+      <span class="ios-side-easy-name">Easy</span>
+    </div>
+  </div>
+</aside>

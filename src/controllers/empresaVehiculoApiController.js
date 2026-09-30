@@ -3,7 +3,7 @@ const empresaVehiculoModel = require('../models/empresaVehiculoModel');
 async function list(req, res, next) {
   try {
     const q = req.query.q || req.query.placa || null;
-    const rows = await empresaVehiculoModel.listAll({ q });
+    const rows = await empresaVehiculoModel.listAll(req.companyRuc, { q });
     res.json(rows.map(empresaVehiculoModel.toApi));
   } catch (err) {
     next(err);
@@ -12,7 +12,7 @@ async function list(req, res, next) {
 
 async function create(req, res, next) {
   try {
-    const row = await empresaVehiculoModel.create(req.body);
+    const row = await empresaVehiculoModel.create(req.companyRuc, req.body);
     res.status(201).json(empresaVehiculoModel.toApi(row));
   } catch (err) {
     if (err.status) {
@@ -24,7 +24,7 @@ async function create(req, res, next) {
 
 async function update(req, res, next) {
   try {
-    const row = await empresaVehiculoModel.update(req.params.id, req.body);
+    const row = await empresaVehiculoModel.update(req.params.id, req.companyRuc, req.body);
     res.json(empresaVehiculoModel.toApi(row));
   } catch (err) {
     if (err.status) {
@@ -36,7 +36,7 @@ async function update(req, res, next) {
 
 async function destroy(req, res, next) {
   try {
-    const result = await empresaVehiculoModel.remove(req.params.id);
+    const result = await empresaVehiculoModel.remove(req.params.id, req.companyRuc);
     res.json({ success: true, id: result.id });
   } catch (err) {
     if (err.status) {

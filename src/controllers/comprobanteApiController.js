@@ -8,6 +8,7 @@ const {
   readAlmacenFromQuery,
   normalizeAlmacenId,
 } = require('../utils/almacenAccess');
+const { parseMobileListQuery, sendMobilePage } = require('../utils/pagination');
 
 const TIPOS_EMITIBLES = comprobanteEmisionService.TIPOS_EMITIBLES;
 const ESTADOS_REEMITIBLES = comprobanteEmisionService.ESTADOS_REEMITIBLES;
@@ -47,8 +48,22 @@ async function crearYEmitir(req, res, next) {
 
     return res.status(result.status).json(result.body);
   } catch (err) {
-    if (err.message && !err.name) {
-      return res.status(400).json({ success: false, message: err.message });
+    if (err.code === 'inventario') {
+      return res.status(409).json({
+        success: false,
+        message: err.message,
+        inventario: err.inventario || null,
+      });
+    }
+    if (err.name === 'EmisorClientError') {
+      return res.status(err.status || 502).json({
+        success: false,
+        message: err.message,
+        emisor: err.data || null,
+      });
+    }
+    if (err.message) {
+      return res.status(err.status || 400).json({ success: false, message: err.message });
     }
     next(err);
   }
@@ -56,12 +71,20 @@ async function crearYEmitir(req, res, next) {
 
 async function list(req, res, next) {
   try {
-    const rows = await comprobanteModel.findAllByCompany(req.companyRuc, {
+    const { page, pageSize, skip } = parseMobileListQuery(req.query);
+    const result = await comprobanteModel.findAllByCompany(req.companyRuc, {
       desde: req.query.desde,
       hasta: req.query.hasta,
+      skip,
+      take: pageSize,
       ...serializeOptions(req),
     });
-    res.json(rows);
+    return sendMobilePage(res, {
+      items: result.items,
+      total: result.total,
+      page,
+      pageSize,
+    });
   } catch (err) {
     next(err);
   }
@@ -69,12 +92,16 @@ async function list(req, res, next) {
 
 async function listCompras(req, res, next) {
   try {
-    const rows = await comprobanteModel.findComprasByCompany(req.companyRuc, {
+    const compraModel = require('../models/compraModel');
+    const { page, pageSize, skip } = parseMobileListQuery(req.query);
+    const rows = await compraModel.listByCompany(req.companyRuc, {
       desde: req.query.desde,
       hasta: req.query.hasta,
-      ...serializeOptions(req),
     });
-    res.json(rows);
+    rows.sort((a, b) => String(b.fecha_emision || '').localeCompare(String(a.fecha_emision || '')));
+    const total = rows.length;
+    const items = rows.slice(skip, skip + pageSize);
+    return sendMobilePage(res, { items, total, page, pageSize });
   } catch (err) {
     next(err);
   }
@@ -82,7 +109,9 @@ async function listCompras(req, res, next) {
 
 async function getById(req, res, next) {
   try {
-    const invoice = await comprobanteModel.findByIdForEmission(req.params.id, req.companyRuc);
+    // Emisor, receptor o parte GRE (p. ej. transportista de una GRE-R) pueden ver el detalle.
+    // Necesario para precargar vehículo/conductor al emitir GRE-T desde una GRE-R recibida.
+    const invoice = await comprobanteModel.findByIdForCompanyAccess(req.params.id, req.companyRuc);
     if (!invoice) {
       return res.status(404).json({ success: false, message: 'Comprobante no encontrado' });
     }
@@ -178,6 +207,7 @@ async function emitir(req, res, next) {
         || req.body?.almacen_id
         || req.body?.almacenId
         || null,
+      usuarioId: req.userId ?? null,
     });
 
     const comprobante = await comprobanteEmisionService.emitirComprobanteExistente(
@@ -345,6 +375,7 @@ async function restarAlmacen(req, res, next) {
 
     const result = await comprobanteInventarioService.registrarSalidaPorComprobante(invoice, {
       almacenId,
+      usuarioId: req.userId ?? null,
     });
 
     if (!result.aplicado) {

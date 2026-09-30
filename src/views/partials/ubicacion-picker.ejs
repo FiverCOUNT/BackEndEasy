@@ -1,0 +1,60 @@
+<%
+  var _ubicBase = typeof appBase !== 'undefined' && appBase ? appBase : '/app';
+%>
+<div id="easyUbicPicker" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true"
+  data-app-base="<%= _ubicBase %>"
+  data-ubigeo-api="<%= _ubicBase %>/ubigeo"
+  data-ubicaciones-api="<%= _ubicBase %>/ubicaciones">
+  <div class="ios-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="easyUbicTitulo">
+    <div class="ios-sheet-head">
+      <button type="button" class="ios-sheet-back" id="easyUbicCerrar">← Volver</button>
+      <h3 id="easyUbicTitulo">Ubicación</h3>
+      <button type="button" class="ios-sheet-action-label" id="easyUbicNueva">Añadir</button>
+    </div>
+
+    <div id="easyUbicListaWrap">
+      <input type="search" id="easyUbicBusqueda" class="ios-sheet-search" placeholder="Buscar recientes…" autocomplete="off" />
+      <div class="ios-sheet-status" id="easyUbicStatus">Cargando ubicaciones…</div>
+      <div class="ios-sheet-list" id="easyUbicLista"></div>
+      <button type="button" class="ios-sheet-more" id="easyUbicMas" hidden>Ver más</button>
+    </div>
+
+    <div id="easyUbicFormWrap" class="ios-envio-form" hidden>
+      <p class="ios-muted" style="margin:0 0 10px;font-size:13px;">Elige región, provincia y distrito; luego escribe la dirección (mz, lote, etc.).</p>
+      <label class="ios-field">
+        <span>Región *</span>
+        <select id="easyUbicRegion" required>
+          <option value="">Selecciona…</option>
+        </select>
+      </label>
+      <label class="ios-field">
+        <span>Provincia *</span>
+        <select id="easyUbicProvincia" required disabled>
+          <option value="">Selecciona región…</option>
+        </select>
+      </label>
+      <label class="ios-field">
+        <span>Distrito *</span>
+        <select id="easyUbicDistrito" required disabled>
+          <option value="">Selecciona provincia…</option>
+        </select>
+      </label>
+      <label class="ios-field">
+        <span>Dirección (mz, lote, calle…) *</span>
+        <input type="text" id="easyUbicDireccion" maxlength="500" placeholder="Ej. Av. Arequipa 123 Mz. B Lt. 4" autocomplete="street-address" />
+      </label>
+      <label class="ios-field">
+        <span>Urbanización</span>
+        <input type="text" id="easyUbicUrbanizacion" maxlength="120" placeholder="Opcional" />
+      </label>
+      <label class="ios-field">
+        <span>Etiqueta</span>
+        <input type="text" id="easyUbicEtiqueta" maxlength="120" placeholder="Ej. Almacén Lima (opcional)" />
+      </label>
+      <input type="hidden" id="easyUbicUbigeo" value="" />
+      <p class="ios-muted" id="easyUbicUbigeoHint" style="font-size:12px;margin:4px 0 12px;">Ubigeo: —</p>
+      <button type="button" class="ios-btn-primary" id="easyUbicGuardar">Guardar y usar</button>
+    </div>
+  </div>
+</div>
+<script src="/js/app-ubicacion.js"></script>

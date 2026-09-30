@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> · Easy</title>
+  <link rel="stylesheet" href="/css/app-ios.css" />
+</head>
+<body class="ios-app">
+  <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
+  <main class="ios-main">
+    <%
+      var c = orden.cliente || {};
+      var inv = orden.invoice;
+      var addr = orden.address_envio || {};
+      var dirParts = [addr.direccion, addr.urbanizacion, addr.distrito, addr.provincia, addr.departamento].filter(Boolean);
+      var dirEnvio = dirParts.join(', ');
+      var editable = orden.estado !== 'FACTURADA' && orden.estado !== 'ANULADA';
+      var estadoLabel = { BORRADOR: 'Borrador', CONFIRMADA: 'Confirmada', FACTURADA: 'Facturada', ANULADA: 'Anulada' };
+      var estadoClass = { BORRADOR: 'is-draft', CONFIRMADA: 'is-ready', FACTURADA: 'is-done', ANULADA: 'is-void' };
+      var docLabel = c.tipo_doc === '1' ? 'DNI' : c.tipo_doc === '6' ? 'RUC' : (c.tipo_doc === '4' ? 'CE' : 'Doc.');
+      function formatMoney(n) {
+        var v = Number(n);
+        if (!Number.isFinite(v)) return 'S/ 0.00';
+        return 'S/ ' + v.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      }
+      function formatFechaOrden(value) {
+        if (!value) return '—';
+        var d = value instanceof Date ? value : new Date(Number(value) || value);
+        if (isNaN(d.getTime())) return '—';
+        return d.toLocaleString('es-PE', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      }
+      function etiquetaUnidad(cod) {
+        var u = String(cod || 'NIU').trim().toUpperCase();
+        if (u === 'NIU' || u === 'UND') return 'und';
+        if (u === 'KGM') return 'kg';
+        if (u === 'LTR' || u === 'LT') return 'lt';
+        return u.toLowerCase();
+      }
+      var lineas = orden.detalles || [];
+    %>
+
+    <header class="ios-top">
+      <div>
+        <a class="ios-back" href="<%= appBase %>/ordenes">← Órdenes</a>
+        <h1><%= c.razon_social || 'Orden' %></h1>
+      </div>
+    </header>
+    <% if (flash) { %><div class="ios-flash <%= flash.type === 'error' ? 'is-error' : 'is-ok' %>"><%= flash.text %></div><% } %>
+
+    <div class="ios-orden-detail-head">
+      <span class="ios-orden-pill <%= estadoClass[orden.estado] || '' %>"><%= estadoLabel[orden.estado] || orden.estado %></span>
+      <small><%= formatFechaOrden(orden.creado_en) %></small>
+    </div>
+
+    <section class="ios-orden-hero">
+      <p>Total</p>
+      <strong><%= formatMoney(orden.mto_imp_venta) %></strong>
+      <small><%= lineas.length %> ítem<%= lineas.length === 1 ? '' : 's' %> · <%= orden.tipo_moneda || 'PEN' %></small>
+    </section>
+
+    <section class="ios-section">
+      <h2 class="ios-section-title">Cliente</h2>
+      <div class="ios-list">
+        <article class="ios-row ios-row-static">
+          <span class="ios-row-text">
+            <strong><%= c.razon_social || 'Sin cliente' %></strong>
+            <small><%= docLabel %> <%= c.numero_doc || '—' %></small>
+          </span>
+        </article>
+        <% if (orden.observacion) { %>
+          <article class="ios-row ios-row-static">
+            <span class="ios-row-text">
+              <strong>Observación</strong>
+              <small><%= orden.observacion %></small>
+            </span>
+          </article>
+        <% } %>
+      </div>
+    </section>
+
+    <% if (dirEnvio || addr.ubigeo) { %>
+      <section class="ios-section">
+        <h2 class="ios-section-title">Envío</h2>
+        <div class="ios-list">
+          <article class="ios-row ios-row-static">
+            <span class="ios-row-text">
+              <strong><%= dirEnvio || 'Dirección de envío' %></strong>
+              <% if (addr.ubigeo) { %><small>Ubigeo <%= addr.ubigeo %></small><% } %>
+            </span>
+          </article>
+        </div>
+      </section>
+    <% } %>
+
+    <section class="ios-section">
+      <h2 class="ios-section-title">Productos</h2>
+      <% if (!lineas.length) { %>
+        <section class="ios-card-empty">
+          <div class="ios-empty-icon">📦</div>
+          <h2>Sin ítems</h2>
+          <p>Esta orden no tiene líneas de producto.</p>
+        </section>
+      <% } else { %>
+        <div class="ios-list ios-orden-items">
+          <% lineas.forEach(function(d) {
+            var serie = (d.producto_serie && d.producto_serie.numero_serie) || d.numero_serie || '';
+            var almacen = (d.almacen && d.almacen.nombre) || '';
+          %>
+            <article class="ios-orden-item">
+              <div class="ios-orden-item-main">
+                <strong><%= d.nombre || d.descripcion || 'Ítem' %></strong>
+                <small>
+                  <%= d.cantidad %> <%= etiquetaUnidad(d.unidad) %>
+                  · <%= formatMoney(d.mto_precio_unitario) %> c/u
+                  <% if (almacen) { %> · <%= almacen %><% } %>
+                </small>
+                <% if (serie) { %>
+                  <small class="ios-orden-linea-serie">Serie: <%= serie %></small>
+                <% } %>
+              </div>
+              <span class="ios-orden-item-total"><%= formatMoney(d.total) %></span>
+            </article>
+          <% }); %>
+        </div>
+      <% } %>
+    </section>
+
+    <section class="ios-section">
+      <h2 class="ios-section-title">Totales</h2>
+      <div class="ios-orden-totales">
+        <div class="ios-orden-totales-row"><span>Gravadas</span><strong><%= formatMoney(orden.mto_oper_gravadas) %></strong></div>
+        <div class="ios-orden-totales-row"><span>IGV</span><strong><%= formatMoney(orden.mto_igv) %></strong></div>
+        <div class="ios-orden-totales-row is-total"><span>Total</span><strong><%= formatMoney(orden.mto_imp_venta) %></strong></div>
+      </div>
+    </section>
+
+    <% if (inv) { %>
+      <section class="ios-section">
+        <h2 class="ios-section-title">Comprobante</h2>
+        <div class="ios-list">
+          <article class="ios-row ios-row-static">
+            <span class="ios-row-text">
+              <strong><%= inv.serie %>-<%= inv.correlativo %></strong>
+              <small><%= inv.tipo_doc === '03' ? 'Boleta' : 'Factura' %> · <%= inv.estado %></small>
+            </span>
+          </article>
+        </div>
+      </section>
+    <% } %>
+
+    <% if (editable) { %>
+      <section class="ios-section">
+        <h2 class="ios-section-title">Realizar venta</h2>
+        <div class="ios-list">
+          <a class="ios-row" href="<%= appBase %>/emitir/FACTURA?orden=<%= orden.id %>">
+            <span class="ios-row-icon" style="background:#E3F2FD;">🧾</span>
+            <span class="ios-row-text">
+              <strong>Factura electrónica</strong>
+              <small>Cliente con RUC</small>
+            </span>
+            <span class="ios-chevron">›</span>
+          </a>
+          <a class="ios-row" href="<%= appBase %>/emitir/BOLETA?orden=<%= orden.id %>">
+            <span class="ios-row-icon" style="background:#E8F5E9;">📄</span>
+            <span class="ios-row-text">
+              <strong>Boleta electrónica</strong>
+              <small>Consumidor final / DNI</small>
+            </span>
+            <span class="ios-chevron">›</span>
+          </a>
+        </div>
+      </section>
+
+      <div class="ios-orden-actions">
+        <a class="ios-btn-primary" href="<%= appBase %>/ordenes/<%= orden.id %>/editar">Editar orden</a>
+        <form method="POST" action="<%= appBase %>/ordenes/<%= orden.id %>/anular" onsubmit="return confirm('¿Anular esta orden?');">
+          <button type="submit" class="ios-btn-secondary">Anular</button>
+        </form>
+        <form method="POST" action="<%= appBase %>/ordenes/<%= orden.id %>/eliminar" onsubmit="return confirm('¿Eliminar definitivamente?');">
+          <button type="submit" class="ios-orden-danger">Eliminar</button>
+        </form>
+      </div>
+    <% } %>
+  </main>
+  <%- include('../../partials/app-tabbar', { active: active, appBase: appBase }) %>
+</body>
+</html>

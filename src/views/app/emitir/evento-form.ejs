@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> · Easy</title>
+  <link rel="stylesheet" href="/css/app-ios.css" />
+</head>
+<body class="ios-app">
+  <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
+  <main class="ios-main">
+    <header class="ios-top">
+      <div>
+        <p class="ios-eyebrow">Eventos GRE</p>
+        <h1><%= meta.titulo %></h1>
+      </div>
+      <a class="ios-back" href="<%= appBase %><%= typeof backHref !== 'undefined' && backHref ? backHref : '/emitir/guia/eventos' %>">Volver</a>
+    </header>
+    <% if (typeof flash !== 'undefined' && flash) { %>
+      <div class="ios-flash <%= flash.type === 'error' ? 'is-error' : '' %>"><%= flash.text %></div>
+    <% } %>
+    <% if (error) { %>
+      <div class="ios-flash is-error"><%= error %></div>
+    <% } %>
+    <form class="ios-form" method="POST" action="<%= appBase %>/emitir/guia/eventos/<%= modo %>">
+      <section class="ios-form-card">
+        <p class="ios-muted"><%= meta.detalle %></p>
+        <label class="ios-field">
+          <span>Guía *</span>
+          <select name="guia_id" required>
+            <option value="">— Seleccionar —</option>
+            <% (guias || []).forEach(function(g) { %>
+              <option value="<%= g.id %>"><%= (g.serie || '') + '-' + (g.correlativo || '') %> · <%= g.tipo_doc || g.tipoDoc %></option>
+            <% }) %>
+          </select>
+        </label>
+        <label class="ios-field">
+          <span>Código evento</span>
+          <select name="codigo_evento">
+            <option value="01">01 · Inicio de traslado</option>
+            <option value="02">02 · Llegada al punto de llegada</option>
+            <option value="03">03 · Entrega de bienes</option>
+          </select>
+        </label>
+        <label class="ios-field">
+          <span>Detalle</span>
+          <input type="text" name="detalle" placeholder="Opcional" />
+        </label>
+      </section>
+      <div class="ios-form-actions">
+        <button type="submit" class="ios-btn-primary">Enviar a SUNAT</button>
+      </div>
+    </form>
+  </main>
+  <%- include('../../partials/app-tabbar', { active: active, appBase: appBase }) %>
+</body>
+</html>

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> · Easy</title>
+  <link rel="stylesheet" href="/css/app-ios.css" />
+</head>
+<body class="ios-app">
+  <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
+  <main class="ios-main">
+    <header class="ios-top">
+      <div>
+        <p class="ios-eyebrow"><%= companyNombre %></p>
+        <h1><%= isEdit ? 'Editar almacén' : 'Nuevo almacén' %></h1>
+      </div>
+      <a class="ios-back" href="<%= appBase %>/almacenes">Almacenes</a>
+    </header>
+
+    <% if (error) { %><div class="ios-flash is-error"><%= error %></div><% } %>
+
+    <form
+      class="ios-form"
+      method="POST"
+      action="<%= isEdit ? (appBase + '/almacenes/' + itemId) : (appBase + '/almacenes') %>"
+    >
+      <section class="ios-form-card">
+        <h3 class="ios-form-label">Datos</h3>
+        <label class="ios-field">
+          <span>Código *</span>
+          <input type="text" name="codigo" value="<%= form.codigo || '' %>" required maxlength="32" placeholder="ALM01" autocomplete="off" />
+        </label>
+        <label class="ios-field">
+          <span>Nombre *</span>
+          <input type="text" name="nombre" value="<%= form.nombre || '' %>" required maxlength="255" placeholder="Almacén principal" />
+        </label>
+        <label class="ios-check" style="align-items:center;gap:12px;margin-top:8px;">
+          <input type="checkbox" name="activo" value="on" <%= form.activo !== false ? 'checked' : '' %> />
+          <span>
+            <strong style="display:block;font-size:15px;">Activo</strong>
+            <small style="display:block;color:var(--ios-muted);margin-top:2px;">Si está inactivo no aparecerá en ventas ni salidas.</small>
+          </span>
+        </label>
+      </section>
+
+      <section class="ios-form-card">
+        <h3 class="ios-form-label">Dirección (opcional)</h3>
+        <input type="hidden" name="ubigeo" id="almUbigeo" value="<%= form.ubigeo || '' %>" />
+        <input type="hidden" name="departamento" id="almDepartamento" value="<%= form.departamento || '' %>" />
+        <input type="hidden" name="provincia" id="almProvincia" value="<%= form.provincia || '' %>" />
+        <input type="hidden" name="distrito" id="almDistrito" value="<%= form.distrito || '' %>" />
+        <input type="hidden" name="direccion" id="almDireccion" value="<%= form.direccion || '' %>" />
+        <div class="ios-ubic-wrap">
+          <button type="button" class="ios-ubic-pick <%= (form.direccion || form.ubigeo) ? 'is-on' : 'is-empty' %>" id="almUbicAbrir">
+            <span class="ios-ubic-pick-icon" aria-hidden="true">📍</span>
+            <span class="ios-ubic-pick-text">
+              <strong id="almUbicTitulo"><%= form.direccion || 'Toca para elegir ubicación' %></strong>
+              <small id="almUbicDetalle"><%= form.ubigeo ? ('Ubigeo ' + form.ubigeo) : 'Región, distrito y dirección (mz, lote…)' %></small>
+            </span>
+          </button>
+          <button type="button" class="ios-ubic-clear" id="almUbicQuitar" <%= (form.direccion || form.ubigeo) ? '' : 'hidden' %> aria-label="Quitar">×</button>
+        </div>
+        <label class="ios-field" style="margin-top:12px;">
+          <span>Cód. local SUNAT</span>
+          <input type="text" name="codLocal" value="<%= form.codLocal || '0000' %>" maxlength="4" placeholder="0000" />
+        </label>
+      </section>
+
+      <button type="submit" class="ios-btn-primary"><%= isEdit ? 'Guardar cambios' : 'Crear almacén' %></button>
+    </form>
+
+    <% if (isEdit) { %>
+      <form
+        method="POST"
+        action="<%= appBase %>/almacenes/<%= itemId %>/<%= form.activo !== false ? 'desactivar' : 'activar' %>"
+        style="margin-top:12px"
+      >
+        <button type="submit" class="ios-btn-ghost" style="width:100%">
+          <%= form.activo !== false ? 'Desactivar almacén' : 'Activar almacén' %>
+        </button>
+      </form>
+      <form
+        method="POST"
+        action="<%= appBase %>/almacenes/<%= itemId %>/eliminar"
+        style="margin-top:8px"
+        onsubmit="return confirm('¿Eliminar este almacén? Solo si no tiene movimientos ni stock.');"
+      >
+        <button type="submit" class="ios-btn-ghost" style="width:100%;color:#FF3B30">Eliminar almacén</button>
+      </form>
+    <% } %>
+  </main>
+  <%- include('../../partials/app-tabbar', { active: active, appBase: appBase }) %>
+  <%- include('../../partials/ubicacion-picker', { appBase: appBase }) %>
+  <script>
+    if (window.EasyUbicacion) {
+      window.EasyUbicacion.bindPick({
+        openBtn: 'almUbicAbrir',
+        clearBtn: 'almUbicQuitar',
+        pickBtn: 'almUbicAbrir',
+        titleEl: 'almUbicTitulo',
+        detailEl: 'almUbicDetalle',
+        title: 'Dirección del almacén',
+        emptyDetail: 'Región, distrito y dirección (mz, lote…)',
+        fields: {
+          ubigeo: 'almUbigeo',
+          departamento: 'almDepartamento',
+          provincia: 'almProvincia',
+          distrito: 'almDistrito',
+          direccion: 'almDireccion',
+        },
+      });
+    }
+  </script>
+</body>
+</html>

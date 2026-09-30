@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> · Easy</title>
+  <link rel="stylesheet" href="/css/app-ios.css" />
+</head>
+<body class="ios-app">
+  <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
+  <main class="ios-main">
+    <header class="ios-top">
+      <div>
+        <p class="ios-eyebrow">Guía de remisión</p>
+        <h1>GRE por evento</h1>
+      </div>
+      <a class="ios-back" href="<%= appBase %>/emitir/guia">Volver</a>
+    </header>
+    <% if (flash) { %>
+      <div class="ios-flash <%= flash.type === 'error' ? 'is-error' : '' %>"><%= flash.text %></div>
+    <% } %>
+    <p class="ios-muted" style="margin:0 0 12px">Complementa una GRE ya emitida, como en SUNAT SOL: tipo de evento, documento relacionado, nuevo tramo y transporte.</p>
+    <div class="ios-list ios-emit-list">
+      <% opciones.forEach(function(op) { %>
+        <a class="ios-row" href="<%= appBase %>/emitir/guia/eventos/<%= op.key %>">
+          <span class="ios-row-icon" style="background:#E1BEE7;color:#6A1B9A">⚠️</span>
+          <span class="ios-row-text">
+            <strong style="color:#6A1B9A"><%= op.titulo %></strong>
+            <small><%= op.detalle %></small>
+          </span>
+          <span class="ios-chevron">›</span>
+        </a>
+      <% }) %>
+    </div>
+  </main>
+  <%- include('../../partials/app-tabbar', { active: active, appBase: appBase }) %>
+</body>
+</html>

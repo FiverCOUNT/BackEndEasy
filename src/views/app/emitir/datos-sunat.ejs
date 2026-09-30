@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> · Easy</title>
+  <link rel="stylesheet" href="/css/app-ios.css?v=20260926ruta" />
+</head>
+<body class="ios-app">
+  <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
+  <main class="ios-main">
+    <header class="ios-top">
+      <div>
+        <p class="ios-eyebrow"><%= companyNombre || 'Empresa' %></p>
+        <h1>Datos de la factura</h1>
+      </div>
+      <a class="ios-back" href="<%= appBase %>/emitir">Volver</a>
+    </header>
+    <p class="ios-muted" style="margin:0 0 14px">Este paso es solo de la factura, como en SUNAT: al contado, en soles y No. Boleta, notas y guías no pasan por aquí.</p>
+    <% if (error) { %><div class="ios-flash is-error"><%= error %></div><% } %>
+
+    <%
+      var d = datos || {};
+      var f = d.flags || {};
+      function on(name, val) { return f[name] === val || d[name] === val; }
+      var preguntas = [
+        ['detraccion', '¿Hay operaciones sujetas a detracción?'],
+        ['colaboracion', '¿Vinculada a un contrato de colaboración empresarial sin contabilidad independiente?'],
+        ['anticipo', '¿Se emite por un pago anticipado?'],
+        ['itinerante', '¿La emite un emisor itinerante?'],
+        ['establecimiento', '¿El bien o servicio se entrega en el establecimiento del emisor?'],
+        ['direccion_entrega', '¿Hay una dirección distinta donde se entrega el bien o se presta el servicio?'],
+        ['combustible', '¿Es venta de combustible y/o mantenimiento de un vehículo?'],
+        ['descuentos', '¿Tiene descuentos o deduce anticipos?'],
+        ['isc', '¿Tiene ISC?'],
+        ['gratuita', '¿Tiene operaciones gratuitas?'],
+        ['otros_tributos', '¿Tiene cargos u otros tributos que no forman parte de la base del IGV?'],
+      ];
+    %>
+
+    <form class="ios-form" method="POST" action="<%= appBase %>/emitir/datos">
+      <section class="ios-form-card">
+        <h3 class="ios-form-label">Tipo de transacción</h3>
+        <div class="ios-sunat-row">
+          <label class="ios-sunat-opt"><input type="radio" name="forma_pago" value="contado" <%= d.forma_pago === 'contado' ? 'checked' : '' %> required /> Al contado</label>
+          <label class="ios-sunat-opt"><input type="radio" name="forma_pago" value="credito" <%= d.forma_pago === 'credito' ? 'checked' : '' %> /> Al crédito</label>
+        </div>
+        <div id="fechaPagoWrap" class="ios-list ios-date-list" style="<%= d.forma_pago === 'credito' ? '' : 'display:none' %>">
+          <input type="hidden" name="fecha_pago" id="fechaPago" value="<%= d.fecha_pago || '' %>" />
+          <button type="button" class="ios-row ios-date-row" id="fechaPagoBtn">
+            <span class="ios-row-text">
+              <strong>Fecha de pago</strong>
+              <small>El cliente paga en esta fecha</small>
+            </span>
+            <span class="ios-date-row-value<%= d.fecha_pago ? '' : ' is-empty' %>" id="fechaPagoLabel"><%= d.fecha_pago ? d.fecha_pago : 'Elegir' %></span>
+            <span class="ios-chevron" aria-hidden="true">›</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="ios-form-card">
+        <h3 class="ios-form-label">Moneda</h3>
+        <div class="ios-sunat-row">
+          <label class="ios-sunat-opt"><input type="radio" name="tipo_moneda" value="PEN" <%= d.tipo_moneda === 'PEN' ? 'checked' : '' %> required /> Soles</label>
+          <label class="ios-sunat-opt"><input type="radio" name="tipo_moneda" value="USD" <%= d.tipo_moneda === 'USD' ? 'checked' : '' %> /> Dólares</label>
+        </div>
+      </section>
+
+      <% preguntas.forEach(function(p) { %>
+        <section class="ios-form-card">
+          <h3 class="ios-form-label"><%= p[1] %></h3>
+          <div class="ios-sunat-row">
+            <label class="ios-sunat-opt"><input type="radio" name="<%= p[0] %>" value="si" <%= on(p[0], 'si') ? 'checked' : '' %> required /> Sí</label>
+            <label class="ios-sunat-opt"><input type="radio" name="<%= p[0] %>" value="no" <%= on(p[0], 'no') ? 'checked' : '' %> /> No</label>
+          </div>
+          <% if (p[0] === 'detraccion') { %>
+            <div id="detraccionExtra" style="margin-top:10px;<%= on('detraccion','si') ? '' : 'display:none' %>">
+              <label>Tipo de operación
+                <select name="detraccion_tipo" id="detraccionTipo">
+                  <option value="">Elegir</option>
+                  <% (detracciones || []).forEach(function(row) { %>
+                    <option value="<%= row.codigo %>" <%= String(d.detraccion_tipo || '') === row.codigo ? 'selected' : '' %>><%= row.codigo %> — <%= row.nombre %></option>
+                  <% }) %>
+                </select>
+              </label>
+              <label>Código del bien o servicio
+                <select name="detraccion_codigo" id="detraccionCodigo">
+                  <option value="">Elegir el tipo de operación</option>
+                </select>
+              </label>
+              <label>Porcentaje
+                <input id="detraccionPorcentajeVista" value="<%= d.detraccion_porcentaje || '' %>" readonly />
+                <input type="hidden" name="detraccion_porcentaje" id="detraccionPorcentaje" value="<%= d.detraccion_porcentaje || '' %>" />
+                <small class="ios-muted">Lo fija SUNAT según el código. No se escribe a mano.</small>
+              </label>
+              <div id="detraccionCampos"></div>
+              <label>Medio de pago
+                <select name="detraccion_medio_pago" required>
+                  <% (mediosPagoDetraccion || []).forEach(function(m) { %>
+                    <option value="<%= m[0] %>" <%= String(d.detraccion_medio_pago || '001') === m[0] ? 'selected' : '' %>><%= m[0] %> — <%= m[1] %></option>
+                  <% }) %>
+                </select>
+                <small class="ios-muted">Códigos de SUNAT. En una detracción lo habitual es 001, depósito en tu cuenta del Banco de la Nación.</small>
+              </label>
+              <label>Cuenta del Banco de la Nación
+                <% if ((cuentasBn || []).length) { %>
+                  <select name="detraccion_cuenta">
+                    <option value="">Elegir de tus métodos de pago</option>
+                    <% cuentasBn.forEach(function(c) { %>
+                      <option value="<%= c.cuenta %>" <%= String(d.detraccion_cuenta || '') === c.cuenta ? 'selected' : '' %>><%= c.nombre %> · <%= c.cuenta %></option>
+                    <% }) %>
+                  </select>
+                <% } else { %>
+                  <p class="ios-muted" style="margin:8px 0 0">No hay una cuenta en Métodos de pago. Agrega una transferencia o un CCI del Banco de la Nación. Yape, Plin y efectivo no sirven para la detracción.</p>
+                  <a href="<%= appBase %>/metodos-pago">Ir a métodos de pago</a>
+                  <input type="hidden" name="detraccion_cuenta" value="" />
+                <% } %>
+                <small class="ios-muted">Es tu cuenta, la de quien emite. El cliente deposita ahí el porcentaje. Se elige de los métodos de pago de tu empresa.</small>
+              </label>
+            </div>
+          <% } %>
+        </section>
+      <% }) %>
+
+      <p class="ios-muted">Si marcas Sí en colaboración, anticipo, itinerante, dirección distinta, combustible, descuentos, ISC, gratuita u otros tributos, la factura se detiene: SUNAT pide un detalle que aún no enviamos. En la boleta esas respuestas no se envían. Detracción sí sale en la factura: código, porcentaje y tu cuenta del Banco de la Nación.</p>
+      <button type="submit" class="ios-btn-primary">Continuar</button>
+    </form>
+  </main>
+  <%- include('../../partials/app-tabbar', { active: active, appBase: appBase }) %>
+  <div id="fechaPagoSheet" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel ios-fecha-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="fechaPagoSheetTitulo">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-action" id="fechaPagoCancelar" aria-label="Cancelar">✕</button>
+        <h3 id="fechaPagoSheetTitulo">Fecha de pago</h3>
+        <button type="button" class="ios-sheet-action ios-sheet-action-text" id="fechaPagoListo">Listo</button>
+      </div>
+      <p class="ios-fecha-sheet-hint">SUNAT acepta la factura hoy. El cliente paga en esta fecha.</p>
+      <div class="ios-date-wheel" id="fechaPagoWheel" aria-label="Selector de fecha">
+        <div class="ios-date-wheel-fade ios-date-wheel-fade-top" aria-hidden="true"></div>
+        <div class="ios-date-wheel-fade ios-date-wheel-fade-bottom" aria-hidden="true"></div>
+        <div class="ios-date-wheel-highlight" aria-hidden="true"></div>
+        <div class="ios-date-wheel-unit" data-col="day">
+          <button type="button" class="ios-date-wheel-step is-up" data-dir="-1" aria-label="Día anterior">▴</button>
+          <div class="ios-date-wheel-col"><ul class="ios-date-wheel-list" id="fechaPagoWheelDay"></ul></div>
+          <button type="button" class="ios-date-wheel-step is-down" data-dir="1" aria-label="Día siguiente">▾</button>
+        </div>
+        <div class="ios-date-wheel-unit" data-col="month">
+          <button type="button" class="ios-date-wheel-step is-up" data-dir="-1" aria-label="Mes anterior">▴</button>
+          <div class="ios-date-wheel-col"><ul class="ios-date-wheel-list" id="fechaPagoWheelMonth"></ul></div>
+          <button type="button" class="ios-date-wheel-step is-down" data-dir="1" aria-label="Mes siguiente">▾</button>
+        </div>
+        <div class="ios-date-wheel-unit" data-col="year">
+          <button type="button" class="ios-date-wheel-step is-up" data-dir="-1" aria-label="Año anterior">▴</button>
+          <div class="ios-date-wheel-col"><ul class="ios-date-wheel-list" id="fechaPagoWheelYear"></ul></div>
+          <button type="button" class="ios-date-wheel-step is-down" data-dir="1" aria-label="Año siguiente">▾</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <%- include('../../partials/ubicacion-picker', { appBase: appBase }) %>
+  <script>
+    (function () {
+      var MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+      var forma = document.querySelectorAll('input[name="forma_pago"]');
+      var wrap = document.getElementById('fechaPagoWrap');
+      var hidden = document.getElementById('fechaPago');
+      var label = document.getElementById('fechaPagoLabel');
+      var sheet = document.getElementById('fechaPagoSheet');
+      var state = { day: 1, month: 1, year: new Date().getFullYear() };
+      var detracciones = <%- JSON.stringify(detracciones || []).replace(/</g, '\\u003c') %>;
+      var detCodigoInicial = <%- JSON.stringify(d.detraccion_codigo || '') %>;
+      var detExtraInicial = <%- JSON.stringify(d.detraccion_extra || {}).replace(/</g, '\\u003c') %>;
+
+      function hoy() {
+        var t = new Date();
+        return { day: t.getDate(), month: t.getMonth() + 1, year: t.getFullYear() };
+      }
+      function parseIso(raw) {
+        var m = String(raw || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!m) return hoy();
+        return { year: Number(m[1]), month: Number(m[2]), day: Number(m[3]) };
+      }
+      function pad(n) { return n < 10 ? '0' + n : String(n); }
+      function iso(p) { return p.year + '-' + pad(p.month) + '-' + pad(p.day); }
+      function texto(p) { return p.day + ' ' + MESES[p.month - 1] + ' ' + p.year; }
+      function diasDelMes(y, m) { return new Date(y, m, 0).getDate(); }
+      function pintarLabel() {
+        if (!label || !hidden) return;
+        if (!hidden.value) {
+          label.textContent = 'Elegir';
+          label.classList.add('is-empty');
+          return;
+        }
+        label.textContent = texto(parseIso(hidden.value));
+        label.classList.remove('is-empty');
+      }
+      function col(name) {
+        return document.querySelector('#fechaPagoWheel .ios-date-wheel-unit[data-col="' + name + '"] .ios-date-wheel-col');
+      }
+      function fill(ul, values, formatter) {
+        if (!ul) return;
+        var html = '<li class="ios-date-wheel-spacer" aria-hidden="true"></li><li class="ios-date-wheel-spacer" aria-hidden="true"></li>';
+        values.forEach(function (v) {
+          html += '<li class="ios-date-wheel-item" data-value="' + v + '">' + (formatter ? formatter(v) : v) + '</li>';
+        });
+        html += '<li class="ios-date-wheel-spacer" aria-hidden="true"></li><li class="ios-date-wheel-spacer" aria-hidden="true"></li>';
+        ul.innerHTML = html;
+      }
+      function snap(name, value) {
+        var c = col(name);
+        if (!c) return;
+        var item = c.querySelector('.ios-date-wheel-item[data-value="' + value + '"]');
+        if (!item) return;
+        var itemH = item.offsetHeight || 40;
+        c.scrollTop = item.offsetTop - (c.clientHeight / 2) + (itemH / 2);
+        state[name] = Number(value);
+      }
+      function rebuildDays() {
+        var max = diasDelMes(state.year, state.month);
+        if (state.day > max) state.day = max;
+        var days = [];
+        for (var d = 1; d <= max; d += 1) days.push(d);
+        fill(document.getElementById('fechaPagoWheelDay'), days, function (v) { return v; });
+        snap('day', state.day);
+      }
+      function armarRueda() {
+        var months = [];
+        for (var m = 1; m <= 12; m += 1) months.push(m);
+        var years = [];
+        var base = hoy().year;
+        for (var y = base; y <= base + 5; y += 1) years.push(y);
+        fill(document.getElementById('fechaPagoWheelMonth'), months, function (v) { return MESES[v - 1]; });
+        fill(document.getElementById('fechaPagoWheelYear'), years, function (v) { return v; });
+        snap('month', state.month);
+        snap('year', state.year);
+        rebuildDays();
+      }
+      function abrir() {
+        var p = hidden && hidden.value ? parseIso(hidden.value) : hoy();
+        state.day = p.day;
+        state.month = p.month;
+        state.year = p.year;
+        if (!sheet) return;
+        sheet.hidden = false;
+        sheet.setAttribute('aria-hidden', 'false');
+        armarRueda();
+      }
+      function cerrar() {
+        if (!sheet) return;
+        sheet.hidden = true;
+        sheet.setAttribute('aria-hidden', 'true');
+      }
+      function syncFecha() {
+        var cred = document.querySelector('input[name="forma_pago"]:checked');
+        if (!wrap) return;
+        wrap.style.display = cred && cred.value === 'credito' ? '' : 'none';
+      }
+      forma.forEach(function (el) { el.addEventListener('change', syncFecha); });
+      var det = document.querySelectorAll('input[name="detraccion"]');
+      var extra = document.getElementById('detraccionExtra');
+      var selTipo = document.getElementById('detraccionTipo');
+      var selCodigo = document.getElementById('detraccionCodigo');
+      var pctVista = document.getElementById('detraccionPorcentajeVista');
+      var pctHidden = document.getElementById('detraccionPorcentaje');
+      var camposBox = document.getElementById('detraccionCampos');
+      function filaDet() {
+        if (!selTipo) return null;
+        return detracciones.find(function (row) { return row.codigo === selTipo.value; }) || null;
+      }
+      function syncPct() {
+        var fila = filaDet();
+        var bien = fila && (fila.codigos || []).find(function (item) { return item.codigo === selCodigo.value; });
+        var pct = bien ? String(bien.porcentaje) : '';
+        if (pctVista) pctVista.value = pct;
+        if (pctHidden) pctHidden.value = pct;
+      }
+      function pintarCampos(fila) {
+        if (!camposBox) return;
+        camposBox.innerHTML = '';
+        (fila && fila.campos || []).forEach(function (campo) {
+          if (campo.key === 'origen_direccion' || campo.key === 'destino_direccion') return;
+          if (campo.key === 'origen_ubigeo' || campo.key === 'destino_ubigeo') {
+            var side = campo.key === 'origen_ubigeo' ? 'Origen' : 'Destino';
+            var dirKey = campo.key.replace('_ubigeo', '_direccion');
+            var wrap = document.createElement('div');
+            wrap.className = 'det-punto';
+            wrap.innerHTML =
+              '<p class="ios-form-label">Punto de ' + side.toLowerCase() + '</p>' +
+              '<div class="ios-ubic-wrap">' +
+                '<input type="hidden" name="dx_' + campo.key + '" id="det' + side + 'Ubigeo" value="" />' +
+                '<input type="hidden" name="dx_' + dirKey + '" id="det' + side + 'Direccion" value="" />' +
+                '<button type="button" class="ios-ubic-pick is-empty" id="det' + side + 'Abrir">' +
+                  '<span class="ios-ubic-pick-icon" aria-hidden="true">📍</span>' +
+                  '<span class="ios-ubic-pick-text">' +
+                    '<strong id="det' + side + 'Titulo">Toca para elegir ubicación</strong>' +
+                    '<small id="det' + side + 'Detalle">Lista guardada o Añadir</small>' +
+                  '</span>' +
+                  '<span class="ios-chevron" aria-hidden="true">›</span>' +
+                '</button>' +
+                '<button type="button" class="ios-ubic-clear" id="det' + side + 'Quitar" hidden aria-label="Quitar ubicación">×</button>' +
+              '</div>';
+            camposBox.appendChild(wrap);
+            var ubigeoNode = document.getElementById('det' + side + 'Ubigeo');
+            var dirNode = document.getElementById('det' + side + 'Direccion');
+            if (ubigeoNode) ubigeoNode.value = detExtraInicial[campo.key] || '';
+            if (dirNode) dirNode.value = detExtraInicial[dirKey] || '';
+            if (window.EasyUbicacion) {
+              window.EasyUbicacion.bindPick({
+                openBtn: 'det' + side + 'Abrir',
+                clearBtn: 'det' + side + 'Quitar',
+                pickBtn: 'det' + side + 'Abrir',
+                titleEl: 'det' + side + 'Titulo',
+                detailEl: 'det' + side + 'Detalle',
+                title: side === 'Origen' ? 'Punto de origen' : 'Punto de destino',
+                emptyTitle: side === 'Origen' ? 'Elegir origen' : 'Elegir destino',
+                emptyDetail: 'Ubicaciones recientes o Añadir',
+                fields: {
+                  ubigeo: 'det' + side + 'Ubigeo',
+                  direccion: 'det' + side + 'Direccion',
+                },
+              });
+            }
+            return;
+          }
+          if (campo.tipo === 'sino') {
+            var checkLabel = document.createElement('label');
+            checkLabel.className = 'ios-check';
+            var hidden = document.createElement('input');
+            hidden.type = 'hidden';
+            hidden.name = 'dx_' + campo.key;
+            hidden.value = 'no';
+            var box = document.createElement('input');
+            box.type = 'checkbox';
+            box.name = 'dx_' + campo.key;
+            box.value = 'si';
+            var marcado = detExtraInicial[campo.key];
+            box.checked = marcado ? marcado === 'si' : campo.defecto !== 'no';
+            checkLabel.appendChild(hidden);
+            checkLabel.appendChild(box);
+            checkLabel.appendChild(document.createTextNode(campo.label));
+            camposBox.appendChild(checkLabel);
+            return;
+          }
+          var label = document.createElement('label');
+          label.textContent = campo.label;
+          var input = document.createElement('input');
+          input.name = 'dx_' + campo.key;
+          input.value = detExtraInicial[campo.key] || (campo.defecto != null ? campo.defecto : '');
+          input.autocomplete = 'off';
+          if (campo.tipo === 'monto') {
+            input.inputMode = 'decimal';
+            input.placeholder = '0.00';
+          }
+          if (campo.tipo === 'fecha') {
+            input.type = 'date';
+          }
+          label.appendChild(input);
+          if (campo.ayuda) {
+            var hint = document.createElement('small');
+            hint.textContent = campo.ayuda;
+            label.appendChild(hint);
+          }
+          camposBox.appendChild(label);
+        });
+      }
+      function pintarCodigos() {
+        if (!selCodigo) return;
+        var fila = filaDet();
+        var elegido = selCodigo.value || detCodigoInicial;
+        selCodigo.innerHTML = '';
+        var vacio = document.createElement('option');
+        vacio.value = '';
+        vacio.textContent = fila ? 'Elegir' : 'Elegir el tipo de operación';
+        selCodigo.appendChild(vacio);
+        (fila && fila.codigos || []).forEach(function (item) {
+          var opt = document.createElement('option');
+          opt.value = item.codigo;
+          opt.textContent = item.codigo + ' — ' + item.nombre;
+          if (item.codigo === elegido) opt.selected = true;
+          selCodigo.appendChild(opt);
+        });
+        if ((fila && fila.codigos || []).length === 1) selCodigo.value = fila.codigos[0].codigo;
+        detCodigoInicial = '';
+        pintarCampos(fila);
+        syncPct();
+      }
+      function syncDet() {
+        var on = document.querySelector('input[name="detraccion"]:checked');
+        if (!extra) return;
+        extra.style.display = on && on.value === 'si' ? '' : 'none';
+      }
+      det.forEach(function (el) { el.addEventListener('change', syncDet); });
+      if (selTipo) selTipo.addEventListener('change', pintarCodigos);
+      if (selCodigo) selCodigo.addEventListener('change', syncPct);
+      pintarCodigos();
+      var btn = document.getElementById('fechaPagoBtn');
+      if (btn) btn.addEventListener('click', abrir);
+      var cancelar = document.getElementById('fechaPagoCancelar');
+      if (cancelar) cancelar.addEventListener('click', cerrar);
+      var listo = document.getElementById('fechaPagoListo');
+      if (listo) listo.addEventListener('click', function () {
+        if (hidden) hidden.value = iso(state);
+        pintarLabel();
+        cerrar();
+      });
+      document.querySelectorAll('#fechaPagoWheel .ios-date-wheel-step').forEach(function (step) {
+        step.addEventListener('click', function () {
+          var unit = step.closest('.ios-date-wheel-unit');
+          var name = unit && unit.getAttribute('data-col');
+          var dir = Number(step.getAttribute('data-dir')) || 0;
+          if (!name) return;
+          var items = Array.from((col(name) || document.createElement('div')).querySelectorAll('.ios-date-wheel-item'));
+          var idx = items.findIndex(function (el) { return Number(el.getAttribute('data-value')) === Number(state[name]); });
+          var next = Math.max(0, Math.min(items.length - 1, (idx < 0 ? 0 : idx) + dir));
+          if (!items[next]) return;
+          snap(name, items[next].getAttribute('data-value'));
+          if (name === 'month' || name === 'year') rebuildDays();
+        });
+      });
+      pintarLabel();
+    })();
+  </script>
+</body>
+</html>

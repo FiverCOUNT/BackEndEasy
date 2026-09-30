@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title><%= title %> — BackEnd Easy</title>
-  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/style.css?v=20260926panel" />
 </head>
 <body>
   <header class="header">
@@ -20,9 +20,9 @@
         <div class="card-header-row">
           <div>
             <h2><%= title %></h2>
-            <p class="api-hint"><%= total %> empresa(s) en total</p>
+          <p class="api-hint"><%= total %> empresa(s) en <%= adminEntornoLabel %></p>
           </div>
-          <a href="/companies/crear" class="btn-link">+ Nueva empresa</a>
+          <a href="<%= adminBase %>/companies/crear" class="btn-link">+ Nueva empresa</a>
         </div>
 
         <%- include('../partials/flash', { flash }) %>
@@ -34,7 +34,7 @@
             <% if (q) { %>
               No hay resultados para «<%= q %>».
             <% } else { %>
-              No hay empresas. <a href="/companies/crear">Registrar la primera</a>
+              No hay empresas. <a href="<%= adminBase %>/companies/crear">Registrar la primera</a>
             <% } %>
           </p>
         <% } else { %>
@@ -70,19 +70,19 @@
                     <td class="muted"><%= c.entorno || '—' %></td>
                     <td>
                       <div class="actions-cell">
-                        <a href="/companies/<%= c.id %>/editar" class="btn-sm btn-edit">Editar</a>
+                        <a href="<%= adminBase %>/companies/<%= c.id %>/editar" class="btn-sm btn-edit">Editar</a>
                         <% if (c.activo === false) { %>
-                          <form method="POST" action="/companies/<%= c.id %>/activar" class="inline-form">
+                          <form method="POST" action="<%= adminBase %>/companies/<%= c.id %>/activar" class="inline-form">
                             <button type="submit" class="btn-sm btn-success">Activar</button>
                           </form>
                         <% } else { %>
-                          <form method="POST" action="/companies/<%= c.id %>/desactivar" class="inline-form">
+                          <form method="POST" action="<%= adminBase %>/companies/<%= c.id %>/desactivar" class="inline-form">
                             <button type="submit" class="btn-sm btn-warn">Desactivar</button>
                           </form>
                         <% } %>
                         <form
                           method="POST"
-                          action="/companies/<%= c.id %>/eliminar"
+                          action="<%= adminBase %>/companies/<%= c.id %>/eliminar"
                           class="inline-form"
                           onsubmit="return confirm('¿Eliminar empresa <%= c.nombre %>?');"
                         >

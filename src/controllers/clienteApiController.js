@@ -1,10 +1,17 @@
 const clienteModel = require('../models/clienteModel');
+const { parseMobileListQuery, sendMobilePage } = require('../utils/pagination');
 
 async function list(req, res, next) {
   try {
     const soloActivos = req.query.solo_activos !== 'false';
-    const rows = await clienteModel.findAllByCompany(req.companyRuc, { soloActivos });
-    res.json(rows);
+    const { q, page, pageSize, skip } = parseMobileListQuery(req.query);
+    const { items, total } = await clienteModel.findByCompanyPaginated(req.companyRuc, {
+      soloActivos,
+      q,
+      skip,
+      take: pageSize,
+    });
+    return sendMobilePage(res, { items, total, page, pageSize });
   } catch (err) {
     next(err);
   }
@@ -45,4 +52,23 @@ async function create(req, res, next) {
   }
 }
 
-module.exports = { list, create };
+async function update(req, res, next) {
+  try {
+    const { id } = req.params;
+    const parsed = clienteModel.parseUpdateBody(req.body);
+
+    if (parsed.razonSocial !== undefined && !parsed.razonSocial) {
+      return res.status(400).json({ success: false, message: 'razon_social es obligatoria' });
+    }
+
+    const row = await clienteModel.update(id, req.companyRuc, parsed);
+    if (!row) {
+      return res.status(404).json({ success: false, message: 'Cliente no encontrado' });
+    }
+    res.json(row);
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { list, create, update };

@@ -8,22 +8,29 @@ const clienteWebController = require('../controllers/clienteWebController');
 const catalogItemWebController = require('../controllers/catalogItemWebController');
 const almacenWebController = require('../controllers/almacenWebController');
 const configuracionWebController = require('../controllers/configuracionWebController');
-const terminosWebController = require('../controllers/terminosWebController');
 const uploadCertificado = require('../middleware/uploadCertificado');
-const { requireWebAdmin, redirectIfWebAdmin } = require('../middleware/webAuth');
+const uploadEasyLogo = require('../middleware/uploadEasyLogo');
+const { requireWebAdmin } = require('../middleware/webAuth');
+const { bindAdminEntorno } = require('../utils/adminEntorno');
+const { ADMIN_BASE } = require('../config/adminPanel');
 
 const router = express.Router();
 
-router.get('/login', redirectIfWebAdmin, webAuthController.showLogin);
-router.post('/login', redirectIfWebAdmin, webAuthController.login);
+router.use((req, res, next) => {
+  res.locals.adminBase = ADMIN_BASE;
+  next();
+});
+
+/** Login unificado en /login; compat: /admin/login → /login */
+router.get('/login', (req, res) => {
+  const q = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+  return res.redirect(302, `/login${q}`);
+});
+router.post('/login', (req, res) => res.redirect(302, '/login'));
 router.post('/logout', requireWebAdmin, webAuthController.logout);
 
-/** Páginas públicas (apps / Play Store): no requieren sesión. */
-router.get('/terminosycondiciones', terminosWebController.index);
-router.get('/terminosycondiciones/', terminosWebController.index);
-router.get('/terminosycondiciones/:app', terminosWebController.show);
-
 router.use(requireWebAdmin);
+router.use(bindAdminEntorno);
 
 router.get('/', homeController.index);
 
@@ -68,6 +75,10 @@ router.get('/comprobantes', comprobanteWebController.list);
 router.get('/clientes', clienteWebController.list);
 
 router.get('/configuracion', configuracionWebController.showEditForm);
-router.post('/configuracion', configuracionWebController.update);
+router.post(
+  '/configuracion',
+  uploadEasyLogo.single('logoEasy'),
+  configuracionWebController.update,
+);
 
 module.exports = router;

@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> · Easy</title>
+  <link rel="stylesheet" href="/css/app-ios.css" />
+</head>
+<body class="ios-app">
+  <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
+  <main class="ios-main">
+    <header class="ios-top">
+      <div>
+        <p class="ios-eyebrow"><%= companyNombre || 'Empresa' %></p>
+        <h1>Comprobantes emitidos</h1>
+      </div>
+    </header>
+    <% if (flash) { %><div class="ios-flash <%= flash.type === 'error' ? 'is-error' : 'is-ok' %>"><%= flash.text %></div><% } %>
+
+    <%
+      function qs(extra) {
+        var params = {
+          periodo: (extra && extra.periodo != null) ? extra.periodo : periodo,
+          fecha: (extra && extra.fecha != null) ? extra.fecha : fecha,
+          q: (extra && Object.prototype.hasOwnProperty.call(extra, 'q')) ? extra.q : (q || ''),
+          doc: (extra && Object.prototype.hasOwnProperty.call(extra, 'doc')) ? extra.doc : (doc || ''),
+        };
+        var parts = [];
+        Object.keys(params).forEach(function(k) {
+          if (params[k] == null || params[k] === '') return;
+          parts.push(encodeURIComponent(k) + '=' + encodeURIComponent(params[k]));
+        });
+        return parts.length ? ('?' + parts.join('&')) : '?';
+      }
+      var tipoIcon = { fact: '🧾', bol: '📄', nc: '↩', nd: '+', gre: '🚚', grt: '🚛', grev: '🔁', doc: '📋' };
+    %>
+
+    <section class="ios-periodo-card">
+      <div class="ios-periodo-card-head">
+        <div>
+          <p class="ios-periodo-card-label">Periodo</p>
+          <strong class="ios-periodo-card-value"><%= periodoLabel %></strong>
+        </div>
+      </div>
+      <div class="ios-periodo-chips">
+        <a class="ios-chip <%= periodo === 'hoy' ? 'is-on' : '' %>" href="<%= appBase %>/comprobantes<%= qs({ periodo: 'hoy', fecha: '' }) %>">Hoy</a>
+        <a class="ios-chip <%= periodo === 'ayer' ? 'is-on' : '' %>" href="<%= appBase %>/comprobantes<%= qs({ periodo: 'ayer', fecha: '' }) %>">Ayer</a>
+        <a class="ios-chip <%= periodo === '7d' ? 'is-on' : '' %>" href="<%= appBase %>/comprobantes<%= qs({ periodo: '7d', fecha: '' }) %>">7 días</a>
+        <button type="button" class="ios-chip ios-chip-fecha <%= periodo === 'fecha' ? 'is-on' : '' %>" id="btnAbrirFecha" aria-haspopup="dialog">
+          Fecha
+        </button>
+      </div>
+    </section>
+
+    <form class="ios-filters ios-filters-comprobantes" method="GET" action="<%= appBase %>/comprobantes" id="filtrosComprobantes">
+      <input type="hidden" name="periodo" id="filtroPeriodo" value="<%= periodo || 'hoy' %>" />
+      <input type="hidden" name="fecha" id="filtroFechaHidden" value="<%= fecha || '' %>" />
+      <input type="hidden" name="doc" value="<%= doc || '' %>" />
+      <div class="ios-search">
+        <input type="search" name="q" value="<%= q || '' %>" placeholder="Buscar…" autocomplete="off" />
+      </div>
+    </form>
+
+    <div class="ios-tipo-chips-row">
+      <div class="ios-tipo-chips" role="tablist" aria-label="Tipo de comprobante" id="compTipoChips">
+        <% tiposFiltro.forEach(function(t) {
+          var on = doc === t.siglas;
+          var href = appBase + '/comprobantes' + qs({ doc: on ? '' : t.siglas });
+        %>
+          <a class="ios-tipo-chip is-<%= t.siglas.toLowerCase() %> <%= on ? 'is-on' : '' %>" href="<%= href %>">
+            <span class="ios-tipo-dot" aria-hidden="true"></span>
+            <strong><%= t.siglas %></strong>
+            <small><%= t.label %></small>
+          </a>
+        <% }) %>
+      </div>
+      <% if (isWebAdmin) { %>
+      <button type="button" class="ios-comp-select-toggle" id="btnCompSelectMode" aria-pressed="false" title="Seleccionar para eliminar">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="3 6 5 6 21 6"/>
+          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+          <path d="M10 11v6M14 11v6"/>
+          <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+        </svg>
+      </button>
+      <% } %>
+    </div>
+
+    <% if (isWebAdmin) { %>
+    <div class="ios-comp-bulk-bar" id="compBulkBar" hidden>
+      <span id="compBulkCount">0 seleccionados</span>
+      <div class="ios-comp-bulk-actions">
+        <button type="button" class="ios-btn-secondary" id="btnCompSelectCancel">Cancelar</button>
+        <button type="button" class="ios-btn-danger" id="btnCompDelete" disabled>Eliminar</button>
+      </div>
+    </div>
+    <% } %>
+
+    <p class="ios-count"><%= total %> documento<%= total === 1 ? '' : 's' %></p>
+    <% if (!items.length) { %>
+      <section class="ios-card-empty">
+        <h2>Sin comprobantes</h2>
+        <p><%= doc ? 'No hay comprobantes de este tipo en el periodo.' : 'No hay comprobantes en el periodo.' %></p>
+        <% if (periodo === 'hoy') { %>
+          <p class="ios-muted-hint">Los de anoche aparecen en <a href="<%= appBase %>/comprobantes<%= qs({ periodo: 'ayer', fecha: '' }) %>">Ayer</a> o elige <button type="button" class="ios-linkish" id="btnAbrirFechaEmpty">Fecha</button>.</p>
+        <% } %>
+      </section>
+    <% } else { %>
+      <div class="ios-list ios-comp-list" id="compList">
+        <% items.forEach(function(it) {
+          var tipoClass = it.porEvento ? 'grev' : ({
+            '01': 'fact', '03': 'bol', '07': 'nc', '08': 'nd', '09': 'gre', '31': 'grt'
+          })[it.tipoDoc] || 'doc';
+          var estadoClass = String(it.estado || '').toUpperCase();
+          if (estadoClass.indexOf('ACEPT') >= 0) estadoClass = 'ok';
+          else if (estadoClass.indexOf('RECHAZ') >= 0) estadoClass = 'bad';
+          else if (estadoClass.indexOf('ENVIA') >= 0 || estadoClass.indexOf('PEND') >= 0) estadoClass = 'warn';
+          else estadoClass = 'muted';
+        %>
+          <div class="ios-comp-card-wrap">
+          <button
+            type="button"
+            class="ios-comp-card is-<%= tipoClass %>"
+            data-comp-open
+            data-id="<%= it.id %>"
+            data-ref="<%= it.ref %>"
+            data-tipo="<%= it.tipoLabel %>"
+            data-tipo-class="<%= tipoClass %>"
+            data-cliente="<%= it.cliente %>"
+            data-cliente-doc="<%= it.clienteDoc || '' %>"
+            data-fecha="<%= it.fecha %>"
+            data-estado="<%= it.estado %>"
+            data-total="<%= it.total %>"
+            data-subtotal="<%= it.subtotal || '' %>"
+            data-igv="<%= it.igv || '' %>"
+            data-lineas="<%= it.lineas || 0 %>"
+            data-obs="<%= (it.observacion || '').replace(/"/g, '&quot;') %>"
+            data-puede-reenviar="<%= it.puedeReenviar ? '1' : '' %>"
+            data-puede-corregir-evento="<%= it.puedeCorregirEvento ? '1' : '' %>"
+          >
+            <% if (isWebAdmin) { %><span class="ios-comp-check" aria-hidden="true"></span><% } %>
+            <span class="ios-comp-accent" aria-hidden="true"></span>
+            <span class="ios-comp-card-main">
+              <span class="ios-comp-card-top">
+                <span class="ios-comp-identity">
+                  <span class="ios-comp-avatar" aria-hidden="true"><%= tipoIcon[tipoClass] || '📋' %></span>
+                  <span class="ios-comp-identity-text">
+                    <strong class="ios-comp-cliente"><%= it.cliente %></strong>
+                    <small class="ios-comp-ref-tipo"><%= it.ref %> · <%= it.tipoLabel %></small>
+                  </span>
+                </span>
+                <span class="ios-comp-total"><%= it.total %></span>
+              </span>
+              <span class="ios-comp-meta">
+                <% if (it.clienteDoc) { %><span><%= it.clienteDoc %></span><span>·</span><% } %>
+                <span><%= it.fecha %></span>
+                <% if (it.lineas) { %><span>·</span><span><%= it.lineas %> línea(s)</span><% } %>
+              </span>
+              <span class="ios-comp-foot">
+                <span class="ios-comp-estado is-<%= estadoClass %>"><%= it.estado %></span>
+                <span class="ios-comp-open-hint">Ver opciones ›</span>
+              </span>
+            </span>
+          </button>
+          <% if (it.puedeCorregirEvento) { %>
+          <a
+            class="ios-comp-reenviar"
+            href="<%= appBase %>/emitir/guia/eventos/GRE_POR_EVENTO?corregir=<%= encodeURIComponent(it.id) %>"
+          >Corregir y reenviar</a>
+          <% } else if (it.puedeReenviar) { %>
+          <button
+            type="button"
+            class="ios-comp-reenviar"
+            data-comp-reenviar
+            data-id="<%= it.id %>"
+            data-ref="<%= it.ref %>"
+          >Reenviar a SUNAT</button>
+          <% } %>
+          </div>
+        <% }); %>
+      </div>
+      <%- include('../../partials/app-load-more', { loadMore: loadMore }) %>
+    <% } %>
+  </main>
+
+  <div id="fechaSheet" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel ios-fecha-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="fechaSheetTitulo">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-action" id="fechaSheetCancelar" aria-label="Cancelar">✕</button>
+        <h3 id="fechaSheetTitulo">Fecha</h3>
+        <button type="button" class="ios-sheet-action ios-sheet-action-text" id="fechaSheetListo">Listo</button>
+      </div>
+      <p class="ios-fecha-sheet-hint">Elige el día (hora Perú)</p>
+      <div class="ios-date-wheel" id="fechaWheel" aria-label="Selector de fecha">
+        <div class="ios-date-wheel-fade ios-date-wheel-fade-top" aria-hidden="true"></div>
+        <div class="ios-date-wheel-fade ios-date-wheel-fade-bottom" aria-hidden="true"></div>
+        <div class="ios-date-wheel-highlight" aria-hidden="true"></div>
+        <div class="ios-date-wheel-unit" data-col="day">
+          <button type="button" class="ios-date-wheel-step is-up" data-dir="-1" aria-label="Día anterior">▴</button>
+          <div class="ios-date-wheel-col">
+            <ul class="ios-date-wheel-list" id="fechaWheelDay"></ul>
+          </div>
+          <button type="button" class="ios-date-wheel-step is-down" data-dir="1" aria-label="Día siguiente">▾</button>
+        </div>
+        <div class="ios-date-wheel-unit" data-col="month">
+          <button type="button" class="ios-date-wheel-step is-up" data-dir="-1" aria-label="Mes anterior">▴</button>
+          <div class="ios-date-wheel-col">
+            <ul class="ios-date-wheel-list" id="fechaWheelMonth"></ul>
+          </div>
+          <button type="button" class="ios-date-wheel-step is-down" data-dir="1" aria-label="Mes siguiente">▾</button>
+        </div>
+        <div class="ios-date-wheel-unit" data-col="year">
+          <button type="button" class="ios-date-wheel-step is-up" data-dir="-1" aria-label="Año anterior">▴</button>
+          <div class="ios-date-wheel-col">
+            <ul class="ios-date-wheel-list" id="fechaWheelYear"></ul>
+          </div>
+          <button type="button" class="ios-date-wheel-step is-down" data-dir="1" aria-label="Año siguiente">▾</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="compSheet" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel ios-comp-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="compSheetTitulo">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-back" id="compSheetCerrar">← Volver</button>
+        <h3 id="compSheetTitulo">Detalle</h3>
+        <span style="width:56px;"></span>
+      </div>
+      <div class="ios-comp-sheet-body" id="compSheetBody">
+        <div class="ios-comp-sheet-hero" id="compSheetHero">
+          <span class="ios-comp-avatar" id="compSheetAvatar">📋</span>
+          <div>
+            <strong id="compSheetCliente">—</strong>
+            <small id="compSheetRef">—</small>
+          </div>
+          <div class="ios-comp-sheet-total" id="compSheetTotal">—</div>
+        </div>
+        <div class="ios-comp-sheet-meta" id="compSheetMeta"></div>
+        <div class="ios-comp-sheet-totales" id="compSheetTotales"></div>
+        <div class="ios-comp-sheet-lineas" id="compSheetLineas">
+          <p class="ios-comp-sheet-loading">Cargando detalle…</p>
+        </div>
+        <div class="ios-comp-sheet-actions" id="compShareBar">
+          <a class="ios-comp-action ios-comp-action-icon" id="compActionPdf" target="_blank" rel="noopener" title="PDF A4">
+            <span class="ios-comp-action-glyph" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <path d="M9 13h6M9 17h4"/>
+              </svg>
+            </span>
+            <strong>A4</strong>
+          </a>
+          <a class="ios-comp-action ios-comp-action-icon" id="compActionTicket" target="_blank" rel="noopener" title="Ticket">
+            <span class="ios-comp-action-glyph" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 7h16v3a2 2 0 0 1 0 4v3H4v-3a2 2 0 0 1 0-4V7z"/>
+                <path d="M9 7v10M12 10h3M12 14h2"/>
+              </svg>
+            </span>
+            <strong>Ticket</strong>
+          </a>
+          <button type="button" class="ios-comp-action ios-comp-action-icon" id="compActionShare" title="Compartir">
+            <span class="ios-comp-action-glyph" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="18" cy="5" r="3"/>
+                <circle cx="6" cy="12" r="3"/>
+                <circle cx="18" cy="19" r="3"/>
+                <path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"/>
+              </svg>
+            </span>
+            <strong>Compartir</strong>
+          </button>
+          <button type="button" class="ios-comp-action ios-comp-action-icon" id="compActionPrint" title="Imprimir">
+            <span class="ios-comp-action-glyph" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 9 6 2 18 2 18 9"/>
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+                <rect x="6" y="14" width="12" height="8"/>
+              </svg>
+            </span>
+            <strong>Imprimir</strong>
+          </button>
+        </div>
+        <button type="button" class="ios-comp-reenviar ios-comp-reenviar-sheet" id="compActionReenviar" hidden>Reenviar a SUNAT</button>
+        <a class="ios-comp-reenviar ios-comp-reenviar-sheet" id="compActionCorregirEvento" hidden href="#">Corregir y reenviar</a>
+        <p class="ios-comp-sheet-status" id="compSheetStatus" hidden></p>
+      </div>
+    </div>
+  </div>
+
+  <iframe id="compPrintFrame" title="Imprimir comprobante" hidden style="position:fixed;right:0;bottom:0;width:0;height:0;border:0;"></iframe>
+  <%- include('../../partials/app-emit-loading') %>
+
+  <%- include('../../partials/app-tabbar', { active: active, appBase: appBase }) %>
+  <script>
+    (function () {
+      var form = document.getElementById('filtrosComprobantes');
+      var periodoHidden = document.getElementById('filtroPeriodo');
+      var fechaHidden = document.getElementById('filtroFechaHidden');
+      var btnFecha = document.getElementById('btnAbrirFecha');
+      var btnFechaEmpty = document.getElementById('btnAbrirFechaEmpty');
+      var fechaSheet = document.getElementById('fechaSheet');
+      var appBase = '<%= appBase %>';
+      var hoyIso = '<%= hoyIso || "" %>';
+      var fechaInicial = (fechaHidden && fechaHidden.value) || hoyIso;
+
+      var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'set', 'oct', 'nov', 'dic'];
+      var ITEM_H = 40;
+      var wheelState = { day: 1, month: 1, year: 2026 };
+
+      function pad2(n) { return String(n).padStart(2, '0'); }
+
+      function parseIso(iso) {
+        var m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!m) return null;
+        return { year: +m[1], month: +m[2], day: +m[3] };
+      }
+
+      function daysInMonth(year, month) {
+        return new Date(Date.UTC(year, month, 0)).getUTCDate();
+      }
+
+      function toIso(y, m, d) {
+        return y + '-' + pad2(m) + '-' + pad2(d);
+      }
+
+      function buildCol(listEl, values, formatter) {
+        if (!listEl) return;
+        var html = '<li class="ios-date-wheel-spacer" aria-hidden="true"></li><li class="ios-date-wheel-spacer" aria-hidden="true"></li>';
+        values.forEach(function (v) {
+          html += '<li class="ios-date-wheel-item" data-value="' + v + '">' + (formatter ? formatter(v) : v) + '</li>';
+        });
+        html += '<li class="ios-date-wheel-spacer" aria-hidden="true"></li><li class="ios-date-wheel-spacer" aria-hidden="true"></li>';
+        listEl.innerHTML = html;
+      }
+
+      function rebuildDays() {
+        var max = daysInMonth(wheelState.year, wheelState.month);
+        if (wheelState.day > max) wheelState.day = max;
+        var days = [];
+        for (var d = 1; d <= max; d++) days.push(d);
+        buildCol(document.getElementById('fechaWheelDay'), days, pad2);
+        snapTo('day', wheelState.day, true);
+      }
+
+      function rebuildAll() {
+        var months = [];
+        for (var m = 1; m <= 12; m++) months.push(m);
+        buildCol(document.getElementById('fechaWheelMonth'), months, function (v) { return MESES[v - 1]; });
+
+        var years = [];
+        var yMax = (parseIso(hoyIso) || { year: new Date().getFullYear() }).year + 1;
+        for (var y = yMax - 8; y <= yMax; y++) years.push(y);
+        buildCol(document.getElementById('fechaWheelYear'), years);
+
+        rebuildDays();
+        snapTo('month', wheelState.month, true);
+        snapTo('year', wheelState.year, true);
+      }
+
+      function colEl(name) {
+        return document.querySelector('#fechaWheel .ios-date-wheel-unit[data-col="' + name + '"] .ios-date-wheel-col');
+      }
+
+      function snapTo(name, value, instant) {
+        var col = colEl(name);
+        if (!col) return;
+        var item = col.querySelector('.ios-date-wheel-item[data-value="' + value + '"]');
+        if (!item) return;
+        var top = item.offsetTop - ITEM_H * 2;
+        if (instant) col.scrollTop = top;
+        else col.scrollTo({ top: top, behavior: 'smooth' });
+        wheelState[name] = Number(value);
+      }
+
+      function readCol(name) {
+        var col = colEl(name);
+        if (!col) return wheelState[name];
+        var idx = Math.round(col.scrollTop / ITEM_H);
+        var items = col.querySelectorAll('.ios-date-wheel-item');
+        var item = items[Math.max(0, Math.min(items.length - 1, idx))];
+        if (!item) return wheelState[name];
+        return Number(item.getAttribute('data-value'));
+      }
+
+      function stepCol(name, dir) {
+        var col = colEl(name);
+        if (!col) return;
+        var items = Array.prototype.slice.call(col.querySelectorAll('.ios-date-wheel-item'));
+        if (!items.length) return;
+        var current = Number(wheelState[name]);
+        var idx = items.findIndex(function (el) {
+          return Number(el.getAttribute('data-value')) === current;
+        });
+        if (idx < 0) idx = 0;
+        var next = Math.max(0, Math.min(items.length - 1, idx + dir));
+        var val = Number(items[next].getAttribute('data-value'));
+        snapTo(name, val, false);
+        if (name === 'month' || name === 'year') rebuildDays();
+        else wheelState.day = val;
+      }
+
+      function onColScroll(name) {
+        var col = colEl(name);
+        if (!col || col._ticking) return;
+        col._ticking = true;
+        window.requestAnimationFrame(function () {
+          col._ticking = false;
+          clearTimeout(col._snapTimer);
+          col._snapTimer = setTimeout(function () {
+            var v = readCol(name);
+            wheelState[name] = v;
+            snapTo(name, v, false);
+            if (name === 'month' || name === 'year') rebuildDays();
+          }, 80);
+        });
+      }
+
+      function abrirFechaSheet() {
+        if (!fechaSheet) return;
+        var base = parseIso(fechaHidden && fechaHidden.value) || parseIso(fechaInicial) || parseIso(hoyIso) || {
+          year: new Date().getFullYear(), month: new Date().getMonth() + 1, day: new Date().getDate()
+        };
+        wheelState = { day: base.day, month: base.month, year: base.year };
+        fechaSheet.hidden = false;
+        fechaSheet.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+        rebuildAll();
+        requestAnimationFrame(function () {
+          snapTo('day', wheelState.day, true);
+          snapTo('month', wheelState.month, true);
+          snapTo('year', wheelState.year, true);
+        });
+      }
+
+      function cerrarFechaSheet() {
+        if (!fechaSheet) return;
+        fechaSheet.hidden = true;
+        fechaSheet.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+      }
+
+      function aplicarFecha() {
+        var max = daysInMonth(wheelState.year, wheelState.month);
+        var d = Math.min(wheelState.day, max);
+        var iso = toIso(wheelState.year, wheelState.month, d);
+        if (periodoHidden) periodoHidden.value = 'fecha';
+        if (fechaHidden) fechaHidden.value = iso;
+        if (form) form.submit();
+        else window.location.href = appBase + '/comprobantes?periodo=fecha&fecha=' + encodeURIComponent(iso);
+      }
+
+      if (btnFecha) btnFecha.addEventListener('click', abrirFechaSheet);
+      if (btnFechaEmpty) btnFechaEmpty.addEventListener('click', abrirFechaSheet);
+      var btnCancel = document.getElementById('fechaSheetCancelar');
+      var btnListo = document.getElementById('fechaSheetListo');
+      if (btnCancel) btnCancel.addEventListener('click', cerrarFechaSheet);
+      if (btnListo) btnListo.addEventListener('click', aplicarFecha);
+      if (fechaSheet) {
+        fechaSheet.addEventListener('click', function (ev) {
+          if (ev.target === fechaSheet) cerrarFechaSheet();
+        });
+        ['day', 'month', 'year'].forEach(function (name) {
+          var unit = document.querySelector('#fechaWheel .ios-date-wheel-unit[data-col="' + name + '"]');
+          var col = colEl(name);
+          if (!col) return;
+          var wheelLock = false;
+          function onWheel(ev) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            if (wheelLock) return;
+            wheelLock = true;
+            stepCol(name, ev.deltaY > 0 ? 1 : -1);
+            setTimeout(function () { wheelLock = false; }, 60);
+          }
+          col.addEventListener('scroll', function () { onColScroll(name); }, { passive: true });
+          col.addEventListener('wheel', onWheel, { passive: false });
+          if (unit) unit.addEventListener('wheel', onWheel, { passive: false });
+        });
+        fechaSheet.querySelectorAll('#fechaWheel .ios-date-wheel-step').forEach(function (btn) {
+          btn.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            var unit = btn.closest('.ios-date-wheel-unit');
+            var name = unit && unit.getAttribute('data-col');
+            var dir = Number(btn.getAttribute('data-dir') || 0);
+            if (name && dir) stepCol(name, dir);
+          });
+        });
+      }
+
+      var sheet = document.getElementById('compSheet');
+      var apiBase = '<%= detalleApiBase || (appBase + "/comprobantes") %>';
+      var icons = { fact: '🧾', bol: '📄', nc: '↩', nd: '+', gre: '🚚', grt: '🚛', grev: '🔁', doc: '📋' };
+      var current = null;
+
+      function setStatus(text, isError) {
+        var el = document.getElementById('compSheetStatus');
+        if (!el) return;
+        if (!text) { el.hidden = true; el.textContent = ''; return; }
+        el.hidden = false;
+        el.textContent = text;
+        el.classList.toggle('is-error', !!isError);
+      }
+
+      function cerrarSheet() {
+        if (!sheet) return;
+        sheet.hidden = true;
+        sheet.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+        current = null;
+      }
+
+      function abrirSheet(data) {
+        current = data;
+        document.getElementById('compSheetCliente').textContent = data.cliente || '—';
+        document.getElementById('compSheetRef').textContent = (data.ref || '') + (data.tipo ? ' · ' + data.tipo : '');
+        document.getElementById('compSheetTotal').textContent = data.total || '—';
+        document.getElementById('compSheetAvatar').textContent = icons[data.tipoClass] || '📋';
+        document.getElementById('compSheetTitulo').textContent = data.ref || 'Detalle';
+
+        var meta = document.getElementById('compSheetMeta');
+        meta.innerHTML =
+          '<div><span>Estado</span><strong>' + (data.estado || '—') + '</strong></div>' +
+          '<div><span>Fecha y hora</span><strong>' + (data.fecha || '—') + '</strong></div>' +
+          '<div><span>Documento</span><strong>' + (data.clienteDoc || '—') + '</strong></div>' +
+          '<div><span>Líneas</span><strong>' + (data.lineas || '—') + '</strong></div>';
+
+        var tot = document.getElementById('compSheetTotales');
+        tot.innerHTML =
+          '<div class="ios-orden-totales-row"><span>Subtotal</span><strong>' + (data.subtotal || '—') + '</strong></div>' +
+          '<div class="ios-orden-totales-row"><span>IGV</span><strong>' + (data.igv || '—') + '</strong></div>' +
+          '<div class="ios-orden-totales-row is-total"><span>Total</span><strong>' + (data.total || '—') + '</strong></div>';
+
+        document.getElementById('compActionPdf').href = apiBase + '/' + encodeURIComponent(data.id) + '/archivos/pdf?formato=a4';
+        document.getElementById('compActionTicket').href = apiBase + '/' + encodeURIComponent(data.id) + '/archivos/pdf?formato=ticket';
+
+        var btnReenviarSheet = document.getElementById('compActionReenviar');
+        var btnCorregirEvento = document.getElementById('compActionCorregirEvento');
+        if (btnReenviarSheet) {
+          btnReenviarSheet.hidden = !data.puedeReenviar || !!data.puedeCorregirEvento;
+          btnReenviarSheet.dataset.id = data.id || '';
+          btnReenviarSheet.dataset.ref = data.ref || '';
+        }
+        if (btnCorregirEvento) {
+          var hrefCorr = '';
+          if (data.puedeCorregirEvento && data.id) {
+            hrefCorr = appBase + '/emitir/guia/eventos/GRE_POR_EVENTO?corregir=' + encodeURIComponent(data.id);
+          } else if (data.puedeCorregirVenta && data.corregirUrl) {
+            hrefCorr = data.corregirUrl;
+          }
+          btnCorregirEvento.hidden = !hrefCorr;
+          btnCorregirEvento.href = hrefCorr || '#';
+        }
+
+        var lineasBox = document.getElementById('compSheetLineas');
+        lineasBox.innerHTML = '<p class="ios-comp-sheet-loading">Cargando detalle…</p>';
+        setStatus('');
+
+        sheet.hidden = false;
+        sheet.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+
+        fetch(apiBase + '/' + encodeURIComponent(data.id), {
+          credentials: 'same-origin',
+          headers: { Accept: 'application/json' },
+        })
+          .then(function (res) {
+            return res.json().then(function (body) {
+              if (!res.ok) throw new Error(body.message || 'No se pudo cargar el detalle');
+              return body;
+            });
+          })
+          .then(function (body) {
+            var c = body.comprobante || {};
+            if (c.subtotal) document.querySelector('#compSheetTotales .ios-orden-totales-row strong').textContent = c.subtotal;
+            if (c.cliente) document.getElementById('compSheetCliente').textContent = c.cliente;
+            if (c.total) document.getElementById('compSheetTotal').textContent = c.total;
+            if (c.pdfA4Url) document.getElementById('compActionPdf').href = c.pdfA4Url;
+            if (c.pdfTicketUrl) document.getElementById('compActionTicket').href = c.pdfTicketUrl;
+            if (btnCorregirEvento && (c.puedeCorregirEvento || c.puedeCorregirVenta)) {
+              btnCorregirEvento.hidden = false;
+              btnCorregirEvento.href = c.puedeCorregirVenta
+                ? (c.corregirUrl || '#')
+                : (c.corregirEventoUrl
+                  || (appBase + '/emitir/guia/eventos/GRE_POR_EVENTO?corregir=' + encodeURIComponent(c.id || data.id || '')));
+              if (btnReenviarSheet) btnReenviarSheet.hidden = true;
+            } else if (btnReenviarSheet && c.puedeReenviar) {
+              btnReenviarSheet.hidden = false;
+              btnReenviarSheet.dataset.id = c.id || data.id || '';
+              if (btnCorregirEvento) btnCorregirEvento.hidden = true;
+            }
+
+            if (c.motivo || c.documentoAfectado) {
+              var extra = '';
+              if (c.documentoAfectado) extra += '<div><span>Doc. afectado</span><strong>' + c.documentoAfectado + '</strong></div>';
+              if (c.motivo) extra += '<div><span>Motivo</span><strong>' + c.motivo + '</strong></div>';
+              meta.innerHTML += extra;
+            }
+
+            var lineas = c.lineas || [];
+            if (!lineas.length) {
+              lineasBox.innerHTML = '<p class="ios-comp-sheet-loading">Sin líneas de detalle</p>';
+              return;
+            }
+            lineasBox.innerHTML = lineas.map(function (ln) {
+              var qty = [ln.cantidad, ln.unidad].filter(Boolean).join(' ');
+              return '<div class="ios-comp-linea">' +
+                '<div><strong>' + (ln.nombre || 'Ítem') + '</strong>' +
+                (ln.serie ? '<small>Serie: ' + ln.serie + '</small>' : '') +
+                '<small class="ios-comp-linea-meta">' +
+                  (qty ? '<span class="ios-comp-linea-qty">' + qty + '</span>' : '') +
+                  (ln.precio ? '<span class="ios-comp-linea-precio"> · ' + ln.precio + '</span>' : '') +
+                '</small></div>' +
+                '<span>' + (ln.total || '') + '</span></div>';
+            }).join('');
+          })
+          .catch(function (err) {
+            lineasBox.innerHTML = '<p class="ios-comp-sheet-loading">' + (err.message || 'Error al cargar') + '</p>';
+          });
+      }
+
+      function pdfA4Url() {
+        var a = document.getElementById('compActionPdf');
+        return a && a.href ? a.href : '';
+      }
+
+      function compartirNativo() {
+        if (!current) return;
+        var url = pdfA4Url();
+        var title = current.ref || 'Comprobante';
+        var text = [current.ref, current.cliente, current.total].filter(Boolean).join(' · ');
+        setStatus('Preparando…');
+
+        function fallbackCopiar() {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(url || text).then(function () {
+              setStatus('Enlace copiado');
+            }).catch(function () {
+              setStatus(url || text);
+            });
+            return;
+          }
+          window.open(url, '_blank');
+          setStatus('');
+        }
+
+        if (!navigator.share) {
+          fallbackCopiar();
+          return;
+        }
+
+        fetch(url, { credentials: 'same-origin' })
+          .then(function (res) {
+            if (!res.ok) throw new Error('No se pudo obtener el PDF');
+            return res.blob();
+          })
+          .then(function (blob) {
+            var file = new File([blob], (current.ref || 'comprobante') + '.pdf', { type: 'application/pdf' });
+            var payload = { title: title, text: text, files: [file] };
+            if (navigator.canShare && !navigator.canShare(payload)) {
+              return navigator.share({ title: title, text: text, url: url });
+            }
+            return navigator.share(payload);
+          })
+          .then(function () { setStatus(''); })
+          .catch(function (err) {
+            if (err && err.name === 'AbortError') { setStatus(''); return; }
+            // Fallback: compartir solo URL
+            navigator.share({ title: title, text: text, url: url }).then(function () {
+              setStatus('');
+            }).catch(function () {
+              fallbackCopiar();
+            });
+          });
+      }
+
+      function imprimirPdf() {
+        if (!current) return;
+        var url = pdfA4Url();
+        if (!url) {
+          setStatus('PDF no disponible', true);
+          return;
+        }
+        setStatus('Preparando impresión…');
+
+        fetch(url, { credentials: 'same-origin' })
+          .then(function (res) {
+            if (!res.ok) throw new Error('No se pudo cargar el PDF');
+            return res.blob();
+          })
+          .then(function (blob) {
+            var blobUrl = URL.createObjectURL(blob);
+            var w = window.open(blobUrl, '_blank');
+            if (!w) {
+              // Popup bloqueado: iframe + print
+              var frame = document.getElementById('compPrintFrame');
+              if (frame) {
+                frame.onload = function () {
+                  try {
+                    frame.contentWindow.focus();
+                    frame.contentWindow.print();
+                  } catch (_e) { /* ignore */ }
+                  setTimeout(function () { URL.revokeObjectURL(blobUrl); }, 60_000);
+                };
+                frame.src = blobUrl;
+                setStatus('Usa el diálogo de impresión');
+                return;
+              }
+              window.location.href = blobUrl;
+              setStatus('');
+              return;
+            }
+            // Esperar a que el visor cargue y abrir medios de impresión
+            var tries = 0;
+            var timer = setInterval(function () {
+              tries += 1;
+              try {
+                w.focus();
+                w.print();
+                clearInterval(timer);
+                setStatus('');
+                setTimeout(function () { URL.revokeObjectURL(blobUrl); }, 60_000);
+              } catch (_e) {
+                if (tries > 8) {
+                  clearInterval(timer);
+                  setStatus('En la pestaña del PDF usa Ctrl+P');
+                }
+              }
+            }, 400);
+          })
+          .catch(function () {
+            window.open(url, '_blank');
+            setStatus('Abre el PDF e imprime con Ctrl+P', true);
+          });
+      }
+
+      var selectMode = false;
+      var selectedIds = {};
+      var btnSelectMode = document.getElementById('btnCompSelectMode');
+      var bulkBar = document.getElementById('compBulkBar');
+      var bulkCount = document.getElementById('compBulkCount');
+      var btnSelectCancel = document.getElementById('btnCompSelectCancel');
+      var btnDelete = document.getElementById('btnCompDelete');
+      var deleteUrl = '<%= appBase %>/comprobantes/eliminar';
+
+      function selectedList() {
+        return Object.keys(selectedIds).filter(function (id) { return selectedIds[id]; });
+      }
+
+      function updateBulkBar() {
+        var ids = selectedList();
+        var n = ids.length;
+        if (bulkCount) {
+          bulkCount.textContent = n === 1 ? '1 seleccionado' : n + ' seleccionados';
+        }
+        if (btnDelete) btnDelete.disabled = n === 0;
+      }
+
+      function setSelectMode(on) {
+        selectMode = !!on;
+        document.body.classList.toggle('ios-comp-selecting', selectMode);
+        if (btnSelectMode) btnSelectMode.setAttribute('aria-pressed', selectMode ? 'true' : 'false');
+        if (btnSelectMode) btnSelectMode.classList.toggle('is-on', selectMode);
+        if (bulkBar) bulkBar.hidden = !selectMode;
+        if (!selectMode) {
+          selectedIds = {};
+          document.querySelectorAll('.ios-comp-card.is-selected').forEach(function (el) {
+            el.classList.remove('is-selected');
+          });
+        }
+        updateBulkBar();
+        if (selectMode && sheet && !sheet.hidden) cerrarSheet();
+      }
+
+      function toggleSelectCard(btn) {
+        var id = btn.dataset.id;
+        if (!id) return;
+        if (selectedIds[id]) {
+          delete selectedIds[id];
+          btn.classList.remove('is-selected');
+        } else {
+          selectedIds[id] = true;
+          btn.classList.add('is-selected');
+        }
+        updateBulkBar();
+      }
+
+      function eliminarSeleccionados() {
+        var ids = selectedList();
+        if (!ids.length) return;
+        var msg = ids.length === 1
+          ? '¿Eliminar este comprobante de la base de datos?'
+          : '¿Eliminar ' + ids.length + ' comprobantes de la base de datos?';
+        if (!window.confirm(msg)) return;
+        if (btnDelete) {
+          btnDelete.disabled = true;
+          btnDelete.textContent = 'Eliminando…';
+        }
+        fetch(deleteUrl, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ ids: ids }),
+        })
+          .then(function (res) {
+            return res.json().then(function (data) {
+              if (!res.ok) throw new Error((data && data.message) || 'Error al eliminar');
+              return data;
+            });
+          })
+          .then(function (data) {
+            var failedMap = {};
+            (data.fallidos || []).forEach(function (f) {
+              if (f && f.id) failedMap[String(f.id)] = f.message || 'Error';
+            });
+            ids.forEach(function (id) {
+              if (failedMap[String(id)]) return;
+              document.querySelectorAll('#compList .ios-comp-card[data-id]').forEach(function (card) {
+                if (String(card.dataset.id) === String(id)) card.remove();
+              });
+              delete selectedIds[id];
+            });
+            var left = document.querySelectorAll('#compList .ios-comp-card[data-id]').length;
+            var countEl = document.querySelector('.ios-count');
+            if (countEl) {
+              countEl.textContent = left + ' documento' + (left === 1 ? '' : 's');
+            }
+            if (btnDelete) btnDelete.textContent = 'Eliminar';
+            updateBulkBar();
+            if (!selectedList().length) setSelectMode(false);
+            if (data.fallidos && data.fallidos.length) {
+              window.alert(
+                (data.message || 'Algunos no se eliminaron') + '\n' +
+                data.fallidos.map(function (f) { return (f.id || '') + ': ' + (f.message || ''); }).join('\n')
+              );
+            }
+            if (!left) window.location.reload();
+          })
+          .catch(function (err) {
+            if (btnDelete) {
+              btnDelete.textContent = 'Eliminar';
+              btnDelete.disabled = selectedList().length === 0;
+            }
+            window.alert(err.message || 'No se pudo eliminar');
+          });
+      }
+
+      document.getElementById('compList') && document.getElementById('compList').addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-comp-open]');
+        if (!btn) return;
+        if (selectMode) {
+          e.preventDefault();
+          toggleSelectCard(btn);
+          return;
+        }
+        abrirSheet({
+          id: btn.dataset.id,
+          ref: btn.dataset.ref,
+          tipo: btn.dataset.tipo,
+          tipoClass: btn.dataset.tipoClass,
+          cliente: btn.dataset.cliente,
+          clienteDoc: btn.dataset.clienteDoc,
+          fecha: btn.dataset.fecha,
+          estado: btn.dataset.estado,
+          total: btn.dataset.total,
+          subtotal: btn.dataset.subtotal,
+          igv: btn.dataset.igv,
+          lineas: btn.dataset.lineas,
+          obs: btn.dataset.obs,
+          puedeReenviar: btn.dataset.puedeReenviar === '1',
+          puedeCorregirEvento: btn.dataset.puedeCorregirEvento === '1',
+        });
+      });
+
+      function mostrarCargaReenvio(ref) {
+        var box = document.getElementById('emitLoading');
+        var title = document.getElementById('emitLoadingTitle');
+        var text = document.getElementById('emitLoadingText');
+        if (title) title.textContent = 'Reenviando…';
+        if (text) text.textContent = (ref || 'Comprobante') + ' · esperando respuesta de SUNAT';
+        if (box) {
+          box.hidden = false;
+          box.setAttribute('aria-hidden', 'false');
+        }
+      }
+
+      function reenviarComprobante(id, ref) {
+        if (!id) return;
+        mostrarCargaReenvio(ref);
+        fetch(apiBase + '/' + encodeURIComponent(id) + '/reenviar', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { Accept: 'application/json' },
+        })
+          .then(function (res) {
+            return res.json().then(function (body) {
+              return { ok: res.ok && body.success !== false, body: body };
+            });
+          })
+          .then(function (out) {
+            var msg = (out.body && out.body.message) || (out.ok ? 'Reenviado' : 'No se pudo reenviar');
+            window.location.href = apiBase + '?msg=' + encodeURIComponent(msg)
+              + '&tipo=' + (out.ok ? 'success' : 'error');
+          })
+          .catch(function (err) {
+            window.location.href = apiBase + '?msg=' + encodeURIComponent(err.message || 'No se pudo reenviar')
+              + '&tipo=error';
+          });
+      }
+
+      document.getElementById('compList') && document.getElementById('compList').addEventListener('click', function (e) {
+        var btnReenviar = e.target.closest('[data-comp-reenviar]');
+        if (!btnReenviar) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (selectMode) return;
+        reenviarComprobante(btnReenviar.dataset.id, btnReenviar.dataset.ref);
+      });
+
+      if (btnSelectMode) {
+        btnSelectMode.addEventListener('click', function () {
+          setSelectMode(!selectMode);
+        });
+      }
+      if (btnSelectCancel) {
+        btnSelectCancel.addEventListener('click', function () {
+          setSelectMode(false);
+        });
+      }
+      if (btnDelete) {
+        btnDelete.addEventListener('click', eliminarSeleccionados);
+      }
+
+      document.getElementById('compSheetCerrar') && document.getElementById('compSheetCerrar').addEventListener('click', cerrarSheet);
+      document.getElementById('compActionShare') && document.getElementById('compActionShare').addEventListener('click', compartirNativo);
+      document.getElementById('compActionPrint') && document.getElementById('compActionPrint').addEventListener('click', imprimirPdf);
+      document.getElementById('compActionReenviar') && document.getElementById('compActionReenviar').addEventListener('click', function () {
+        var btn = document.getElementById('compActionReenviar');
+        reenviarComprobante(btn && btn.dataset.id, btn && btn.dataset.ref);
+      });
+      sheet && sheet.addEventListener('click', function (e) {
+        if (e.target === sheet) cerrarSheet();
+      });
+      document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Escape') return;
+        if (sheet && !sheet.hidden) { cerrarSheet(); return; }
+        if (selectMode) setSelectMode(false);
+      });
+
+      // Deep-link desde Salidas/Ingresos: /comprobantes?abrir=<id>
+      (function openFromQuery() {
+        var params = new URLSearchParams(window.location.search || '');
+        var abrirId = String(params.get('abrir') || '').trim();
+        if (!abrirId) return;
+        setStatus('Cargando comprobante…');
+        fetch(apiBase + '/' + encodeURIComponent(abrirId), {
+          credentials: 'same-origin',
+          headers: { Accept: 'application/json' },
+        })
+          .then(function (res) {
+            return res.json().then(function (body) {
+              if (!res.ok) throw new Error(body.message || 'No se encontró el comprobante');
+              return body;
+            });
+          })
+          .then(function (body) {
+            var c = body.comprobante || {};
+            var tipoDoc = String(c.tipoDoc || '').padStart(2, '0');
+            var tipoLabel = String(c.tipoLabel || c.tipo || '').toLowerCase();
+            var tipoClass = 'doc';
+            if (tipoLabel.indexOf('por evento') >= 0) tipoClass = 'grev';
+            else if (tipoDoc === '01') tipoClass = 'fact';
+            else if (tipoDoc === '03') tipoClass = 'bol';
+            else if (tipoDoc === '07') tipoClass = 'nc';
+            else if (tipoDoc === '08') tipoClass = 'nd';
+            else if (tipoDoc === '09') tipoClass = 'gre';
+            else if (tipoDoc === '31') tipoClass = 'grt';
+            abrirSheet({
+              id: c.id || abrirId,
+              ref: c.ref || '',
+              tipo: c.tipoLabel || c.tipo || '',
+              tipoClass: tipoClass,
+              cliente: c.cliente || '',
+              clienteDoc: c.clienteDoc || '',
+              fecha: c.fecha || '',
+              estado: c.estado || '',
+              total: c.total || '',
+              subtotal: c.subtotal || '',
+              igv: c.igv || '',
+              lineas: (c.lineas && c.lineas.length) || '',
+              puedeReenviar: !!c.puedeReenviar,
+            });
+            // Limpia el query para no reabrir al volver atrás.
+            try {
+              params.delete('abrir');
+              var qs = params.toString();
+              var next = window.location.pathname + (qs ? ('?' + qs) : '');
+              window.history.replaceState({}, '', next);
+            } catch (_) { /* ignore */ }
+          })
+          .catch(function (err) {
+            setStatus(err.message || 'No se pudo abrir el comprobante', true);
+          });
+      })();
+    })();
+  </script>
+</body>
+</html>

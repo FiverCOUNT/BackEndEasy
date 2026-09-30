@@ -12,12 +12,17 @@
     "db:verify": "node scripts/verify-mysql.js",
     "db:studio": "node scripts/with-env.js studio",
     "db:seed": "node prisma/seed.js",
+    "db:seed-ubigeo": "node scripts/seed-ubigeo.js",
     "start": "node src/server.js",
     "dev": "node scripts/dev-server.js",
     "dev:server": "node scripts/dev-server.js",
     "db:generate": "node scripts/with-env.js generate",
     "db:import-codigos-sunat": "node scripts/import-codigos-producto-sunat.js",
-    "db:limpiar-servicios-compras": "node scripts/limpiar-servicios-catalogo-compras.js"
+    "db:limpiar-servicios-compras": "node scripts/limpiar-servicios-catalogo-compras.js",
+    "test:compras-recibidos": "node scripts/test-compras-recibidos.js",
+    "test:smoke-compras": "node scripts/smoke-compras-api.js",
+    "test:web-app-panel": "node scripts/test-web-app-panel.js",
+    "db:migrate-recibidos-compras": "node scripts/migrate-recibidos-invoices-to-compras.js"
   },
   "keywords": [
     "mvc",
@@ -42,7 +47,8 @@
     "multer": "^2.1.1",
     "node-forge": "^1.4.0",
     "pdf-parse": "^2.4.5",
-    "pdfkit": "^0.19.1"
+    "pdfkit": "^0.19.1",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "prisma": "^6.9.0",

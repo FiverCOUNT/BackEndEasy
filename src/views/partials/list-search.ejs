@@ -1,4 +1,7 @@
 <form class="list-search" method="GET" action="<%= searchAction %>">
+  <% if (typeof adminEntorno !== 'undefined' && adminEntorno) { %>
+    <input type="hidden" name="entorno" value="<%= adminEntorno %>" />
+  <% } %>
   <div class="list-search-row">
     <input
       type="search"
@@ -10,7 +13,7 @@
     />
     <button type="submit" class="btn-sm btn-edit">Buscar</button>
     <% if (q) { %>
-      <a href="<%= searchAction %>" class="btn-sm btn-clear">Limpiar</a>
+      <a href="<%= searchAction %>?entorno=<%= adminEntorno %>" class="btn-sm btn-clear">Limpiar</a>
     <% } %>
   </div>
   <% if (typeof pageSize !== 'undefined') { %>

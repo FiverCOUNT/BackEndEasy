@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> · Easy</title>
+  <link rel="stylesheet" href="/css/app-ios.css?v=scan-salida" />
+</head>
+<body class="ios-app">
+  <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
+  <main class="ios-main">
+    <header class="ios-top">
+      <div>
+        <p class="ios-eyebrow"><%= companyNombre %></p>
+        <h1>Nueva salida</h1>
+      </div>
+      <a class="ios-btn-secondary" href="<%= appBase %>/salidas">Lista</a>
+    </header>
+
+    <% if (error) { %><div class="ios-flash is-error"><%= error %></div><% } %>
+
+    <%
+      var catalogoJson = JSON.stringify((catalogo || []).map(function(it) {
+        return {
+          id: it.id,
+          nombre: it.nombre,
+          codigo: it.codigo || '',
+          unidad: it.unidad || 'NIU',
+          precio_unitario: it.precioUnitario != null ? it.precioUnitario : (it.precio_unitario || 0),
+          maneja_stock: it.manejaStock === true || it.maneja_stock === true,
+          maneja_serie: it.manejaSerie === true || it.maneja_serie === true,
+          stock_actual: it.stock_actual != null ? it.stock_actual : (it.stockActual != null ? it.stockActual : null),
+          kind: it.kind || 'PRODUCT',
+        };
+      }));
+      var almacenesJson = JSON.stringify((almacenesDestino || []).map(function(a) {
+        return { id: a.id, nombre: a.nombre, codigo: a.codigo || '' };
+      }));
+      var clientesJson = JSON.stringify(clientes || []);
+    %>
+
+    <form class="ios-form" method="POST" action="<%= appBase %>/salidas" id="salidaForm"
+      data-stock-api="<%= catalogoStockUrl %>"
+      data-series-api="<%= seriesApiUrl %>"
+      data-almacen-default="<%= form.almacen_id || defaultAlmacenId || '' %>">
+
+      <section class="ios-form-card">
+        <h3 class="ios-form-label">Almacenes</h3>
+        <div class="ios-inline">
+          <% if (origenBloqueado || almacenesOrigen.length === 1) {
+            var origenFijo = almacenesOrigen[0] || null;
+          %>
+            <label class="ios-field">
+              <span>Origen *</span>
+              <% if (origenFijo) { %>
+                <input type="text" value="<%= origenFijo.nombre %>" readonly />
+                <input type="hidden" name="almacen_id" id="almacenId" value="<%= origenFijo.id %>" />
+              <% } else { %>
+                <input type="text" value="Sin almacén asignado" readonly />
+                <input type="hidden" name="almacen_id" id="almacenId" value="" />
+              <% } %>
+            </label>
+          <% } else { %>
+            <label class="ios-field">
+              <span>Origen *</span>
+              <select name="almacen_id" id="almacenId" required>
+                <option value="">Selecciona…</option>
+                <% almacenesOrigen.forEach(function(a) { %>
+                  <option value="<%= a.id %>" <%= String(form.almacen_id || defaultAlmacenId) === String(a.id) ? 'selected' : '' %>><%= a.nombre %></option>
+                <% }); %>
+              </select>
+            </label>
+          <% } %>
+          <% if (puedeTrasladar) { %>
+          <label class="ios-field">
+            <span>Destino</span>
+            <select name="almacen_destino_id" id="almacenDestinoId">
+              <option value="">Selecciona…</option>
+              <% almacenesDestino.forEach(function(a) { %>
+                <option value="<%= a.id %>" <%= String(form.almacen_destino_id || '') === String(a.id) ? 'selected' : '' %>><%= a.nombre %></option>
+              <% }); %>
+            </select>
+          </label>
+          <% } %>
+        </div>
+        <div id="clienteWrap">
+          <input type="hidden" name="cliente_id" id="clienteId" value="<%= form.cliente_id || '' %>" />
+          <button type="button" class="ios-picker-btn" id="clienteAbrir">
+            <span class="ios-picker-btn-text">
+              <strong id="clienteBtnTitulo">Seleccionar cliente</strong>
+              <small id="clienteBtnDetalle">Salida a cliente</small>
+            </span>
+            <span class="ios-picker-btn-chevron" aria-hidden="true">▾</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="ios-form-card">
+        <h3 class="ios-form-label">Productos</h3>
+        <div class="ios-search-row">
+          <div class="ios-search">
+            <input type="search" id="productoBusqueda" placeholder="Buscar producto…" autocomplete="off" />
+          </div>
+          <button type="button" id="productoAbrirLista" class="ios-icon-btn" aria-label="Ver catálogo">+</button>
+        </div>
+        <div id="lineasOrden" class="ios-orden-lineas"></div>
+        <div id="lineasHidden"></div>
+        <p style="font-size:13px;color:var(--ios-muted);margin:0;">Misma lógica que al emitir: stock del origen, series y cantidades.</p>
+      </section>
+
+      <section class="ios-form-card">
+        <h3 class="ios-form-label">Observaciones</h3>
+        <label class="ios-field">
+          <span>Nota (opcional)</span>
+          <input type="text" name="observaciones" value="<%= form.observaciones || '' %>" maxlength="255" placeholder="Ej. Traslado interno, ajuste…" />
+        </label>
+      </section>
+
+      <button type="submit" class="ios-btn-primary" style="width:100%;margin-top:8px;">Registrar salida</button>
+    </form>
+  </main>
+
+  <div id="productoPicker" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel" role="dialog" aria-modal="true">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-back" id="productoPickerCerrar">← Volver</button>
+        <h3>Catálogo</h3>
+        <span style="width:56px;"></span>
+      </div>
+      <div class="ios-sheet-toolbar">
+        <input type="search" id="productoPickerBusqueda" class="ios-sheet-search" placeholder="Nombre, código o serie…" autocomplete="off" />
+        <select id="productoAlmacenSelect" class="ios-sheet-almacen-select" aria-label="Almacén" hidden></select>
+        <button type="button" id="barcodeSerieBtn" class="ios-sheet-scan-btn" aria-label="Escanear serie" title="Escanear serie">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M4 7V5a1 1 0 0 1 1-1h2M20 7V5a1 1 0 0 0-1-1h-2M4 17v2a1 1 0 0 0 1 1h2M20 17v2a1 1 0 0 1-1 1h-2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M4 12h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+      <div class="ios-sheet-status" id="productoPickerStatus">Toca un producto para agregarlo</div>
+      <div class="ios-sheet-list" id="productoPickerLista"></div>
+    </div>
+  </div>
+
+  <div id="seriePicker" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel" role="dialog" aria-modal="true">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-back" id="seriePickerCerrar">← Volver</button>
+        <h3 id="seriePickerTitulo">Elegir serie</h3>
+        <span style="width:44px;"></span>
+      </div>
+      <input type="search" id="seriePickerBusqueda" class="ios-sheet-search" placeholder="Buscar número de serie…" autocomplete="off" />
+      <div class="ios-sheet-status" id="seriePickerStatus">Cargando series…</div>
+      <div class="ios-sheet-list" id="seriePickerLista"></div>
+      <button type="button" class="ios-btn-primary ios-serie-picker-add" id="seriePickerAgregar" disabled>
+        Agregar seleccionadas
+      </button>
+    </div>
+  </div>
+
+  <div id="clienteSheet" class="ios-sheet" hidden aria-hidden="true">
+    <div class="ios-sheet-panel" role="dialog" aria-modal="true">
+      <div class="ios-sheet-head">
+        <h3>Cliente</h3>
+        <button type="button" class="ios-btn-ghost" id="clienteSheetCerrar">Cerrar</button>
+      </div>
+      <input type="search" id="clienteBuscar" class="ios-sheet-search" placeholder="Nombre o documento…" autocomplete="off" />
+      <div class="ios-sheet-status" id="clienteStatus" hidden>Sin resultados</div>
+      <div class="ios-sheet-list" id="clienteLista"></div>
+    </div>
+  </div>
+
+  <script type="application/json" id="salida-catalogo-data"><%- catalogoJson.replace(/</g, '\\u003c') %></script>
+  <script type="application/json" id="salida-clientes-data"><%- clientesJson.replace(/</g, '\\u003c') %></script>
+  <script type="application/json" id="salida-almacenes-data"><%- almacenesJson.replace(/</g, '\\u003c') %></script>
+  <script type="application/json" id="salida-lineas-data"><%- JSON.stringify(typeof lineasIniciales !== 'undefined' && lineasIniciales ? lineasIniciales : []).replace(/</g, '\\u003c') %></script>
+  <%- include('../../partials/app-emit-loading') %>
+  <script src="/js/app-emit-loading.js"></script>
+  <%- include('../../partials/app-barcode-serie') %>
+  <script src="/js/app-barcode-serie.js?v=scan-salida"></script>
+  <script src="/js/app-lineas-productos.js?v=scan-salida"></script>
+  <script>
+  (function () {
+    var form = document.getElementById('salidaForm');
+    if (!form || !window.EasyLineasProductos) return;
+
+    var almacenId = document.getElementById('almacenId');
+    var almacenDestinoId = document.getElementById('almacenDestinoId');
+    var clienteWrap = document.getElementById('clienteWrap');
+    var clienteId = document.getElementById('clienteId');
+    var clienteSheet = document.getElementById('clienteSheet');
+    var clienteLista = document.getElementById('clienteLista');
+    var clienteBuscar = document.getElementById('clienteBuscar');
+    var clienteStatus = document.getElementById('clienteStatus');
+    var clienteTitulo = document.getElementById('clienteBtnTitulo');
+    var clienteDetalle = document.getElementById('clienteBtnDetalle');
+    var clientes = parseJson('salida-clientes-data');
+
+    function parseJson(id) {
+      try { return JSON.parse(document.getElementById(id).textContent || '[]'); }
+      catch (e) { return []; }
+    }
+
+    function pintarCliente() {
+      var cli = clientes.find(function (c) { return String(c.id) === String(clienteId && clienteId.value); });
+      if (clienteTitulo) clienteTitulo.textContent = cli ? cli.nombre : 'Seleccionar cliente';
+      if (clienteDetalle) {
+        clienteDetalle.textContent = cli
+          ? ((cli.tipo_doc_label || 'Doc.') + ' ' + (cli.numero_doc || ''))
+          : 'Salida a cliente';
+      }
+    }
+
+    function pintarListaClientes() {
+      if (!clienteLista) return;
+      var q = (clienteBuscar && clienteBuscar.value ? clienteBuscar.value : '').trim().toLowerCase();
+      clienteLista.innerHTML = '';
+      var n = 0;
+      clientes.forEach(function (c) {
+        var texto = ((c.nombre || '') + ' ' + (c.numero_doc || '')).toLowerCase();
+        if (q && texto.indexOf(q) === -1) return;
+        n += 1;
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'ios-sheet-item' + (String(c.id) === String(clienteId && clienteId.value) ? ' is-selected' : '');
+        btn.innerHTML = '<strong></strong><span></span>';
+        btn.querySelector('strong').textContent = c.nombre || 'Cliente';
+        btn.querySelector('span').textContent = (c.tipo_doc_label || 'Doc.') + ' ' + (c.numero_doc || '');
+        btn.addEventListener('click', function () {
+          if (clienteId) clienteId.value = c.id;
+          if (clienteSheet) {
+            clienteSheet.hidden = true;
+            clienteSheet.setAttribute('aria-hidden', 'true');
+          }
+          pintarCliente();
+        });
+        clienteLista.appendChild(btn);
+      });
+      if (clienteStatus) clienteStatus.hidden = n !== 0;
+    }
+
+    function tieneDestino() {
+      return Boolean(almacenDestinoId && almacenDestinoId.value);
+    }
+
+    function syncClienteVisibilidad() {
+      var traslado = tieneDestino();
+      if (clienteWrap) clienteWrap.hidden = traslado;
+      if (traslado && clienteId) clienteId.value = '';
+      pintarCliente();
+    }
+
+    function syncDestinoOptions() {
+      if (!almacenDestinoId) return;
+      var origen = almacenId && almacenId.value ? String(almacenId.value) : '';
+      Array.prototype.forEach.call(almacenDestinoId.options || [], function (opt) {
+        if (!opt.value) return;
+        var mismo = origen && String(opt.value) === origen;
+        opt.disabled = mismo;
+        opt.hidden = mismo;
+      });
+      if (origen && String(almacenDestinoId.value) === origen) {
+        almacenDestinoId.value = '';
+      }
+    }
+
+    var lineasApi = EasyLineasProductos.init({
+      form: form,
+      catalogo: parseJson('salida-catalogo-data'),
+      almacenes: parseJson('salida-almacenes-data'),
+      lineasIniciales: parseJson('salida-lineas-data'),
+      stockApi: form.getAttribute('data-stock-api'),
+      seriesApi: form.getAttribute('data-series-api'),
+      lockAlmacen: true,
+      showPrices: false,
+      showTotals: false,
+      validateOnSubmit: false,
+      getAlmacenId: function () {
+        return almacenId ? almacenId.value : '';
+      },
+      fields: {
+        catalog_item_id: 'catalog_item_id',
+        cantidad: 'cantidad',
+        producto_serie_id: 'producto_serie_id',
+        numero_serie: 'numero_serie',
+      },
+    });
+
+    syncDestinoOptions();
+    syncClienteVisibilidad();
+
+    if (almacenId && almacenId.tagName === 'SELECT') {
+      almacenId.addEventListener('change', function () {
+        syncDestinoOptions();
+        if (lineasApi) lineasApi.syncAlmacenFromForm();
+      });
+    }
+    if (almacenDestinoId) {
+      almacenDestinoId.addEventListener('change', syncClienteVisibilidad);
+    }
+    document.getElementById('clienteAbrir')?.addEventListener('click', function () {
+      if (!clienteSheet || tieneDestino()) return;
+      if (clienteBuscar) clienteBuscar.value = '';
+      pintarListaClientes();
+      clienteSheet.hidden = false;
+      clienteSheet.setAttribute('aria-hidden', 'false');
+      setTimeout(function () { clienteBuscar && clienteBuscar.focus(); }, 30);
+    });
+    document.getElementById('clienteSheetCerrar')?.addEventListener('click', function () {
+      if (!clienteSheet) return;
+      clienteSheet.hidden = true;
+      clienteSheet.setAttribute('aria-hidden', 'true');
+    });
+    clienteSheet?.addEventListener('click', function (ev) {
+      if (ev.target === clienteSheet) {
+        clienteSheet.hidden = true;
+        clienteSheet.setAttribute('aria-hidden', 'true');
+      }
+    });
+    clienteBuscar?.addEventListener('input', pintarListaClientes);
+
+    form.addEventListener('submit', function (ev) {
+      var origen = almacenId && almacenId.value;
+      var destino = almacenDestinoId && almacenDestinoId.value;
+      if (!origen) {
+        ev.preventDefault();
+        window.alert('Selecciona el almacén de origen.');
+        return;
+      }
+      if (destino && origen === destino) {
+        ev.preventDefault();
+        window.alert('Origen y destino no pueden ser el mismo almacén.');
+        return;
+      }
+      if (!destino && !(clienteId && clienteId.value)) {
+        ev.preventDefault();
+        window.alert('Selecciona un cliente o un almacén de destino.');
+        return;
+      }
+      if (destino && clienteId) clienteId.value = '';
+      if (lineasApi && !lineasApi.validate()) {
+        ev.preventDefault();
+        return;
+      }
+      if (typeof window.showEmitLoading === 'function') {
+        window.showEmitLoading('Registrando salida…', 'Moviendo stock. No cierres esta ventana.');
+      }
+      var btn = form.querySelector('button[type="submit"]');
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Registrando…';
+      }
+    });
+  })();
+  </script>
+  <%- include('../../partials/app-tabbar', { active: active, appBase: appBase }) %>
+</body>
+</html>

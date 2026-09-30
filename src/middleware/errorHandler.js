@@ -1,40 +1,46 @@
+const { adminPath } = require('../config/adminPanel');
+
+const PRISMA_DB_CODES = new Set(['P2024', 'P1001', 'P1017', 'P1008', 'P1002']);
+
+function isPrismaDbError(err) {
+  return PRISMA_DB_CODES.has(err?.code) || PRISMA_DB_CODES.has(err?.errorCode);
+}
+
 function errorHandler(err, req, res, next) {
   if (res.headersSent) return next(err);
 
-  const status = err.status || 500;
-  const message = err.message || 'Error interno del servidor';
+  const dbDown = isPrismaDbError(err);
+  const status = dbDown ? 503 : (err.status || 500);
+  const message = dbDown
+    ? 'No se pudo conectar a la base de datos. Espera un momento e inténtalo de nuevo.'
+    : (err.message || 'Error interno del servidor');
 
   if (status >= 500) {
     console.error(err);
   }
 
-  if (req.path.startsWith('/api')) {
-    return res.status(status).json({ success: false, message });
+  const path = String(req.originalUrl || req.path || '').split('?')[0];
+
+  if (path.startsWith('/api')) {
+    const payload = { success: false, message };
+    if (err.code) payload.code = err.code;
+    return res.status(status).json(payload);
   }
 
-  if (req.path.startsWith('/usuarios')) {
-    const q = new URLSearchParams({ msg: message, tipo: 'error' });
-    return res.redirect(`/usuarios?${q.toString()}`);
-  }
+  const adminRedirects = [
+    ['/usuarios', '/usuarios'],
+    ['/companies', '/companies'],
+    ['/catalogo', '/catalogo'],
+    ['/comprobantes', '/comprobantes'],
+    ['/clientes', '/clientes'],
+    ['/almacenes', '/almacenes'],
+  ];
 
-  if (req.path.startsWith('/companies')) {
-    const q = new URLSearchParams({ msg: message, tipo: 'error' });
-    return res.redirect(`/companies?${q.toString()}`);
-  }
-
-  if (req.path.startsWith('/catalogo')) {
-    const q = new URLSearchParams({ msg: message, tipo: 'error' });
-    return res.redirect(`/catalogo?${q.toString()}`);
-  }
-
-  if (req.path.startsWith('/comprobantes')) {
-    const q = new URLSearchParams({ msg: message, tipo: 'error' });
-    return res.redirect(`/comprobantes?${q.toString()}`);
-  }
-
-  if (req.path.startsWith('/clientes')) {
-    const q = new URLSearchParams({ msg: message, tipo: 'error' });
-    return res.redirect(`/clientes?${q.toString()}`);
+  for (const [suffix, dest] of adminRedirects) {
+    if (path === adminPath(suffix) || path.startsWith(`${adminPath(suffix)}/`)) {
+      const q = new URLSearchParams({ msg: message, tipo: 'error' });
+      return res.redirect(`${adminPath(dest)}?${q.toString()}`);
+    }
   }
 
   res.status(status).send(`<p style="font-family:sans-serif;padding:2rem;">${message}</p>`);

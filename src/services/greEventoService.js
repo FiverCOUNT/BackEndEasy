@@ -100,10 +100,9 @@ async function registrarEvento(companyRuc, guiaId, body = {}) {
 
   const entry = {
     tipo: 'evento',
-    codigo_evento: codigo,
+    codigo,
     descripcion: EVENTOS_SUNAT[codigo],
     fecha_evento: payload.fecha_evento,
-    detalle: payload.detalle || null,
     sunat: emisorData,
     success: emisorData?.success === true,
   };
@@ -119,49 +118,67 @@ async function registrarEvento(companyRuc, guiaId, body = {}) {
   };
 }
 
+/**
+ * Baja de GRE (RS 255-2015 art. 8 / RS 123-2022):
+ * SUNAT solo permite dar de baja GRE desde SOL (Clave SOL), no desde el SEE del contribuyente.
+ * Aquí registramos en Easy la baja ya hecha en SOL, con motivo y referencia de constancia.
+ */
 async function comunicarBaja(companyRuc, guiaId, body = {}) {
   const invoice = await findGuiaAceptada(companyRuc, guiaId);
   const motivo = String(body.motivo || body.descripcion || '').trim();
   if (!motivo) {
-    const err = new Error('motivo es obligatorio para la comunicación de baja.');
+    const err = new Error('El motivo de baja es obligatorio.');
     err.status = 400;
     throw err;
   }
 
-  const payload = await payloadGreBase(invoice);
-  payload.motivo = motivo;
-  payload.fecha_baja = body.fecha_baja || body.fechaBaja || formatFechaEvento();
-
-  let emisorData = null;
-  let emisorError = null;
-  try {
-    ({ data: emisorData } = await emisorClient.emitirGreBaja(payload));
-  } catch (err) {
-    emisorError = err.message;
-    emisorData = err.data || { success: false, message: err.message };
+  const confirmadoSol = ['1', 'true', 'on', 'yes', 'si', 'sí'].includes(
+    String(body.confirmado_sol || body.confirmadoSol || '').trim().toLowerCase(),
+  );
+  if (!confirmadoSol) {
+    const err = new Error(
+      'Confirma que ya diste de baja la GRE en SUNAT SOL (Empresas → Guía de Remisión Electrónica → Baja GRE).',
+    );
+    err.status = 400;
+    throw err;
   }
+
+  const fechaBaja = body.fecha_baja || body.fechaBaja || formatFechaEvento();
+  const constanciaRef = String(body.constancia_ref || body.constanciaRef || '').trim();
 
   const entry = {
     tipo: 'baja',
     motivo,
-    fecha_baja: payload.fecha_baja,
-    sunat: emisorData,
-    success: emisorData?.success === true,
+    fecha_baja: fechaBaja,
+    fuente: 'SOL',
+    constancia_ref: constanciaRef || null,
+    /**
+     * Acreditación oficial: en SOL SUNAT entrega la «Constancia de baja de GRE».
+     * No hay CDR/ticket vía SEE-contribuyente para este trámite.
+     */
+    sunat: {
+      canal: 'SEE-SOL',
+      documento: 'Constancia de baja de GRE',
+      mensaje: 'Baja registrada por el contribuyente en SUNAT Operaciones en Línea.',
+      constancia_ref: constanciaRef || null,
+    },
+    success: true,
   };
   const sunatJson = await appendGreEventoMeta(invoice.id, entry);
+  await comprobanteModel.marcarAnulado(invoice.id, companyRuc, motivo);
 
-  let estado = invoice.estado;
-  if (entry.success) {
-    await comprobanteModel.marcarAnulado(invoice.id, companyRuc, motivo);
-    estado = 'ANULADO';
-  }
+  const ref = `${invoice.serie}-${invoice.correlativo}`;
+  const partes = [
+    `GRE ${ref} marcada como ANULADA en Easy.`,
+    'Acreditación SUNAT: Constancia de baja de GRE (SOL).',
+  ];
+  if (constanciaRef) partes.push(`Ref. constancia: ${constanciaRef}.`);
+  partes.push(`Motivo: ${motivo}`);
 
   return {
-    success: entry.success,
-    message: entry.success
-      ? 'Comunicación de baja registrada.'
-      : (emisorError || emisorData?.message || 'No se pudo comunicar la baja a SUNAT.'),
-    guia: comprobanteModel.toApiInvoice({ ...invoice, estado, sunatJson }),
+    success: true,
+    message: partes.join(' '),
+    guia: comprobanteModel.toApiInvoice({ ...invoice, estado: 'ANULADO', sunatJson }),
     baja: entry,
   };
 }

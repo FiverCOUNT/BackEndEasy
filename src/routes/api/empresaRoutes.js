@@ -6,6 +6,7 @@ const catalogItemApiController = require('../../controllers/catalogItemApiContro
 const inventarioApiController = require('../../controllers/inventarioApiController');
 const almacenApiController = require('../../controllers/almacenApiController');
 const clienteApiController = require('../../controllers/clienteApiController');
+const ordenApiController = require('../../controllers/ordenApiController');
 const comprobanteApiController = require('../../controllers/comprobanteApiController');
 const empresaAddressApiController = require('../../controllers/empresaAddressApiController');
 const empresaVehiculoApiController = require('../../controllers/empresaVehiculoApiController');
@@ -16,6 +17,9 @@ const empresaPerfilApiController = require('../../controllers/empresaPerfilApiCo
 const compraApiController = require('../../controllers/compraApiController');
 const adjuntoApiController = require('../../controllers/adjuntoApiController');
 const codigoProductoSunatApiController = require('../../controllers/codigoProductoSunatApiController');
+const usuarioEmpresaApiController = require('../../controllers/usuarioEmpresaApiController');
+const metodoPagoApiController = require('../../controllers/metodoPagoApiController');
+const appUbigeoWebController = require('../../controllers/appUbigeoWebController');
 const uploadAdjunto = require('../../middleware/uploadAdjunto');
 
 const router = express.Router({ mergeParams: true });
@@ -57,13 +61,49 @@ router.get('/codigos-producto-sunat', codigoProductoSunatApiController.list);
 router.get('/almacenes', almacenApiController.list);
 router.post('/almacenes', requireAdmin, almacenApiController.create);
 
+router.get('/usuarios', requireAdmin, usuarioEmpresaApiController.list);
+router.post('/usuarios', requireAdmin, usuarioEmpresaApiController.create);
+router.put('/usuarios/:id', requireAdmin, usuarioEmpresaApiController.update);
+router.patch('/usuarios/:id', requireAdmin, usuarioEmpresaApiController.update);
+router.post('/usuarios/:id/activar', requireAdmin, usuarioEmpresaApiController.activar);
+router.post('/usuarios/:id/desactivar', requireAdmin, usuarioEmpresaApiController.desactivar);
+router.delete('/usuarios/:id', requireAdmin, usuarioEmpresaApiController.destroy);
+
 router.get('/clientes', clienteApiController.list);
 router.post('/clientes', clienteApiController.create);
+router.patch('/clientes/:id', clienteApiController.update);
+
+router.get('/ordenes/no-vistas', ordenApiController.countNoVistas);
+router.get('/ordenes/direcciones-envio', ordenApiController.direccionesEnvioRecientes);
+router.post('/ordenes/direcciones-envio', ordenApiController.crearDireccionEnvio);
+router.put('/ordenes/direcciones-envio/:id', ordenApiController.actualizarDireccionEnvio);
+router.get('/ordenes', ordenApiController.list);
+router.post('/ordenes', ordenApiController.create);
+router.post('/ordenes/:id/visto', ordenApiController.marcarVista);
+router.get('/ordenes/:id', ordenApiController.getById);
+router.put('/ordenes/:id', ordenApiController.update);
+router.patch('/ordenes/:id', ordenApiController.update);
+router.post('/ordenes/:id/anular', ordenApiController.anular);
+router.delete('/ordenes/:id', ordenApiController.destroy);
 
 router.get('/addresses', empresaAddressApiController.list);
 router.post('/addresses', empresaAddressApiController.create);
 router.put('/addresses/:id', empresaAddressApiController.update);
 router.delete('/addresses/:id', empresaAddressApiController.destroy);
+
+/** Catálogo INEI (región → provincia → distrito) para selects de ubicación. */
+router.get('/ubigeo/regiones', appUbigeoWebController.regionesJson);
+router.get('/ubigeo/regiones/:regionCodigo/provincias', appUbigeoWebController.provinciasJson);
+router.get('/ubigeo/provincias/:provinciaCodigo/distritos', appUbigeoWebController.distritosJson);
+router.get('/ubigeo/lookup/:ubigeo', appUbigeoWebController.lookupUbigeoJson);
+
+/** Medios de cobro (Yape, CCI, …) — tabla metodos_pago. */
+router.get('/metodos-pago', metodoPagoApiController.list);
+router.get('/metodos-pago/:id', metodoPagoApiController.getById);
+router.post('/metodos-pago', requireAdmin, metodoPagoApiController.create);
+router.put('/metodos-pago/:id', requireAdmin, metodoPagoApiController.update);
+router.patch('/metodos-pago/:id', requireAdmin, metodoPagoApiController.update);
+router.delete('/metodos-pago/:id', requireAdmin, metodoPagoApiController.destroy);
 
 router.get('/vehiculos', empresaVehiculoApiController.list);
 router.post('/vehiculos', empresaVehiculoApiController.create);
@@ -86,6 +126,8 @@ router.get('/comprobantes/emisor/health', comprobanteApiController.healthEmisor)
 router.get('/comprobantes', comprobanteApiController.list);
 router.get('/compras', compraApiController.list);
 router.post('/compras', compraApiController.create);
+/** Sync recibidos desde SUNAT (SIRE+SSPP+scraper) → compras + XML/PDF. Usado por la app al abrir Compras. */
+router.post('/compras/sincronizar', compraApiController.sincronizar);
 router.post('/compras/sspp/traer', requireAdmin, compraApiController.traerSspp);
 router.post('/compras/sire/traer-mes', requireAdmin, compraApiController.traerMesSire);
 router.patch('/compras/:id/lineas/:detailId', requireAdmin, compraApiController.relacionarLinea);
@@ -103,6 +145,7 @@ router.delete('/comprobantes/:id', comprobanteApiController.eliminar);
 
 router.post('/inventario/movimientos', inventarioApiController.registrarMovimiento);
 router.get('/inventario/movimientos', inventarioApiController.listMovimientos);
+router.get('/inventario/movimientos/:id', inventarioApiController.getMovimientoById);
 router.post('/inventario/entradas', inventarioApiController.registrarEntrada);
 router.post('/inventario/salidas', inventarioApiController.registrarSalida);
 router.get('/entregas', inventarioApiController.listSalidas);

@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> · Easy</title>
+  <link rel="stylesheet" href="/css/app-ios.css?v=hist-alm" />
+</head>
+<body class="ios-app">
+  <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
+  <main class="ios-main">
+    <header class="ios-top">
+      <div>
+        <p class="ios-eyebrow"><%= companyNombre %></p>
+        <h1>Historial</h1>
+      </div>
+    </header>
+
+    <% if (typeof flash !== 'undefined' && flash) { %>
+      <div class="ios-flash <%= flash.type === 'error' ? 'is-error' : 'is-ok' %>"><%= flash.text %></div>
+    <% } %>
+
+    <% if (typeof sinAlmacenAsignado !== 'undefined' && sinAlmacenAsignado) { %>
+      <section class="ios-form-card ios-ajustes-empty">
+        <p>Tu usuario no tiene almacén asignado. Pide a un admin que te asigne uno.</p>
+      </section>
+    <% } else { %>
+      <%
+        var productosList = typeof productos !== 'undefined' && productos ? productos : [];
+        var sel = typeof productoSel !== 'undefined' ? productoSel : null;
+        var vistaActual = typeof vista !== 'undefined' ? vista : 'vacio';
+        var seriesList = typeof series !== 'undefined' && series ? series : [];
+        var itemsList = typeof items !== 'undefined' && items ? items : [];
+        var esSerieProducto = sel && sel.maneja_serie;
+        var placeholderQ = esSerieProducto || modo === 'serie'
+          ? 'Nº de serie…'
+          : 'Serie o producto (mín. 2)';
+
+        function esc(s) {
+          return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+        }
+        function labelEstado(est) {
+          var map = {
+            DISPONIBLE: 'En almacén',
+            RESERVADO: 'Reservado',
+            VENDIDO: 'Vendido',
+            ENTREGADO: 'Entregado',
+            BAJA: 'Baja',
+          };
+          return map[est] || est || '—';
+        }
+        function labelTipo(it) {
+          if (it.es_traslado) return 'Traslado';
+          var ref = String(it.referencia_tipo || '').toUpperCase();
+          if (ref === 'DEVOLUCION_CLIENTE' || ref === 'REGRESO_SALIDA') return 'Devolución';
+          if (ref === 'VENTA' || ref === 'ORDEN') return 'Venta';
+          if (ref === 'COMPRA' || ref.indexOf('COMPRA') === 0) return 'Compra';
+          if (it.tipo_movimiento === 'ENTRADA') return 'Ingreso';
+          if (it.tipo_movimiento === 'SALIDA') return 'Salida';
+          return it.tipo_movimiento || 'Movimiento';
+        }
+        function pillClass(it) {
+          if (it.es_traslado) return 'is-traslado';
+          var ref = String(it.referencia_tipo || '').toUpperCase();
+          if (ref === 'DEVOLUCION_CLIENTE' || ref === 'REGRESO_SALIDA') return 'is-dev';
+          if (ref === 'VENTA' || ref === 'ORDEN') return 'is-venta';
+          if (ref === 'COMPRA' || ref.indexOf('COMPRA') === 0) return 'is-compra';
+          if (it.tipo_movimiento === 'ENTRADA') return 'is-compra';
+          if (it.tipo_movimiento === 'SALIDA') return 'is-venta';
+          return 'is-default';
+        }
+        function formatMovFecha(v) {
+          if (v == null || v === '') return '—';
+          var ms = typeof v === 'number' ? v : Number(v);
+          if (!Number.isFinite(ms)) return String(v);
+          try {
+            return new Date(ms).toLocaleString('es-PE', {
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: true,
+              timeZone: 'America/Lima',
+            });
+          } catch (e) {
+            return String(v);
+          }
+        }
+        function dotClass(it) {
+          if (it.es_traslado) return 'is-traslado';
+          if (it.tipo_movimiento === 'ENTRADA') return 'is-entrada';
+          if (it.tipo_movimiento === 'SALIDA') return 'is-salida';
+          return 'is-default';
+        }
+
+        var groups = {};
+        if (vistaActual === 'serie_timeline') {
+          itemsList.forEach(function (it) {
+            var key = it.numero_serie || '—';
+            if (!groups[key]) groups[key] = [];
+            groups[key].push(it);
+          });
+        }
+        var groupKeys = Object.keys(groups);
+      %>
+
+      <form class="ios-filters ios-hist-filters" method="GET" action="<%= appBase %>/historial" id="formHistorial">
+        <div class="ios-hist-grid">
+          <label class="ios-hist-field ios-hist-field-q">
+            <span class="ios-hist-field-label">Buscar</span>
+            <input
+              type="search"
+              name="q"
+              id="histQ"
+              class="ios-hist-input"
+              value="<%= q || '' %>"
+              placeholder="<%= placeholderQ %>"
+              autocomplete="off"
+              <%= sel && !sel.maneja_serie ? 'disabled' : '' %>
+            />
+          </label>
+          <div class="ios-hist-field ios-hist-field-prod">
+            <span class="ios-hist-field-label">Producto</span>
+            <%
+              var prodLabel = 'Todos';
+              if (sel) {
+                prodLabel = sel.nombre
+                  + (sel.codigo ? ' · ' + sel.codigo : '')
+                  + (sel.maneja_serie ? ' · Serie' : '');
+              }
+            %>
+            <div class="ios-hist-pick" id="histProductoPick">
+              <input
+                type="hidden"
+                name="producto"
+                id="histProducto"
+                value="<%= sel ? sel.id : '' %>"
+                data-serie="<%= sel && sel.maneja_serie ? '1' : '0' %>"
+              />
+              <button type="button" class="ios-hist-input ios-hist-pick-btn" id="histProductoBtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="histProductoSheet">
+                <span id="histProductoLabel"><%= prodLabel %></span>
+              </button>
+            </div>
+          </div>
+          <% if (!sel) { %>
+            <label class="ios-hist-field ios-hist-field-modo">
+              <span class="ios-hist-field-label">Modo</span>
+              <select name="modo" id="histModo" class="ios-hist-input">
+                <option value="nombre" <%= modo === 'nombre' ? 'selected' : '' %>>Por nombre</option>
+                <option value="serie" <%= modo === 'serie' ? 'selected' : '' %>>Por serie</option>
+              </select>
+            </label>
+          <% } else { %>
+            <input type="hidden" name="modo" value="<%= esSerieProducto ? 'serie' : 'producto' %>" />
+          <% } %>
+          <% if (isWebAdmin && almacenes && almacenes.length) { %>
+            <label class="ios-hist-field ios-hist-field-alm">
+              <span class="ios-hist-field-label">Almacén</span>
+              <select name="almacen" id="histAlmacen" class="ios-hist-input">
+                <option value="">Todos</option>
+                <% almacenes.forEach(function(a) { %>
+                  <option value="<%= a.id %>" <%= almacenId === a.id ? 'selected' : '' %>><%= a.nombre %></option>
+                <% }); %>
+              </select>
+            </label>
+          <% } %>
+          <div class="ios-hist-field ios-hist-field-btn">
+            <span class="ios-hist-field-label" aria-hidden="true">&nbsp;</span>
+            <button type="submit" class="ios-btn-secondary ios-hist-buscar">Buscar</button>
+          </div>
+        </div>
+      </form>
+
+      <% if (sel) { %>
+        <section class="ios-hist-product-card">
+          <div class="ios-hist-product-card-text">
+            <strong><%= sel.nombre %></strong>
+            <small>
+              <%= sel.codigo ? sel.codigo + ' · ' : '' %>
+              <%= sel.maneja_serie ? 'Con series' : 'Sin series · últimos movimientos' %>
+            </small>
+          </div>
+          <% if (sel.maneja_serie) { %>
+            <span class="ios-mov-pill is-traslado">Serie</span>
+          <% } else { %>
+            <span class="ios-mov-pill is-manual">Cantidad</span>
+          <% } %>
+        </section>
+      <% } %>
+
+      <% if (vistaActual === 'serie_manual') { %>
+        <section class="ios-form-card ios-ajustes-empty">
+          <p>Escribe el nº de serie arriba y pulsa Buscar para ver su historial.</p>
+        </section>
+      <% } else if (vistaActual === 'serie_timeline' && groupKeys.length) { %>
+        <% groupKeys.forEach(function(serieKey) {
+          var movs = groups[serieKey];
+          var first = movs[0] || {};
+          var metaSerie = seriesList.find(function (s) { return s.numero_serie === serieKey; });
+        %>
+          <section class="ios-hist-serie-head">
+            <div>
+              <p class="ios-hist-serie-num"><%= serieKey %></p>
+              <strong><%= first.catalog_item_nombre || (metaSerie && metaSerie.catalog_item_nombre) || 'Producto' %></strong>
+              <small>
+                <%= (metaSerie && metaSerie.catalog_item_codigo) || first.catalog_item_codigo || '' %>
+                <% if (metaSerie) { %> · <%= labelEstado(metaSerie.estado) %><% } %>
+                <% if (metaSerie && metaSerie.almacen_nombre) { %> · <%= metaSerie.almacen_nombre %><% } %>
+              </small>
+            </div>
+            <span class="ios-hist-count"><%= movs.length %> mov.</span>
+          </section>
+
+          <ol class="ios-hist-timeline">
+            <% movs.forEach(function(it, idx) { %>
+              <li class="ios-hist-tl-item">
+                <span class="ios-hist-tl-dot <%= dotClass(it) %>" aria-hidden="true"></span>
+                <article class="ios-hist-tl-card">
+                  <div class="ios-hist-tl-main">
+                    <div class="ios-hist-tl-top">
+                      <span class="ios-mov-pill <%= pillClass(it) %>"><%= labelTipo(it) %></span>
+                      <time><%= formatMovFecha(it.fecha) %></time>
+                    </div>
+                    <strong class="ios-hist-tl-num"><%= it.movimiento_numero || '—' %></strong>
+                    <p class="ios-hist-tl-route">
+                      <span><%= it.origen_nombre || '—' %></span>
+                      <span class="ios-hist-tl-arrow" aria-hidden="true">→</span>
+                      <span><%= it.destino_nombre || '—' %></span>
+                    </p>
+                    <% if (it.usuario_nombre) { %>
+                      <p class="ios-hist-tl-user"><%= it.usuario_nombre %></p>
+                    <% } %>
+                    <% if (it.observaciones) { %>
+                      <p class="ios-hist-tl-obs"><%= it.observaciones %></p>
+                    <% } %>
+                    <% if (idx === 0) { %>
+                      <p class="ios-hist-tl-first">Primer registro</p>
+                    <% } %>
+                  </div>
+                  <p class="ios-hist-qty">
+                    <strong><%= it.cantidad != null ? it.cantidad : 1 %></strong>
+                    <% if (it.unidad) { %><small><%= it.unidad %></small><% } %>
+                  </p>
+                </article>
+              </li>
+            <% }); %>
+          </ol>
+        <% }); %>
+      <% } else if ((vistaActual === 'producto' || vistaActual === 'nombre' || vistaActual === 'almacen') && itemsList.length) { %>
+        <p class="ios-hist-section-h"><%= vistaActual === 'almacen'
+          ? ('Movimientos recientes' + (typeof almacenNombre !== 'undefined' && almacenNombre ? ' · ' + almacenNombre : ''))
+          : (vistaActual === 'producto' ? 'Últimos movimientos' : 'Resultados') %></p>
+        <div class="ios-hist-mov-list">
+          <% itemsList.forEach(function(it) { %>
+            <article class="ios-hist-mov-card">
+              <div class="ios-hist-tl-main">
+                <div class="ios-hist-tl-top">
+                  <span class="ios-mov-pill <%= pillClass(it) %>"><%= labelTipo(it) %></span>
+                  <time><%= formatMovFecha(it.fecha) %></time>
+                </div>
+                <strong><%= it.catalog_item_nombre || 'Producto' %></strong>
+                <small class="ios-hist-mov-num"><%= it.movimiento_numero || '—' %></small>
+                <p class="ios-hist-tl-route">
+                  <span><%= it.origen_nombre || '—' %></span>
+                  <span class="ios-hist-tl-arrow" aria-hidden="true">→</span>
+                  <span><%= it.destino_nombre || '—' %></span>
+                </p>
+                <% if (it.numero_serie) { %>
+                  <p class="ios-hist-tl-meta">Serie <%= it.numero_serie %></p>
+                <% } %>
+                <% if (it.usuario_nombre) { %>
+                  <p class="ios-hist-tl-user"><%= it.usuario_nombre %></p>
+                <% } %>
+              </div>
+              <p class="ios-hist-qty">
+                <strong><%= it.cantidad != null ? it.cantidad : '—' %></strong>
+                <% if (it.unidad) { %><small><%= it.unidad %></small><% } %>
+              </p>
+            </article>
+          <% }); %>
+        </div>
+        <%- include('../../partials/app-load-more', { loadMore: typeof loadMore !== 'undefined' ? loadMore : null }) %>
+      <% } else if (vistaActual === 'almacen') { %>
+        <section class="ios-form-card ios-ajustes-empty">
+          <p>Sin movimientos recientes en este almacén.</p>
+        </section>
+      <% } else if (q || sel) { %>
+        <section class="ios-form-card ios-ajustes-empty">
+          <p>Sin movimientos para esta búsqueda.</p>
+        </section>
+      <% } else { %>
+        <section class="ios-form-card ios-ajustes-empty">
+          <p>Elige un almacén para ver sus movimientos recientes, o busca un producto / serie.</p>
+        </section>
+      <% } %>
+      <div id="histProductoSheet" class="ios-sheet" hidden aria-hidden="true">
+        <div class="ios-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="histProductoTitulo">
+          <div class="ios-sheet-head">
+            <h3 id="histProductoTitulo">Producto</h3>
+            <button type="button" class="ios-btn-ghost" id="histProductoCerrar">Cerrar</button>
+          </div>
+          <input type="search" id="histProductoBuscar" class="ios-sheet-search" placeholder="Buscar producto…" autocomplete="off" />
+          <div class="ios-sheet-status" id="histProductoStatus" hidden>Sin resultados</div>
+          <div class="ios-sheet-list" id="histProductoLista">
+            <button
+              type="button"
+              class="ios-sheet-item<%= sel ? '' : ' is-selected' %>"
+              data-id=""
+              data-serie="0"
+              data-label="Todos"
+              data-q="todos"
+            >
+              <strong>Todos los productos</strong>
+              <span>Sin filtrar por producto</span>
+            </button>
+            <% productosList.forEach(function(p) {
+              var meta = [];
+              if (p.codigo) meta.push(p.codigo);
+              if (p.maneja_serie) meta.push('Serie');
+              var itemLabel = p.nombre + (p.codigo ? ' · ' + p.codigo : '') + (p.maneja_serie ? ' · Serie' : '');
+              var qtext = (p.nombre + ' ' + (p.codigo || '') + (p.maneja_serie ? ' serie' : '')).toLowerCase();
+            %>
+              <button
+                type="button"
+                class="ios-sheet-item<%= sel && sel.id === p.id ? ' is-selected' : '' %>"
+                data-id="<%= p.id %>"
+                data-serie="<%= p.maneja_serie ? '1' : '0' %>"
+                data-label="<%= esc(itemLabel) %>"
+                data-q="<%= esc(qtext) %>"
+              >
+                <strong><%= p.nombre %></strong>
+                <% if (meta.length) { %><span><%= meta.join(' · ') %></span><% } %>
+              </button>
+            <% }); %>
+          </div>
+        </div>
+      </div>
+    <% } %>
+  </main>
+
+  <script>
+  (function () {
+    var producto = document.getElementById('histProducto');
+    var btn = document.getElementById('histProductoBtn');
+    var sheet = document.getElementById('histProductoSheet');
+    var buscar = document.getElementById('histProductoBuscar');
+    var lista = document.getElementById('histProductoLista');
+    var status = document.getElementById('histProductoStatus');
+    var cerrarBtn = document.getElementById('histProductoCerrar');
+    var label = document.getElementById('histProductoLabel');
+    var qInput = document.getElementById('histQ');
+    var form = document.getElementById('formHistorial');
+    if (!producto || !btn || !sheet || !lista || !form) return;
+
+    function filtrar() {
+      var q = (buscar && buscar.value ? buscar.value : '').trim().toLowerCase();
+      var visibles = 0;
+      lista.querySelectorAll('.ios-sheet-item').forEach(function (el) {
+        var texto = el.getAttribute('data-q') || '';
+        var show = !q || texto.indexOf(q) !== -1;
+        el.hidden = !show;
+        if (show) visibles += 1;
+      });
+      if (status) status.hidden = visibles !== 0;
+    }
+
+    function cerrar() {
+      sheet.hidden = true;
+      sheet.setAttribute('aria-hidden', 'true');
+      btn.setAttribute('aria-expanded', 'false');
+      document.body.classList.remove('sunat-picker-open');
+    }
+
+    function abrir() {
+      sheet.hidden = false;
+      sheet.setAttribute('aria-hidden', 'false');
+      btn.setAttribute('aria-expanded', 'true');
+      document.body.classList.add('sunat-picker-open');
+      if (buscar) {
+        buscar.value = '';
+        filtrar();
+        setTimeout(function () { buscar.focus(); }, 30);
+      }
+      var on = lista.querySelector('.is-selected');
+      if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest' });
+    }
+
+    function aplicarYBuscar() {
+      var conSerie = producto.getAttribute('data-serie') === '1';
+      if (qInput) {
+        qInput.disabled = Boolean(producto.value) && !conSerie;
+        if (qInput.disabled || !producto.value) qInput.value = '';
+        if (!producto.value) qInput.disabled = false;
+        qInput.placeholder = conSerie
+          ? 'Nº de serie…'
+          : 'Serie o producto (mín. 2)';
+      }
+      form.submit();
+    }
+
+    var almacenSel = document.getElementById('histAlmacen');
+    if (almacenSel) {
+      almacenSel.addEventListener('change', function () {
+        producto.value = '';
+        producto.setAttribute('data-serie', '0');
+        if (label) label.textContent = 'Todos';
+        if (qInput) {
+          qInput.disabled = false;
+          qInput.value = '';
+        }
+        form.submit();
+      });
+    }
+
+    btn.addEventListener('click', abrir);
+    if (cerrarBtn) cerrarBtn.addEventListener('click', cerrar);
+    if (buscar) buscar.addEventListener('input', filtrar);
+
+    sheet.addEventListener('click', function (ev) {
+      if (ev.target === sheet) {
+        cerrar();
+        return;
+      }
+      var item = ev.target.closest('.ios-sheet-item');
+      if (!item || item.hidden) return;
+      producto.value = item.getAttribute('data-id') || '';
+      producto.setAttribute('data-serie', item.getAttribute('data-serie') || '0');
+      if (label) label.textContent = item.getAttribute('data-label') || 'Todos';
+      lista.querySelectorAll('.ios-sheet-item').forEach(function (el) {
+        el.classList.toggle('is-selected', el === item);
+      });
+      cerrar();
+      aplicarYBuscar();
+    });
+
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape' && !sheet.hidden) cerrar();
+    });
+
+    if (qInput && !qInput.disabled && producto.value && producto.getAttribute('data-serie') === '1' && !qInput.value) {
+      setTimeout(function () { qInput.focus(); }, 50);
+    }
+  })();
+  </script>
+
+  <%- include('../../partials/app-tabbar', { active: active, appBase: appBase }) %>
+</body>
+</html>

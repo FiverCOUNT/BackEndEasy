@@ -3,7 +3,7 @@ const empresaConductorModel = require('../models/empresaConductorModel');
 async function list(req, res, next) {
   try {
     const q = req.query.q || req.query.buscar || null;
-    const rows = await empresaConductorModel.listAll({ q });
+    const rows = await empresaConductorModel.listAll(req.companyRuc, { q });
     res.json(rows.map(empresaConductorModel.toApi));
   } catch (err) {
     next(err);
@@ -20,7 +20,7 @@ async function lookup(req, res, next) {
         message: 'Indica el número de documento (?numero=)',
       });
     }
-    const row = await empresaConductorModel.findByDocumento(tipoDoc, numero);
+    const row = await empresaConductorModel.findByDocumento(req.companyRuc, tipoDoc, numero);
     if (!row) {
       return res.json({
         encontrado: false,
@@ -40,7 +40,7 @@ async function lookup(req, res, next) {
 
 async function create(req, res, next) {
   try {
-    const row = await empresaConductorModel.create(req.body);
+    const row = await empresaConductorModel.create(req.companyRuc, req.body);
     res.status(201).json(empresaConductorModel.toApi(row));
   } catch (err) {
     if (err.status) {
@@ -52,7 +52,7 @@ async function create(req, res, next) {
 
 async function update(req, res, next) {
   try {
-    const row = await empresaConductorModel.update(req.params.id, req.body);
+    const row = await empresaConductorModel.update(req.params.id, req.companyRuc, req.body);
     res.json(empresaConductorModel.toApi(row));
   } catch (err) {
     if (err.status) {
@@ -64,7 +64,7 @@ async function update(req, res, next) {
 
 async function destroy(req, res, next) {
   try {
-    const result = await empresaConductorModel.remove(req.params.id);
+    const result = await empresaConductorModel.remove(req.params.id, req.companyRuc);
     res.json({ success: true, id: result.id });
   } catch (err) {
     if (err.status) {
