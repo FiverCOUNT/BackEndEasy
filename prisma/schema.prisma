@@ -226,6 +226,10 @@ model LineaCatalogoItem {
   cantidad        Decimal  @db.Decimal(14, 4)
   almacenId       String?  @map("almacen_id") @db.VarChar(36)
   productoSerieId String?  @map("producto_serie_id") @db.VarChar(36)
+  /// Código de lote de esta línea. Vacío si no aplica.
+  lote            String?  @db.VarChar(64)
+  /// YYYY-MM-DD. Vencimiento de esta línea.
+  fechaVencimiento String? @map("fecha_vencimiento") @db.VarChar(10)
 
   movimiento    Movimiento     @relation(fields: [movimientoId], references: [id], onDelete: Cascade)
   productoSerie ProductoSerie? @relation(fields: [productoSerieId], references: [id], onDelete: SetNull)
@@ -257,10 +261,6 @@ model CatalogItem {
   precioUnitario  Decimal  @map("precio_unitario") @db.Decimal(14, 4)
   /// Costo de adquisición. Vacío si aún no se registró.
   precioCompra    Decimal? @map("precio_compra") @db.Decimal(14, 4)
-  /// YYYY-MM-DD. Solo productos que vencen; null en el resto.
-  fechaVencimiento String? @map("fecha_vencimiento") @db.VarChar(10)
-  /// Código de lote del producto. Vacío si no aplica.
-  lote            String?  @db.VarChar(64)
   afectacionIgv   String   @default("10") @map("afectacion_igv") @db.VarChar(4)
   activo          Boolean  @default(true)
   manejaStock     Boolean  @default(false) @map("maneja_stock")

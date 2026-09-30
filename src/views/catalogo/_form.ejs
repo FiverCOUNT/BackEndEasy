@@ -74,16 +74,6 @@
     <input type="number" id="precioCompra" name="precioCompra" value="<%= form.precioCompra || '' %>" min="0" step="0.01" placeholder="Opcional" />
   </div>
   <div class="field">
-    <label for="lote">Lote</label>
-    <input type="text" id="lote" name="lote" value="<%= form.lote || '' %>" maxlength="64" placeholder="Ej. L-2026-014" />
-    <span class="field-hint">Opcional. Código de lote del producto.</span>
-  </div>
-  <div class="field">
-    <label for="fechaVencimiento">Fecha de vencimiento</label>
-    <input type="date" id="fechaVencimiento" name="fechaVencimiento" value="<%= form.fechaVencimiento || '' %>" />
-    <span class="field-hint">Opcional. Solo productos que vencen.</span>
-  </div>
-  <div class="field">
     <label for="afectacionIgv">Afectación IGV</label>
     <input type="text" id="afectacionIgv" name="afectacionIgv" value="<%= form.afectacionIgv || '10' %>" maxlength="4" />
   </div>

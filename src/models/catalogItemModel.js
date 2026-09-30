@@ -31,8 +31,6 @@ function toApi(item) {
     unidad: item.unidad,
     precio_unitario: toNumber(item.precioUnitario) ?? 0,
     precio_compra: toNumber(item.precioCompra),
-    fecha_vencimiento: item.fechaVencimiento || null,
-    lote: item.lote || null,
     afectacion_igv: item.afectacionIgv,
     activo: item.activo !== false,
     maneja_stock: Boolean(item.manejaStock),
@@ -51,8 +49,6 @@ function toPublic(item) {
     codigoSunat: api.codigo_sunat,
     precioUnitario: api.precio_unitario,
     precioCompra: api.precio_compra,
-    fechaVencimiento: api.fecha_vencimiento,
-    lote: api.lote,
     afectacionIgv: api.afectacion_igv,
     manejaStock: api.maneja_stock,
     manejaSerie: api.maneja_serie,
@@ -98,22 +94,6 @@ function parsePrecioOpcional(value) {
   return n;
 }
 
-function parseLote(body) {
-  if (body.lote === undefined) return undefined;
-  const s = String(body.lote ?? '').trim().slice(0, 64);
-  return s || null;
-}
-
-function parseFecha(value) {
-  const s = String(value ?? '').trim().slice(0, 10);
-  if (!s) return null;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
-  const [y, m, d] = s.split('-').map((n) => Number(n));
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) return null;
-  return s;
-}
-
 function parseBool(value, defaultValue = true) {
   if (value === undefined || value === null || value === '') return defaultValue;
   if (value === false || value === 'false' || value === 'off') return false;
@@ -134,10 +114,6 @@ function parseBody(body) {
     unidad: (body.unidad || (isProduct ? 'NIU' : 'ZZ')).trim(),
     precioUnitario: toNumber(body.precioUnitario ?? body.precio_unitario) ?? 0,
     precioCompra: parsePrecioOpcional(body.precioCompra ?? body.precio_compra),
-    fechaVencimiento: isProduct
-      ? parseFecha(body.fechaVencimiento ?? body.fecha_vencimiento)
-      : null,
-    lote: isProduct ? parseLote(body) : null,
     afectacionIgv: (body.afectacionIgv || body.afectacion_igv || '10').trim(),
     activo: parseBool(body.activo, true),
     manejaStock:
@@ -355,8 +331,6 @@ async function create(body, id = randomUUID()) {
       unidad: data.unidad,
       precioUnitario: data.precioUnitario,
       precioCompra: data.precioCompra,
-      fechaVencimiento: data.fechaVencimiento,
-      lote: data.lote || null,
       afectacionIgv: data.afectacionIgv,
       activo: data.activo,
       manejaStock,
@@ -441,8 +415,6 @@ async function update(id, body) {
       unidad: data.unidad,
       precioUnitario: data.precioUnitario,
       precioCompra: data.precioCompra,
-      fechaVencimiento: data.fechaVencimiento,
-      ...(data.lote !== undefined ? { lote: data.lote } : {}),
       afectacionIgv: data.afectacionIgv,
       activo: data.activo,
       manejaStock,

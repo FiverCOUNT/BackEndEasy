@@ -7,8 +7,6 @@
   const wrapProducto = document.getElementById('unidadProductoWrap');
   const wrapServicio = document.getElementById('unidadServicioWrap');
   const serieWrap = document.getElementById('serieWrap');
-  const fechaVenceWrap = document.getElementById('fechaVenceWrap');
-  const loteWrap = document.getElementById('loteWrap');
   const manejaSerie = document.getElementById('manejaSerie');
   const manejaStock = document.getElementById('manejaStock');
 
@@ -27,8 +25,6 @@
     if (wrapProducto) wrapProducto.hidden = isService;
     if (wrapServicio) wrapServicio.hidden = !isService;
     if (serieWrap) serieWrap.hidden = isService;
-    if (fechaVenceWrap) fechaVenceWrap.hidden = isService;
-    if (loteWrap) loteWrap.hidden = isService;
 
     if (isService) {
       unidadHidden.value = 'ZZ';

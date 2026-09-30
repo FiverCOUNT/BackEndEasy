@@ -651,6 +651,13 @@
       cerrarEscaneoMasivo();
     }
 
+    function escAttr(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;');
+    }
+
     function addHidden(name, value) {
       if (!name || !lineasHidden) return;
       var input = document.createElement('input');
@@ -681,6 +688,11 @@
         var qtyHtml = '<div class="ios-orden-linea-qty-wrap">' + qtyInner +
           '<span class="ios-orden-linea-unidad">' + unidadLbl + '</span></div>';
         var serieHtml = '';
+        var loteHtml =
+          '<div class="ios-orden-linea-lote">' +
+            '<input type="text" maxlength="64" placeholder="Lote" value="' + escAttr(ln.lote || '') + '" data-lote />' +
+            '<input type="date" value="' + escAttr(ln.fecha_vencimiento || '') + '" data-vence />' +
+          '</div>';
         if (ln.maneja_serie) {
           if (ln.numero_serie) {
             serieHtml = '<small class="ios-orden-linea-serie">Serie: ' + ln.numero_serie + '</small>';
@@ -706,6 +718,7 @@
           '<div class="ios-orden-linea-text">' +
             '<strong>' + (ln.nombre || 'Ítem') + '</strong>' +
             serieHtml +
+            loteHtml +
             (detailParts.length ? ('<small>' + detailParts.join(' · ') + '</small>') : '') +
           '</div>' +
           qtyHtml +
@@ -728,6 +741,18 @@
         if (masivasBtn) {
           masivasBtn.addEventListener('click', function () {
             if (prod) abrirEscaneoMasivo(prod);
+          });
+        }
+        var loteInput = row.querySelector('[data-lote]');
+        if (loteInput) {
+          loteInput.addEventListener('input', function () {
+            lineas[idx].lote = loteInput.value;
+          });
+        }
+        var venceInput = row.querySelector('[data-vence]');
+        if (venceInput) {
+          venceInput.addEventListener('input', function () {
+            lineas[idx].fecha_vencimiento = venceInput.value;
           });
         }
         var qtyInput = row.querySelector('[data-qty]');
@@ -771,6 +796,8 @@
         addHidden(fields.producto_serie_id, ln.producto_serie_id || '');
         addHidden(fields.numero_serie, ln.numero_serie || '');
         addHidden(fields.descripcion, ln.nombre || '');
+        addHidden('lote', ln.lote || '');
+        addHidden('fecha_vencimiento', ln.fecha_vencimiento || '');
       });
 
       if (ordenTotal) {

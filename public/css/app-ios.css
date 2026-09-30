@@ -695,6 +695,20 @@ a { color: inherit; text-decoration: none; }
   min-width: 24px;
   text-transform: lowercase;
 }
+.ios-orden-linea-lote {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+.ios-orden-linea-lote input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid #d1d1d6;
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 13px;
+  background: #fff;
+}
 .ios-orden-linea-serie {
   display: block;
   color: var(--ios-blue) !important;

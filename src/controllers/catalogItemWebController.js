@@ -46,10 +46,6 @@ function formFromBody(body) {
     unidad: parsed.unidad,
     precioUnitario: String(parsed.precioUnitario ?? 0),
     precioCompra: parsed.precioCompra != null ? String(parsed.precioCompra) : '',
-    fechaVencimiento: parsed.kind === 'SERVICE'
-      ? ''
-      : (parsed.fechaVencimiento || String(body.fechaVencimiento || body.fecha_vencimiento || '').trim().slice(0, 10)),
-    lote: parsed.kind === 'SERVICE' ? '' : (parsed.lote || ''),
     afectacionIgv: parsed.afectacionIgv,
     activo: parsed.activo,
     manejaStock: parsed.manejaStock,
@@ -71,8 +67,6 @@ function formFromItem(item) {
     unidad: p.unidad,
     precioUnitario: String(p.precioUnitario ?? 0),
     precioCompra: p.precioCompra != null ? String(p.precioCompra) : '',
-    fechaVencimiento: p.fechaVencimiento || '',
-    lote: p.lote || '',
     afectacionIgv: p.afectacionIgv,
     activo: p.activo,
     manejaStock: p.manejaStock,

@@ -89,6 +89,8 @@ function mapMovimientoListItem(m, almacenesById = {}, regresadosIds = null) {
       maneja_serie: Boolean(l.maneja_serie),
       serie: l.producto_serie?.numero_serie || l.serie || '',
       producto_serie_id: l.producto_serie_id || l.producto_serie?.id || '',
+      lote: l.lote || '',
+      fecha_vencimiento: l.fecha_vencimiento || '',
     })),
     almacenId: m.almacen_id || '',
     puedeRegresar: esSalidaRegresable
@@ -1208,7 +1210,16 @@ function parseSalidaLineasFromBody(body = {}) {
   const cantidades = [].concat(body.cantidad || []);
   const seriesIds = [].concat(body.producto_serie_id || []);
   const numerosSerie = [].concat(body.numero_serie || []);
-  const n = Math.max(catalogIds.length, cantidades.length, seriesIds.length, numerosSerie.length);
+  const lotes = [].concat(body.lote || []);
+  const fechas = [].concat(body.fecha_vencimiento || []);
+  const n = Math.max(
+    catalogIds.length,
+    cantidades.length,
+    seriesIds.length,
+    numerosSerie.length,
+    lotes.length,
+    fechas.length,
+  );
   const lineas = [];
   for (let i = 0; i < n; i += 1) {
     const catalogItemId = String(catalogIds[i] || '').trim();
@@ -1216,11 +1227,15 @@ function parseSalidaLineasFromBody(body = {}) {
     const cantidad = Number(String(cantidades[i] || '').replace(',', '.'));
     const productoSerieId = String(seriesIds[i] || '').trim();
     const numeroSerie = String(numerosSerie[i] || '').trim();
+    const lote = String(lotes[i] || '').trim().slice(0, 64);
+    const fecha = String(fechas[i] || '').trim().slice(0, 10);
     lineas.push({
       catalog_item_id: catalogItemId,
       cantidad: Number.isFinite(cantidad) && cantidad > 0 ? cantidad : (numeroSerie || productoSerieId ? 1 : 0),
       producto_serie_id: productoSerieId || undefined,
       numero_serie: numeroSerie || undefined,
+      lote: lote || undefined,
+      fecha_vencimiento: /^\d{4}-\d{2}-\d{2}$/.test(fecha) ? fecha : undefined,
     });
   }
   return lineas.filter((l) => l.catalog_item_id && l.cantidad > 0);

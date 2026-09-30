@@ -36,10 +36,6 @@ function formFromBody(body, companyRuc) {
     unidad: parsed.unidad,
     precioUnitario: String(parsed.precioUnitario ?? ''),
     precioCompra: parsed.precioCompra != null ? String(parsed.precioCompra) : '',
-    fechaVencimiento: parsed.kind === 'SERVICE'
-      ? ''
-      : (parsed.fechaVencimiento || String(body.fechaVencimiento || body.fecha_vencimiento || '').trim().slice(0, 10)),
-    lote: parsed.kind === 'SERVICE' ? '' : (parsed.lote || ''),
     afectacionIgv: parsed.afectacionIgv || '10',
     activo: parsed.activo,
     manejaStock: parsed.manejaStock,
@@ -61,8 +57,6 @@ function formFromItem(item) {
     unidad: p.unidad,
     precioUnitario: String(p.precioUnitario ?? 0),
     precioCompra: p.precioCompra != null ? String(p.precioCompra) : '',
-    fechaVencimiento: p.fechaVencimiento || '',
-    lote: p.lote || '',
     afectacionIgv: p.afectacionIgv || '10',
     activo: p.activo,
     manejaStock: p.manejaStock,
@@ -83,11 +77,6 @@ function validateForm(form) {
       return 'El precio de compra no puede ser negativo.';
     }
   }
-  if (form.kind !== 'SERVICE' && form.fechaVencimiento) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(form.fechaVencimiento)) {
-      return 'La fecha de vencimiento no es válida.';
-    }
-  }
   return null;
 }
 
@@ -104,13 +93,6 @@ function stockLabel(item) {
     return `Stock: ${n} unidad(es) · con serie`;
   }
   return `Stock: ${n} ${unidad}`.trim();
-}
-
-function formatVence(value) {
-  const s = String(value || '').trim().slice(0, 10);
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
-  if (!m) return null;
-  return `${m[3]}/${m[2]}/${m[1]}`;
 }
 
 function formatMoney(value) {
@@ -175,8 +157,6 @@ async function list(req, res, next) {
         compraLabel: (it.precioCompra ?? it.precio_compra) != null
           ? formatMoney(it.precioCompra ?? it.precio_compra)
           : null,
-        venceLabel: formatVence(it.fechaVencimiento || it.fecha_vencimiento),
-        loteLabel: String(it.lote || '').trim() || null,
       })),
       total,
       q,
@@ -209,8 +189,6 @@ async function showCreateForm(req, res, next) {
         afectacionIgv: '10',
         precioUnitario: '',
         precioCompra: '',
-        fechaVencimiento: '',
-        lote: '',
         codigo: '',
         codigoSunat: '',
         codigoSunatNombre: '',
