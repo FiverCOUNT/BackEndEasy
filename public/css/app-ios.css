@@ -3771,6 +3771,10 @@ html.is-emit-busy #emitLoading {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.ios-mov-fecha {
+  font-weight: 700 !important;
+  color: #007AFF !important;
+}
 .ios-mov-preview {
   color: #334155 !important;
   font-weight: 500;
@@ -4243,9 +4247,9 @@ select.ios-hist-input,
   margin-bottom: 6px;
 }
 .ios-hist-tl-top time {
-  font-size: 12px;
-  color: #64748B;
-  font-weight: 500;
+  font-size: 13px;
+  color: #007AFF;
+  font-weight: 700;
   text-align: right;
 }
 .ios-hist-tl-num {

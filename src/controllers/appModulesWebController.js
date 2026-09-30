@@ -24,6 +24,7 @@ const {
   formatDocRef,
   formatFecha,
   formatFechaHora,
+  formatFechaRelativa,
   labelMotivoNota,
   puedeReenviarPorFalloSunat,
   puedeCorregirGreEvento,
@@ -65,7 +66,7 @@ function mapMovimientoListItem(m, almacenesById = {}, regresadosIds = null) {
   return {
     id: m.id,
     numero: m.numero || '—',
-    fecha: formatFechaHora(m.fecha) || formatFecha(m.fecha),
+    fecha: formatFechaRelativa(m.fecha) || formatFecha(m.fecha),
     tipo: m.tipo || '',
     observaciones: m.observaciones || '',
     refTipo: m.referencia_tipo || '',

@@ -146,6 +146,40 @@ function formatFecha(value) {
   });
 }
 
+const MESES_LIMA = [
+  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+];
+
+function limaCalendar(ms) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Lima',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date(ms));
+  const get = (type) => parts.find((p) => p.type === type)?.value || '';
+  const y = Number(get('year'));
+  const m = Number(get('month'));
+  const d = Number(get('day'));
+  return { y, m, d, ymd: `${get('year')}-${get('month')}-${get('day')}` };
+}
+
+/** Hoy, Ayer, o «2 de julio 2000» en calendario Perú. */
+function formatFechaRelativa(value) {
+  if (value == null || value === '') return '—';
+  const { toApiTimestamp } = require('./fechas');
+  const ms = typeof value === 'number' ? value : toApiTimestamp(value);
+  if (ms == null) return formatFecha(value);
+  const day = limaCalendar(ms);
+  const now = limaCalendar(Date.now());
+  if (day.ymd === now.ymd) return 'Hoy';
+  const ayer = limaCalendar(Date.UTC(now.y, now.m - 1, now.d - 1, 17, 0, 0));
+  if (day.ymd === ayer.ymd) return 'Ayer';
+  const mes = MESES_LIMA[day.m - 1] || '';
+  return `${day.d} de ${mes} ${day.y}`;
+}
+
 /** Fecha + hora en calendario Perú (comprobantes emitidos). */
 function formatFechaHora(value) {
   if (value == null || value === '') return '—';
@@ -267,6 +301,7 @@ module.exports = {
   labelTipoComprobante,
   formatDocRef,
   formatFecha,
+  formatFechaRelativa,
   formatFechaHora,
   labelMotivoNota,
   puedeReenviarPorFalloSunat,

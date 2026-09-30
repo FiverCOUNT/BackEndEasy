@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title><%= title %> · Easy</title>
-  <link rel="stylesheet" href="/css/app-ios.css?v=hist-alm" />
+  <link rel="stylesheet" href="/css/app-ios.css?v=fecha-rel" />
 </head>
 <body class="ios-app">
   <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
@@ -78,15 +78,23 @@
           var ms = typeof v === 'number' ? v : Number(v);
           if (!Number.isFinite(ms)) return String(v);
           try {
-            return new Date(ms).toLocaleString('es-PE', {
-              day: '2-digit',
-              month: 'short',
-              year: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: true,
-              timeZone: 'America/Lima',
-            });
+            var tz = { timeZone: 'America/Lima' };
+            var ymd = function (t) {
+              return new Date(t).toLocaleDateString('en-CA', tz);
+            };
+            var day = ymd(ms);
+            var now = new Date();
+            if (day === ymd(now.getTime())) return 'Hoy';
+            var p = ymd(now.getTime()).split('-').map(Number);
+            var ayer = ymd(Date.UTC(p[0], p[1] - 1, p[2] - 1, 17, 0, 0));
+            if (day === ayer) return 'Ayer';
+            var meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+            var parts = new Intl.DateTimeFormat('en-US', Object.assign({ year: 'numeric', month: '2-digit', day: '2-digit' }, tz)).formatToParts(new Date(ms));
+            var get = function (type) {
+              var found = parts.find(function (x) { return x.type === type; });
+              return found ? found.value : '';
+            };
+            return Number(get('day')) + ' de ' + meses[Number(get('month')) - 1] + ' ' + get('year');
           } catch (e) {
             return String(v);
           }
