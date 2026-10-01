@@ -678,10 +678,6 @@
 
     function confirmarEscaneoMasivo() {
       if (!escaneoProducto || !escaneoSeries.length) return;
-      if (productoPideLote(escaneoProducto) && !(escaneoLote && escaneoLote.id)) {
-        window.alert('Elige el lote de "' + (escaneoProducto.nombre || 'producto') + '". Todas las series lo usan.');
-        return;
-      }
       var alm = resolveAlmacenId();
       var catalogId = escaneoProducto.id;
       var precio = escaneoProducto.precio_unitario != null ? Number(escaneoProducto.precio_unitario) : null;
@@ -981,27 +977,6 @@
       if (!lineas.length) {
         window.alert('Agrega al menos un producto.');
         return false;
-      }
-      if (isIngreso) {
-        var sinLote = lineas.find(function (ln) {
-          var prodLn = productoPorId(ln.catalog_item_id);
-          var pide = ln.maneja_lote === true || (prodLn && prodLn.maneja_lote === true);
-          return pide && !String(ln.producto_lote_id || '').trim();
-        });
-        if (sinLote) {
-          window.alert('Indica el lote de: ' + (sinLote.nombre || 'producto'));
-          return false;
-        }
-        var sinVence = lineas.find(function (ln) {
-          var prodLn = productoPorId(ln.catalog_item_id);
-          var conLote = ln.maneja_lote === true || (prodLn && prodLn.maneja_lote === true);
-          var pide = !conLote && (ln.maneja_vencimiento === true || (prodLn && prodLn.maneja_vencimiento === true));
-          return pide && !/^\d{4}-\d{2}-\d{2}$/.test(String(ln.fecha_vencimiento || ''));
-        });
-        if (sinVence) {
-          window.alert('Indica la fecha de vencimiento de: ' + (sinVence.nombre || 'producto'));
-          return false;
-        }
       }
       var sinSerie = lineas.find(function (ln) {
         if (!ln.maneja_serie) return false;

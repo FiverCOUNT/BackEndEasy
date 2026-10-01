@@ -18,12 +18,8 @@ function usaSeriesInventario(item) {
   return Boolean(item?.manejaSerie && unidadPermiteSerie(item.unidad));
 }
 
-function validarLoteIngreso(item, linea) {
-  if (!item) return null;
-  if (item.manejaLote && !String(linea?.productoLoteId || '').trim()) return 'lote_requerido';
-  if (linea?.productoLoteId) return null;
-  const fecha = String(linea?.fechaVencimiento || '').trim().slice(0, 10);
-  if (item.manejaVencimiento && !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return 'vencimiento_requerido';
+function validarLoteIngreso() {
+  // El lote es opcional. Si el ingreso trae un id, se enlaza; si no, el ingreso sigue.
   return null;
 }
 
@@ -69,6 +65,7 @@ function normalizeIncomingLineas(rawLineas) {
     const lote = String(raw.lote || raw.numero_lote || '').trim().slice(0, 64) || null;
     const fechaRaw = String(raw.fecha_vencimiento || raw.fechaVencimiento || '').trim().slice(0, 10);
     const fechaVencimiento = /^\d{4}-\d{2}-\d{2}$/.test(fechaRaw) ? fechaRaw : null;
+    const productoLoteId = String(raw.producto_lote_id || raw.productoLoteId || '').trim() || null;
     const legacyIds = normalizeStringArray(raw.serie_ids || raw.serieIds);
     const legacyNumeros = normalizeStringArray(raw.series || raw.numeros_serie || raw.numerosSerie);
     const base = {
@@ -76,6 +73,7 @@ function normalizeIncomingLineas(rawLineas) {
       almacenId: almacenId || undefined,
       lote,
       fechaVencimiento,
+      productoLoteId,
     };
 
     if (productoSerieId) {
@@ -1366,6 +1364,7 @@ module.exports = {
   toApiMovimiento,
   toApiLinea,
   validarLoteIngreso,
+  normalizeIncomingLineas,
   findById,
   findMany,
   findByCliente,

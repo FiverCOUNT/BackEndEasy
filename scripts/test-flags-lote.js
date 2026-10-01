@@ -1,6 +1,5 @@
 /**
- * Reglas de lote y vencimiento: el catálogo solo marca las opciones
- * y el ingreso exige el dato cuando el producto las tiene.
+ * El lote es opcional. Si el ingreso trae el id, se conserva.
  */
 const catalogItemModel = require('../src/models/catalogItemModel');
 const { validarLoteIngreso } = require('../src/models/movimientoModel');
@@ -40,18 +39,28 @@ check('servicio ignora lote', servicio.manejaLote, false);
 check('servicio ignora vencimiento', servicio.manejaVencimiento, false);
 
 const itemLote = { manejaLote: true, manejaVencimiento: false, nombre: 'Amox' };
-check('ingreso sin lote elegido', validarLoteIngreso(itemLote, { lote: 'L-1' }), 'lote_requerido');
+check('ingreso sin lote elegido', validarLoteIngreso(itemLote, { lote: 'L-1' }), null);
 check('ingreso con lote elegido', validarLoteIngreso(itemLote, { productoLoteId: 'lot-1' }), null);
 
 const itemVence = { manejaLote: false, manejaVencimiento: true, nombre: 'Jarabe' };
-check('ingreso sin fecha', validarLoteIngreso(itemVence, { fechaVencimiento: '' }), 'vencimiento_requerido');
-check('fecha invalida', validarLoteIngreso(itemVence, { fechaVencimiento: '31/09/2026' }), 'vencimiento_requerido');
+check('ingreso sin fecha', validarLoteIngreso(itemVence, { fechaVencimiento: '' }), null);
+check('fecha invalida', validarLoteIngreso(itemVence, { fechaVencimiento: '31/09/2026' }), null);
 check('fecha valida', validarLoteIngreso(itemVence, { fechaVencimiento: '2027-07-02' }), null);
 
 const ambos = { manejaLote: true, manejaVencimiento: true };
-check('texto no reemplaza el lote', validarLoteIngreso(ambos, { lote: 'L-1', fechaVencimiento: '2027-07-02' }), 'lote_requerido');
+check('sin lote tambien pasa', validarLoteIngreso(ambos, { lote: 'L-1', fechaVencimiento: '2027-07-02' }), null);
 check('lote elegido cubre la fecha', validarLoteIngreso(ambos, { productoLoteId: 'lot-1' }), null);
 check('producto sin control', validarLoteIngreso({ manejaLote: false, manejaVencimiento: false }, {}), null);
+
+const { normalizeIncomingLineas } = require('../src/models/movimientoModel');
+const conservado = normalizeIncomingLineas([{
+  catalog_item_id: 'item-1',
+  cantidad: 100,
+  producto_lote_id: 'lot-leche',
+  lote: 'LOTELECHE',
+  fecha_vencimiento: '2027-01-01',
+}])[0];
+check('el id del lote se conserva', conservado && conservado.productoLoteId, 'lot-leche');
 
 if (failed) {
   console.error(failed + ' fallas');
