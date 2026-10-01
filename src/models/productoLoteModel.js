@@ -87,12 +87,13 @@ function cantidadVisible(value) {
   return String(rounded);
 }
 
-async function productosDelLote(companyRuc, loteId) {
+async function productosDelLote(companyRuc, loteId, { almacenId = null } = {}) {
   const lote = await prisma.productoLote.findFirst({
     where: { id: String(loteId || ''), companyRuc },
     select: { id: true, nombre: true },
   });
   if (!lote) return null;
+  const soloAlmacen = String(almacenId || '').trim();
 
   const lineas = await prisma.lineaCatalogoItem.findMany({
     where: {
@@ -104,6 +105,7 @@ async function productosDelLote(companyRuc, loteId) {
       catalogItemId: true,
       nombre: true,
       unidad: true,
+      almacenId: true,
       productoSerieId: true,
       movimiento: { select: { tipo: true, referenciaTipo: true } },
       productoSerie: {
@@ -111,7 +113,8 @@ async function productosDelLote(companyRuc, loteId) {
           id: true,
           numeroSerie: true,
           estado: true,
-          almacen: { select: { nombre: true } },
+          almacenId: true,
+          almacen: { select: { id: true, nombre: true } },
         },
       },
       catalogItem: { select: { nombre: true, unidad: true } },
@@ -134,6 +137,8 @@ async function productosDelLote(companyRuc, loteId) {
     const grupo = porItem.get(id);
     if (linea.productoSerieId && linea.productoSerie) {
       const estado = linea.productoSerie.estado;
+      const almSerie = linea.productoSerie.almacen?.id || linea.productoSerie.almacenId || '';
+      if (soloAlmacen && almSerie !== soloAlmacen) continue;
       if (estado === 'DISPONIBLE' || estado === 'RESERVADO') {
         grupo.series.set(linea.productoSerie.id, {
           numero_serie: linea.productoSerie.numeroSerie,
@@ -143,6 +148,7 @@ async function productosDelLote(companyRuc, loteId) {
       }
       continue;
     }
+    if (soloAlmacen && String(linea.almacenId || '') !== soloAlmacen) continue;
     const traslado = linea.movimiento?.referenciaTipo === 'TRASLADO';
     const salida = linea.movimiento?.tipo === 'SALIDA' && !traslado;
     const signo = salida ? -1 : 1;

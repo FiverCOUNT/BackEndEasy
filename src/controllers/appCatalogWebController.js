@@ -94,10 +94,11 @@ function stockLabel(item) {
   if (stock == null) return 'Sin stock en almacén';
   const n = Number(stock);
   const unidad = item.unidad || '';
+  const qty = Number.isInteger(n) ? String(n) : String(Math.round(n * 10000) / 10000);
   if (manejaSerie && String(unidad).toUpperCase() === 'NIU') {
-    return `Stock: ${n} unidad(es) · con serie`;
+    return `Stock: ${qty} unidad(es) · con serie`;
   }
-  return `Stock: ${n} ${unidad}`.trim();
+  return `Stock: ${qty} ${unidad}`.trim();
 }
 
 function formatMoney(value) {
@@ -131,9 +132,14 @@ async function list(req, res, next) {
     ]);
     const lote = loteId ? lotes.find((row) => row.id === loteId) : null;
     let ids = null;
+    const qtyByItem = new Map();
     if (lote) {
-      const delLote = await productoLoteModel.productosDelLote(companyRuc, lote.id);
-      ids = [...new Set((delLote?.items || []).map((item) => item.id).filter(Boolean))];
+      const delLote = await productoLoteModel.productosDelLote(companyRuc, lote.id, { almacenId });
+      for (const row of delLote?.items || []) {
+        if (!row.id) continue;
+        qtyByItem.set(row.id, (qtyByItem.get(row.id) || 0) + Number(row.cantidad || 0));
+      }
+      ids = [...qtyByItem.keys()];
     }
 
     const { total, items: pageItems } = await catalogItemModel.findPaginated({
@@ -148,7 +154,12 @@ async function list(req, res, next) {
       ids,
     });
 
-    const enriched = pageItems;
+    const enriched = lote
+      ? pageItems.map((it) => {
+          const qty = qtyByItem.get(it.id) || 0;
+          return { ...it, stockActual: qty, stock_actual: qty };
+        })
+      : pageItems;
 
     const loadMore = buildLoadMoreMeta({
       total,
