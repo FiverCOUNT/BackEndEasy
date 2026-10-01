@@ -4398,7 +4398,8 @@ select.ios-hist-input,
   }
   .ios-hist-buscar { width: 100%; }
 }
-.ios-lote-card { gap: 10px; }
+.ios-lote-list { overflow: visible; }
+.ios-lote-row .ios-menu { margin-left: auto; flex-shrink: 0; }
 .ios-lote-nuevo {
   display: grid;
   grid-template-columns: 1.4fr 1fr;

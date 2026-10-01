@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title><%= title %> · Easy</title>
-  <link rel="stylesheet" href="/css/app-ios.css?v=lotes-lista" />
+  <link rel="stylesheet" href="/css/app-ios.css?v=lote-productos" />
 </head>
 <body class="ios-app">
   <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
@@ -57,7 +57,7 @@
           <p>El primer lote que guardes aparece aquí.</p>
         </section>
       <% } else { %>
-        <div class="ios-list">
+        <div class="ios-list ios-lote-list">
           <% lotes.forEach(function (lote) {
             var fecha = '';
             var raw = String(lote.fecha_vencimiento || '').slice(0, 10);
@@ -67,18 +67,135 @@
               fecha = Number(partes[2]) + ' de ' + meses[Number(partes[1]) - 1] + ' ' + partes[0];
             }
           %>
-            <article class="ios-row ios-row-static">
+            <article class="ios-row ios-row-static ios-lote-row">
               <span class="ios-row-icon">▣</span>
               <span class="ios-row-text">
                 <strong><%= lote.nombre %></strong>
                 <small class="<%= fecha ? 'ios-lote-fecha' : '' %>"><%= fecha || 'Sin fecha' %></small>
               </span>
+              <details class="ios-menu">
+                <summary aria-label="Opciones del lote">⋯</summary>
+                <div class="ios-menu-panel">
+                  <button type="button" data-lote-productos="<%= lote.id %>" data-lote-nombre="<%= lote.nombre %>">Ver productos</button>
+                </div>
+              </details>
             </article>
           <% }); %>
         </div>
       <% } %>
     </section>
   </main>
+  <div id="loteProductosSheet" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel" role="dialog" aria-modal="true">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-back" id="loteProductosCerrar">← Volver</button>
+        <div class="ios-sheet-head-titles">
+          <h3 id="loteProductosTitulo">Productos</h3>
+          <p id="loteProductosSub" class="ios-sheet-head-sub"></p>
+        </div>
+        <span style="width:56px;"></span>
+      </div>
+      <div class="ios-sheet-status" id="loteProductosStatus">Cargando…</div>
+      <div class="ios-sheet-list" id="loteProductosLista"></div>
+    </div>
+  </div>
   <%- include('../../partials/app-tabbar', { active: active, appBase: appBase }) %>
+  <script>
+  (function () {
+    var appBase = '<%= appBase %>';
+    var sheet = document.getElementById('loteProductosSheet');
+    var titulo = document.getElementById('loteProductosTitulo');
+    var sub = document.getElementById('loteProductosSub');
+    var statusEl = document.getElementById('loteProductosStatus');
+    var lista = document.getElementById('loteProductosLista');
+
+    function esc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function cerrar() {
+      if (!sheet) return;
+      sheet.hidden = true;
+      sheet.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('ios-sheet-open');
+    }
+
+    function pintar(items) {
+      lista.innerHTML = '';
+      if (!items.length) {
+        statusEl.textContent = 'Este lote no tiene productos en stock.';
+        return;
+      }
+      var series = 0;
+      var productos = items.length;
+      items.forEach(function (it) {
+        if (it.tipo === 'serie') series += (it.series || []).length;
+      });
+      statusEl.textContent = productos + ' producto' + (productos === 1 ? '' : 's')
+        + (series ? (' · ' + series + ' serie' + (series === 1 ? '' : 's')) : '');
+      items.forEach(function (it) {
+        if (it.tipo === 'serie') {
+          var head = document.createElement('div');
+          head.className = 'ios-sheet-item';
+          head.innerHTML = '<strong>' + esc(it.nombre) + '</strong><span>' + esc(it.series.length) + ' serie' + (it.series.length === 1 ? '' : 's') + '</span>';
+          lista.appendChild(head);
+          (it.series || []).forEach(function (s) {
+            var row = document.createElement('div');
+            row.className = 'ios-sheet-item';
+            var meta = [s.estado || '', s.almacen_nombre || ''].filter(Boolean).join(' · ');
+            row.innerHTML = '<strong>' + esc(s.numero_serie || '—') + '</strong><span>' + esc(meta) + '</span>';
+            lista.appendChild(row);
+          });
+          return;
+        }
+        var rowQty = document.createElement('div');
+        rowQty.className = 'ios-sheet-item';
+        rowQty.innerHTML = '<strong>' + esc(it.nombre) + '</strong><span>' + esc(it.cantidad) + ' ' + esc(it.unidad || '') + '</span>';
+        lista.appendChild(rowQty);
+      });
+    }
+
+    document.addEventListener('click', function (ev) {
+      var btn = ev.target.closest('[data-lote-productos]');
+      if (!btn) return;
+      ev.preventDefault();
+      var details = btn.closest('details.ios-menu');
+      if (details) details.open = false;
+      var id = btn.getAttribute('data-lote-productos');
+      var nombre = btn.getAttribute('data-lote-nombre') || 'Lote';
+      titulo.textContent = 'Productos';
+      sub.textContent = nombre;
+      statusEl.textContent = 'Cargando…';
+      lista.innerHTML = '';
+      sheet.hidden = false;
+      sheet.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('ios-sheet-open');
+      fetch(appBase + '/lotes/' + encodeURIComponent(id) + '/productos', {
+        headers: { Accept: 'application/json' },
+        credentials: 'same-origin',
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (!data || data.success === false) {
+            statusEl.textContent = 'No se pudieron cargar los productos.';
+            return;
+          }
+          pintar(data.items || []);
+        })
+        .catch(function () {
+          statusEl.textContent = 'No se pudieron cargar los productos.';
+        });
+    });
+
+    document.getElementById('loteProductosCerrar').addEventListener('click', cerrar);
+    sheet.addEventListener('click', function (ev) {
+      if (ev.target === sheet) cerrar();
+    });
+  })();
+  </script>
 </body>
 </html>

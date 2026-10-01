@@ -516,6 +516,17 @@ async function showLotes(req, res, next) {
   }
 }
 
+async function productosLoteJson(req, res, next) {
+  try {
+    const companyRuc = companyRucOf(res);
+    const data = await productoLoteModel.productosDelLote(companyRuc, req.params.id);
+    if (!data) return res.status(404).json({ success: false, message: 'Lote no encontrado.' });
+    return res.json({ success: true, ...data });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function saveLotes(req, res, next) {
   try {
     const companyRuc = companyRucOf(res);
@@ -543,6 +554,7 @@ async function saveLotes(req, res, next) {
 module.exports = {
   list,
   showLotes,
+  productosLoteJson,
   saveLotes,
   showCreateForm,
   create,

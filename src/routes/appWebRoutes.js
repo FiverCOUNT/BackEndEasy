@@ -108,6 +108,7 @@ router.get('/catalogo/crear', requireWebAppAdmin, appCatalogWebController.showCr
 router.post('/catalogo', requireWebAppAdmin, appCatalogWebController.create);
 router.get('/catalogo/:id/series', appCatalogWebController.seriesJson);
 router.get('/lotes', requireWebAppAdmin, appCatalogWebController.showLotes);
+router.get('/lotes/:id/productos', requireWebAppAdmin, appCatalogWebController.productosLoteJson);
 router.post('/lotes', requireWebAppAdmin, appCatalogWebController.saveLotes);
 router.get('/catalogo/:id/editar', requireWebAppAdmin, appCatalogWebController.showEditForm);
 router.post('/catalogo/:id', requireWebAppAdmin, appCatalogWebController.update);
