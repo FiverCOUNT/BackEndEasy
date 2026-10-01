@@ -4388,3 +4388,29 @@ select.ios-hist-input,
   }
   .ios-hist-buscar { width: 100%; }
 }
+.ios-lote-card { gap: 10px; }
+.ios-lote-nuevo {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 8px;
+}
+.ios-lote-nuevo input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid #d1d1d6;
+  border-radius: 12px;
+  padding: 12px 12px;
+  font-size: 16px;
+  background: #fff;
+  color: #0f172a;
+}
+.ios-lote-card .ios-hint { margin: 0; }
+.ios-lote-card .ios-btn-primary { width: 100%; }
+.ios-lote-fecha {
+  color: #007AFF;
+  font-weight: 700;
+}
+@media (max-width: 520px) {
+  .ios-lote-nuevo { grid-template-columns: 1fr 0.9fr; }
+}

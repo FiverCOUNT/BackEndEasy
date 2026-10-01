@@ -31,10 +31,12 @@ function normalizarFilas(nombres, fechas) {
   return { filas };
 }
 
-async function listByCompany(companyRuc) {
+async function listByCompany(companyRuc, { recientes = false } = {}) {
   const rows = await prisma.productoLote.findMany({
     where: { companyRuc },
-    orderBy: [{ nombre: 'asc' }],
+    orderBy: recientes
+      ? [{ creadoEn: 'desc' }, { nombre: 'asc' }]
+      : [{ nombre: 'asc' }],
   });
   return rows.map(toApi);
 }

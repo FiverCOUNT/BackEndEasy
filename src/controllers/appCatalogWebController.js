@@ -481,21 +481,36 @@ async function buscarSerieJson(req, res, next) {
   }
 }
 
+function filaLoteFromBody(body) {
+  const nombres = [].concat(body?.lote_nombre || []);
+  const fechas = [].concat(body?.lote_fecha || []);
+  return {
+    nombre: String(nombres[0] || ''),
+    fecha_vencimiento: String(fechas[0] || '').slice(0, 10),
+  };
+}
+
+async function renderLotes(res, { error, fila, flash }) {
+  const companyRuc = companyRucOf(res);
+  const lotes = await productoLoteModel.listByCompany(companyRuc, { recientes: true });
+  res.render('app/catalogo/lotes', layoutLocalsCatalog(res, {
+    title: 'Lotes',
+    active: 'lotes',
+    error: error || null,
+    fila: fila || { nombre: '', fecha_vencimiento: '' },
+    lotes,
+    flash: flash || null,
+  }));
+}
+
 async function showLotes(req, res, next) {
   try {
     const companyRuc = companyRucOf(res);
-    const lotes = await productoLoteModel.listByCompany(companyRuc);
     if (String(req.query.formato || '') === 'json') {
+      const lotes = await productoLoteModel.listByCompany(companyRuc);
       return res.json({ success: true, items: lotes });
     }
-    const vacias = Array.from({ length: 6 }, () => ({ nombre: '', fecha_vencimiento: '' }));
-    res.render('app/catalogo/lotes', layoutLocalsCatalog(res, {
-      title: 'Lotes',
-      active: 'lotes',
-      error: null,
-      filas: lotes.concat(vacias),
-      flash: parseFlash(req),
-    }));
+    await renderLotes(res, { flash: parseFlash(req) });
   } catch (err) {
     next(err);
   }
@@ -510,20 +525,15 @@ async function saveLotes(req, res, next) {
       fechas: req.body.lote_fecha,
     });
     if (result.error) {
-      const lotes = await productoLoteModel.listByCompany(companyRuc);
-      const vacias = Array.from({ length: 6 }, () => ({ nombre: '', fecha_vencimiento: '' }));
-      return res.status(400).render('app/catalogo/lotes', layoutLocalsCatalog(res, {
-        title: 'Lotes',
-        active: 'lotes',
+      return renderLotes(res.status(400), {
         error: result.error,
-        filas: lotes.concat(vacias),
-        flash: null,
-      }));
+        fila: filaLoteFromBody(req.body),
+      });
     }
     return redirectWithFlash(
       res,
       appPath('/lotes'),
-      result.total ? `${result.total} lote(s) guardados.` : 'No había lotes nuevos.',
+      result.total ? 'Lote guardado.' : 'Escribe el nombre del lote.',
     );
   } catch (err) {
     next(err);

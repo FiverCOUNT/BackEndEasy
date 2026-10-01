@@ -245,10 +245,11 @@ model LineaCatalogoItem {
 /// Partida de un producto: el nombre del lote y su caducidad.
 /// Lote creado una vez. La línea del producto solo guarda su id.
 model ProductoLote {
-  id               String  @id @db.VarChar(36)
-  companyRuc       String  @map("company_ruc") @db.VarChar(11)
-  nombre           String  @db.VarChar(64)
-  fechaVencimiento String? @map("fecha_vencimiento") @db.VarChar(10)
+  id               String   @id @db.VarChar(36)
+  companyRuc       String   @map("company_ruc") @db.VarChar(11)
+  nombre           String   @db.VarChar(64)
+  fechaVencimiento String?  @map("fecha_vencimiento") @db.VarChar(10)
+  creadoEn         DateTime @default(now()) @map("creado_en")
 
   lineas LineaCatalogoItem[]
 

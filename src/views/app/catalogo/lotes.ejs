@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title><%= title %> · Easy</title>
-  <link rel="stylesheet" href="/css/app-ios.css?v=lotes-tabla" />
+  <link rel="stylesheet" href="/css/app-ios.css?v=lotes-lista" />
 </head>
 <body class="ios-app">
   <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
@@ -21,36 +21,64 @@
       <div class="ios-flash <%= flash.type === 'error' ? 'is-error' : 'is-ok' %>"><%= flash.text %></div>
     <% } %>
 
-    <p class="ios-hint" style="margin:0 0 12px;">Crea el lote una vez. En el ingreso del producto solo lo eliges.</p>
-
-    <form class="ios-form" method="POST" action="<%= appBase %>/lotes" id="lotesForm">
-      <section class="ios-form-card" id="lotesFilas">
-        <% (filas || []).forEach(function (fila) { %>
-          <div class="ios-orden-linea-lote" style="margin-bottom:8px;">
-            <input type="text" name="lote_nombre" maxlength="64" placeholder="Nombre del lote" value="<%= fila.nombre || '' %>" />
-            <input type="date" name="lote_fecha" value="<%= fila.fecha_vencimiento || '' %>" />
+    <section class="ios-section">
+      <h3 class="ios-section-title">Nuevo lote</h3>
+      <form class="ios-form" method="POST" action="<%= appBase %>/lotes">
+        <section class="ios-form-card ios-lote-card">
+          <div class="ios-lote-nuevo">
+            <input
+              type="text"
+              name="lote_nombre"
+              maxlength="64"
+              placeholder="Nombre del lote"
+              value="<%= (fila && fila.nombre) || '' %>"
+              autocomplete="off"
+              required
+            />
+            <input
+              type="date"
+              name="lote_fecha"
+              value="<%= (fila && fila.fecha_vencimiento) || '' %>"
+              aria-label="Fecha de vencimiento"
+            />
           </div>
-          <% if (fila.id) { %>
-            <p class="ios-hint" style="margin:-4px 0 10px;">Id <%= fila.id %></p>
-          <% } %>
-        <% }); %>
-      </section>
-      <button type="button" class="ios-btn-secondary" id="btnMasLote" style="width:100%;">Agregar fila</button>
-      <button type="submit" class="ios-btn-primary" style="width:100%;margin-top:8px;">Guardar lotes</button>
-    </form>
+          <p class="ios-hint">La fecha puede quedar vacía.</p>
+          <button type="submit" class="ios-btn-primary">Guardar lote</button>
+        </section>
+      </form>
+    </section>
+
+    <section class="ios-section">
+      <h3 class="ios-section-title">Recientes</h3>
+      <% if (!(lotes || []).length) { %>
+        <section class="ios-card-empty">
+          <div class="ios-empty-icon">▣</div>
+          <h2>Sin lotes</h2>
+          <p>El primer lote que guardes aparece aquí.</p>
+        </section>
+      <% } else { %>
+        <div class="ios-list">
+          <% lotes.forEach(function (lote) {
+            var fecha = '';
+            var raw = String(lote.fecha_vencimiento || '').slice(0, 10);
+            var partes = raw.split('-');
+            var meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+            if (partes.length === 3 && meses[Number(partes[1]) - 1]) {
+              fecha = Number(partes[2]) + ' de ' + meses[Number(partes[1]) - 1] + ' ' + partes[0];
+            }
+          %>
+            <article class="ios-row ios-row-static">
+              <span class="ios-row-icon">▣</span>
+              <span class="ios-row-text">
+                <strong><%= lote.nombre %></strong>
+                <small class="<%= fecha ? 'ios-lote-fecha' : '' %>"><%= fecha || 'Sin fecha' %></small>
+              </span>
+            </article>
+          <% }); %>
+        </div>
+      <% } %>
+    </section>
   </main>
   <%- include('../../partials/app-tabbar', { active: active, appBase: appBase }) %>
-  <script>
-  document.getElementById('btnMasLote').addEventListener('click', function () {
-    var box = document.getElementById('lotesFilas');
-    var row = document.createElement('div');
-    row.className = 'ios-orden-linea-lote';
-    row.style.marginBottom = '8px';
-    row.innerHTML = '<input type="text" name="lote_nombre" maxlength="64" placeholder="Nombre del lote" />'
-      + '<input type="date" name="lote_fecha" />';
-    box.appendChild(row);
-    row.querySelector('input').focus();
-  });
-  </script>
 </body>
 </html>
