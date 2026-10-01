@@ -1,4 +1,5 @@
 const catalogItemModel = require('../models/catalogItemModel');
+const productoLoteModel = require('../models/productoLoteModel');
 const almacenModel = require('../models/almacenModel');
 const codigoProductoSunatModel = require('../models/codigoProductoSunatModel');
 const { parseLoadMoreQuery, buildLoadMoreMeta, parseListQuery } = require('../utils/pagination');
@@ -480,8 +481,59 @@ async function buscarSerieJson(req, res, next) {
   }
 }
 
+async function showLotes(req, res, next) {
+  try {
+    const companyRuc = companyRucOf(res);
+    const lotes = await productoLoteModel.listByCompany(companyRuc);
+    if (String(req.query.formato || '') === 'json') {
+      return res.json({ success: true, items: lotes });
+    }
+    const vacias = Array.from({ length: 6 }, () => ({ nombre: '', fecha_vencimiento: '' }));
+    res.render('app/catalogo/lotes', layoutLocalsCatalog(res, {
+      title: 'Lotes',
+      active: 'lotes',
+      error: null,
+      filas: lotes.concat(vacias),
+      flash: parseFlash(req),
+    }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function saveLotes(req, res, next) {
+  try {
+    const companyRuc = companyRucOf(res);
+    const result = await productoLoteModel.guardarFilas({
+      companyRuc,
+      nombres: req.body.lote_nombre,
+      fechas: req.body.lote_fecha,
+    });
+    if (result.error) {
+      const lotes = await productoLoteModel.listByCompany(companyRuc);
+      const vacias = Array.from({ length: 6 }, () => ({ nombre: '', fecha_vencimiento: '' }));
+      return res.status(400).render('app/catalogo/lotes', layoutLocalsCatalog(res, {
+        title: 'Lotes',
+        active: 'lotes',
+        error: result.error,
+        filas: lotes.concat(vacias),
+        flash: null,
+      }));
+    }
+    return redirectWithFlash(
+      res,
+      appPath('/lotes'),
+      result.total ? `${result.total} lote(s) guardados.` : 'No había lotes nuevos.',
+    );
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   list,
+  showLotes,
+  saveLotes,
   showCreateForm,
   create,
   showEditForm,

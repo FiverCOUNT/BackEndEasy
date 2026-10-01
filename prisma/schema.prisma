@@ -243,18 +243,17 @@ model LineaCatalogoItem {
 }
 
 /// Partida de un producto: el nombre del lote y su caducidad.
+/// Lote creado una vez. La línea del producto solo guarda su id.
 model ProductoLote {
   id               String  @id @db.VarChar(36)
   companyRuc       String  @map("company_ruc") @db.VarChar(11)
-  catalogItemId    String  @map("catalog_item_id") @db.VarChar(36)
-  numeroLote       String  @map("numero_lote") @db.VarChar(64)
+  nombre           String  @db.VarChar(64)
   fechaVencimiento String? @map("fecha_vencimiento") @db.VarChar(10)
 
-  catalogItem CatalogItem         @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
-  lineas      LineaCatalogoItem[]
+  lineas LineaCatalogoItem[]
 
-  @@unique([companyRuc, catalogItemId, numeroLote], map: "producto_lotes_company_item_numero_key")
-  @@index([catalogItemId])
+  @@unique([companyRuc, nombre], map: "producto_lotes_company_nombre_key")
+  @@index([companyRuc])
   @@map("producto_lotes")
 }
 
@@ -288,7 +287,6 @@ model CatalogItem {
   duracionMinutos Int?     @map("duracion_minutos")
 
   productoSeries ProductoSerie[]
-  productoLotes  ProductoLote[]
   lineasCatalogo LineaCatalogoItem[]
   saleDetails    SaleDetail[]
   inventario     Inventario[]

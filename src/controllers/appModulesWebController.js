@@ -1212,6 +1212,7 @@ function parseSalidaLineasFromBody(body = {}) {
   const numerosSerie = [].concat(body.numero_serie || []);
   const lotes = [].concat(body.lote || []);
   const fechas = [].concat(body.fecha_vencimiento || []);
+  const loteIds = [].concat(body.producto_lote_id || []);
   const n = Math.max(
     catalogIds.length,
     cantidades.length,
@@ -1219,6 +1220,7 @@ function parseSalidaLineasFromBody(body = {}) {
     numerosSerie.length,
     lotes.length,
     fechas.length,
+    loteIds.length,
   );
   const lineas = [];
   for (let i = 0; i < n; i += 1) {
@@ -1229,6 +1231,7 @@ function parseSalidaLineasFromBody(body = {}) {
     const numeroSerie = String(numerosSerie[i] || '').trim();
     const lote = String(lotes[i] || '').trim().slice(0, 64);
     const fecha = String(fechas[i] || '').trim().slice(0, 10);
+    const productoLoteId = String(loteIds[i] || '').trim();
     lineas.push({
       catalog_item_id: catalogItemId,
       cantidad: Number.isFinite(cantidad) && cantidad > 0 ? cantidad : (numeroSerie || productoSerieId ? 1 : 0),
@@ -1236,6 +1239,7 @@ function parseSalidaLineasFromBody(body = {}) {
       numero_serie: numeroSerie || undefined,
       lote: lote || undefined,
       fecha_vencimiento: /^\d{4}-\d{2}-\d{2}$/.test(fecha) ? fecha : undefined,
+      producto_lote_id: productoLoteId || undefined,
     });
   }
   return lineas.filter((l) => l.catalog_item_id && l.cantidad > 0);

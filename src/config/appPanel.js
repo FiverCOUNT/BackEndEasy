@@ -18,6 +18,7 @@ const APP_NAV_ITEMS = [
   { id: 'comprobantes', href: '/comprobantes', label: 'Comprobantes', icon: '☰', group: 'main' },
   { id: 'clientes', href: '/clientes', label: 'Clientes', icon: '👤', group: 'modulos' },
   { id: 'catalogo', href: '/catalogo', label: 'Catálogo', icon: '▦', group: 'modulos' },
+  { id: 'lotes', href: '/lotes', label: 'Lotes', icon: '▣', group: 'modulos', adminOnly: true },
   { id: 'compras', href: '/compras', label: 'Compras', icon: '🛒', group: 'modulos', adminOnly: true },
   { id: 'salidas', href: '/salidas', label: 'Salidas', icon: '↗', group: 'modulos' },
   { id: 'ingresos', href: '/ingresos', label: 'Ingresos', icon: '↘', group: 'modulos', adminOnly: true },

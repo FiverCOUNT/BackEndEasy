@@ -40,8 +40,8 @@ check('servicio ignora lote', servicio.manejaLote, false);
 check('servicio ignora vencimiento', servicio.manejaVencimiento, false);
 
 const itemLote = { manejaLote: true, manejaVencimiento: false, nombre: 'Amox' };
-check('ingreso sin lote', validarLoteIngreso(itemLote, { lote: '' }), 'lote_requerido');
-check('ingreso con lote', validarLoteIngreso(itemLote, { lote: 'L-1' }), null);
+check('ingreso sin lote elegido', validarLoteIngreso(itemLote, { lote: 'L-1' }), 'lote_requerido');
+check('ingreso con lote elegido', validarLoteIngreso(itemLote, { productoLoteId: 'lot-1' }), null);
 
 const itemVence = { manejaLote: false, manejaVencimiento: true, nombre: 'Jarabe' };
 check('ingreso sin fecha', validarLoteIngreso(itemVence, { fechaVencimiento: '' }), 'vencimiento_requerido');
@@ -49,9 +49,8 @@ check('fecha invalida', validarLoteIngreso(itemVence, { fechaVencimiento: '31/09
 check('fecha valida', validarLoteIngreso(itemVence, { fechaVencimiento: '2027-07-02' }), null);
 
 const ambos = { manejaLote: true, manejaVencimiento: true };
-check('pide fecha aunque haya lote', validarLoteIngreso(ambos, { lote: 'L-1', fechaVencimiento: '' }), 'vencimiento_requerido');
-check('completo', validarLoteIngreso(ambos, { lote: 'L-1', fechaVencimiento: '2027-07-02' }), null);
-check('regreso con id no vuelve a pedir', validarLoteIngreso(ambos, { productoLoteId: 'abc' }), null);
+check('texto no reemplaza el lote', validarLoteIngreso(ambos, { lote: 'L-1', fechaVencimiento: '2027-07-02' }), 'lote_requerido');
+check('lote elegido cubre la fecha', validarLoteIngreso(ambos, { productoLoteId: 'lot-1' }), null);
 check('producto sin control', validarLoteIngreso({ manejaLote: false, manejaVencimiento: false }, {}), null);
 
 if (failed) {

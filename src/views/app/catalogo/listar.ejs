@@ -70,6 +70,7 @@
         <% items.forEach(function(it) {
           var unidadSerie = String(it.unidad || '').toUpperCase() === 'NIU';
           var conSerie = it.kind !== 'SERVICE' && unidadSerie && (it.manejaSerie || it.maneja_serie);
+          var conLote = it.kind !== 'SERVICE' && (it.manejaLote || it.maneja_lote || it.manejaVencimiento || it.maneja_vencimiento);
           var serieNombre = String(it.nombre || '').replace(/"/g, '&quot;');
         %>
           <article
@@ -124,6 +125,9 @@
                 <summary aria-label="Acciones">⋯</summary>
                 <div class="ios-menu-panel">
                   <a href="<%= appBase %>/catalogo/<%= it.id %>/editar">Editar</a>
+                  <% if (conLote) { %>
+                    <a href="<%= appBase %>/lotes">Lotes</a>
+                  <% } %>
                   <% if (conSerie) { %>
                     <button type="button" data-series-item="<%= it.id %>" data-series-nombre="<%= serieNombre %>">Ver series</button>
                   <% } %>

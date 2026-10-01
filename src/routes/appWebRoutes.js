@@ -107,6 +107,8 @@ router.get('/catalogo/codigos-sunat', appCatalogWebController.searchCodigosSunat
 router.get('/catalogo/crear', requireWebAppAdmin, appCatalogWebController.showCreateForm);
 router.post('/catalogo', requireWebAppAdmin, appCatalogWebController.create);
 router.get('/catalogo/:id/series', appCatalogWebController.seriesJson);
+router.get('/lotes', requireWebAppAdmin, appCatalogWebController.showLotes);
+router.post('/lotes', requireWebAppAdmin, appCatalogWebController.saveLotes);
 router.get('/catalogo/:id/editar', requireWebAppAdmin, appCatalogWebController.showEditForm);
 router.post('/catalogo/:id', requireWebAppAdmin, appCatalogWebController.update);
 router.post('/catalogo/:id/activar', requireWebAppAdmin, appCatalogWebController.activate);
@@ -118,10 +120,10 @@ router.post('/compras/sync', requireWebAppAdmin, appModulesWebController.sincron
 router.post('/compras/sincronizar', requireWebAppAdmin, appModulesWebController.sincronizarCompras);
 router.post('/compras/eliminar', requireWebAppAdmin, appModulesWebController.eliminarCompras);
 router.get('/compras/sync', requireWebAppAdmin, (req, res) => {
-  res.redirect(`${APP_BASE}/compras?msg=${encodeURIComponent('Usa el botÃ³n Sync / Forzar sync')}&tipo=error`);
+  res.redirect(`${APP_BASE}/compras?msg=${encodeURIComponent('Usa el botón Sync / Forzar sync')}&tipo=error`);
 });
 router.get('/compras/sincronizar', requireWebAppAdmin, (req, res) => {
-  res.redirect(`${APP_BASE}/compras?msg=${encodeURIComponent('Usa el botÃ³n Sync / Forzar sync')}&tipo=error`);
+  res.redirect(`${APP_BASE}/compras?msg=${encodeURIComponent('Usa el botón Sync / Forzar sync')}&tipo=error`);
 });
 router.get('/compras/:id/pdf', requireWebAppAdmin, appModulesWebController.compraPdf);
 router.get('/compras/:id', requireWebAppAdmin, appModulesWebController.compraDetalleJson);

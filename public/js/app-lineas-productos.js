@@ -675,6 +675,78 @@
       lineasHidden.appendChild(input);
     }
 
+    var appBase = String(form.getAttribute('action') || '').replace(/\/(ingresos|salidas)\/?$/, '');
+
+    function cerrarLotePicker() {
+      var sheet = document.getElementById('lotePickerSheet');
+      if (!sheet) return;
+      sheet.hidden = true;
+      sheet.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('ios-sheet-open');
+    }
+
+    function abrirLotePicker(prod, idx) {
+      if (!prod || !prod.id) return;
+      var sheet = document.getElementById('lotePickerSheet');
+      if (!sheet) {
+        sheet = document.createElement('div');
+        sheet.id = 'lotePickerSheet';
+        sheet.className = 'ios-sheet';
+        sheet.innerHTML =
+          '<div class="ios-sheet-panel" role="dialog" aria-modal="true">' +
+            '<div class="ios-sheet-head"><h3>Lotes</h3><button type="button" class="ios-btn-ghost" data-cerrar>Cerrar</button></div>' +
+            '<div class="ios-sheet-status" data-status>Cargando…</div>' +
+            '<div class="ios-sheet-list" data-lista></div>' +
+            '<a class="ios-btn-secondary" data-admin style="display:block;text-align:center;margin:12px;">Registrar lotes</a>' +
+          '</div>';
+        document.body.appendChild(sheet);
+        sheet.querySelector('[data-cerrar]').addEventListener('click', cerrarLotePicker);
+        sheet.addEventListener('click', function (ev) {
+          if (ev.target === sheet) cerrarLotePicker();
+        });
+      }
+      sheet.hidden = false;
+      sheet.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('ios-sheet-open');
+      sheet.querySelector('[data-admin]').href = appBase + '/lotes';
+      var status = sheet.querySelector('[data-status]');
+      var lista = sheet.querySelector('[data-lista]');
+      status.textContent = 'Cargando…';
+      lista.innerHTML = '';
+      fetch(appBase + '/lotes?formato=json', {
+        headers: { Accept: 'application/json' },
+        credentials: 'same-origin',
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          var items = (data && data.items) || [];
+          if (!items.length) {
+            status.textContent = 'Todavía no hay lotes. Regístralos en el menú Lotes del producto.';
+            return;
+          }
+          status.textContent = items.length + ' lote(s). Elige uno.';
+          items.forEach(function (lot) {
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'ios-sheet-item';
+            b.innerHTML = '<strong>' + escAttr(lot.nombre) + '</strong>' +
+              (lot.fecha_vencimiento ? '<small>Vence ' + escAttr(lot.fecha_vencimiento) + '</small>' : '<small>Sin fecha</small>');
+            b.addEventListener('click', function () {
+              if (!lineas[idx]) return;
+              lineas[idx].lote = lot.nombre || '';
+              lineas[idx].producto_lote_id = lot.id || '';
+              if (lot.fecha_vencimiento) lineas[idx].fecha_vencimiento = lot.fecha_vencimiento;
+              cerrarLotePicker();
+              renderLineas();
+            });
+            lista.appendChild(b);
+          });
+        })
+        .catch(function () {
+          status.textContent = 'No se pudieron cargar los lotes.';
+        });
+    }
+
     function renderLineas() {
       if (!lineasBox || !lineasHidden) return;
       lineasBox.innerHTML = '';
@@ -702,7 +774,9 @@
         if (pideLote || pideVence) {
           loteHtml = '<div class="ios-orden-linea-lote">' +
             (pideLote
-              ? '<input type="text" maxlength="64" placeholder="Lote" value="' + escAttr(ln.lote || '') + '" data-lote />'
+              ? '<button type="button" class="ios-orden-linea-serie-btn" data-elegir-lote>' +
+                  (ln.lote ? ('Lote ' + escAttr(ln.lote)) : 'Elegir lote') +
+                '</button>'
               : '') +
             (pideVence
               ? '<input type="date" value="' + escAttr(ln.fecha_vencimiento || '') + '" data-vence />'
@@ -759,10 +833,10 @@
             if (prod) abrirEscaneoMasivo(prod);
           });
         }
-        var loteInput = row.querySelector('[data-lote]');
-        if (loteInput) {
-          loteInput.addEventListener('input', function () {
-            lineas[idx].lote = loteInput.value;
+        var elegirLoteBtn = row.querySelector('[data-elegir-lote]');
+        if (elegirLoteBtn) {
+          elegirLoteBtn.addEventListener('click', function () {
+            abrirLotePicker(prod || { id: ln.catalog_item_id, nombre: ln.nombre }, idx);
           });
         }
         var venceInput = row.querySelector('[data-vence]');
@@ -814,6 +888,7 @@
         addHidden(fields.descripcion, ln.nombre || '');
         addHidden('lote', ln.lote || '');
         addHidden('fecha_vencimiento', ln.fecha_vencimiento || '');
+        addHidden('producto_lote_id', ln.producto_lote_id || '');
       });
 
       if (ordenTotal) {

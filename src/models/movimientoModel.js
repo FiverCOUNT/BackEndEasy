@@ -19,8 +19,9 @@ function usaSeriesInventario(item) {
 }
 
 function validarLoteIngreso(item, linea) {
-  if (!item || linea?.productoLoteId) return null;
-  if (item.manejaLote && !String(linea?.lote || '').trim()) return 'lote_requerido';
+  if (!item) return null;
+  if (item.manejaLote && !String(linea?.productoLoteId || '').trim()) return 'lote_requerido';
+  if (linea?.productoLoteId) return null;
   const fecha = String(linea?.fechaVencimiento || '').trim().slice(0, 10);
   if (item.manejaVencimiento && !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return 'vencimiento_requerido';
   return null;
@@ -121,7 +122,7 @@ function toApiLinea(linea) {
     producto_serie_id: linea.productoSerieId,
     producto_serie: linea.productoSerie ? productoSerieModel.toApi(linea.productoSerie) : null,
     producto_lote_id: linea.productoLoteId || null,
-    lote: linea.productoLote?.numeroLote || null,
+    lote: linea.productoLote?.nombre || null,
     fecha_vencimiento: linea.productoLote?.fechaVencimiento || null,
   };
 }
@@ -180,7 +181,7 @@ const movimientoInclude = {
   lineas: {
     include: {
       productoSerie: true,
-      productoLote: { select: { id: true, numeroLote: true, fechaVencimiento: true } },
+      productoLote: { select: { id: true, nombre: true, fechaVencimiento: true } },
       catalogItem: { select: { id: true, manejaSerie: true } },
     },
     orderBy: { lineaId: 'asc' },
@@ -211,47 +212,20 @@ function snapshotLineaFromItem(item, { almacenId, cantidad, productoSerieId, pro
   };
 }
 
-async function resolverProductoLoteId(tx, { companyRuc, catalogItemId, numero, fecha, productoLoteId }) {
+async function resolverProductoLoteId(tx, { companyRuc, productoLoteId }) {
   const existingId = String(productoLoteId || '').trim();
-  if (existingId) return existingId;
-  const numeroLote = String(numero || '').trim().slice(0, 64);
-  if (!numeroLote || !catalogItemId || !companyRuc) return null;
-  const fechaRaw = String(fecha || '').trim().slice(0, 10);
-  const fechaVencimiento = /^\d{4}-\d{2}-\d{2}$/.test(fechaRaw) ? fechaRaw : null;
+  if (!existingId || !companyRuc) return null;
   const client = tx || prisma;
-  const found = await client.productoLote.findUnique({
-    where: {
-      companyRuc_catalogItemId_numeroLote: { companyRuc, catalogItemId, numeroLote },
-    },
+  const found = await client.productoLote.findFirst({
+    where: { id: existingId, companyRuc },
+    select: { id: true },
   });
-  if (found) {
-    if (fechaVencimiento && found.fechaVencimiento !== fechaVencimiento) {
-      await client.productoLote.update({
-        where: { id: found.id },
-        data: { fechaVencimiento },
-      });
-    }
-    return found.id;
-  }
-  const id = randomUUID();
-  await client.productoLote.create({
-    data: {
-      id,
-      companyRuc,
-      catalogItemId,
-      numeroLote,
-      fechaVencimiento,
-    },
-  });
-  return id;
+  return found ? found.id : null;
 }
 
 async function snapshotConLote(tx, companyRuc, item, linea, extra) {
   const productoLoteId = await resolverProductoLoteId(tx, {
     companyRuc,
-    catalogItemId: item.id,
-    numero: linea?.lote,
-    fecha: linea?.fechaVencimiento,
     productoLoteId: linea?.productoLoteId,
   });
   return snapshotLineaFromItem(item, { ...extra, productoLoteId });
