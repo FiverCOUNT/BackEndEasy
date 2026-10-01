@@ -88,12 +88,16 @@
     var escaneoMasivoAgregar = document.getElementById('escaneoMasivoAgregar');
     var escaneoMasivoLimpiar = document.getElementById('escaneoMasivoLimpiar');
     var escaneoMasivoConfirmar = document.getElementById('escaneoMasivoConfirmar');
+    var escaneoMasivoLote = document.getElementById('escaneoMasivoLote');
+    var escaneoMasivoElegirLote = document.getElementById('escaneoMasivoElegirLote');
+    var escaneoMasivoLoteInfo = document.getElementById('escaneoMasivoLoteInfo');
 
     var productoSeriePendiente = null;
     var seriesDisponibles = [];
     var seriesSeleccionadas = new Set();
     var escaneoProducto = null;
     var escaneoSeries = [];
+    var escaneoLote = null;
 
     function resolveAlmacenId() {
       if (typeof options.getAlmacenId === 'function') {
@@ -538,6 +542,44 @@
         .filter(Boolean);
     }
 
+    function loteIngresoDeProducto(catalogItemId) {
+      var ln = lineas.find(function (row) {
+        return String(row.catalog_item_id) === String(catalogItemId)
+          && String(row.producto_lote_id || '').trim();
+      });
+      if (!ln) return null;
+      return {
+        id: ln.producto_lote_id,
+        nombre: ln.lote || '',
+        fecha_vencimiento: ln.fecha_vencimiento || '',
+      };
+    }
+
+    function productoPideLote(producto) {
+      return !!(producto && (producto.maneja_lote === true || producto.manejaLote === true));
+    }
+
+    function pintarEscaneoLote(producto) {
+      if (!escaneoMasivoLote) return;
+      var pide = isIngreso && productoPideLote(producto);
+      escaneoMasivoLote.hidden = !pide;
+      if (!pide) return;
+      if (escaneoMasivoElegirLote) {
+        escaneoMasivoElegirLote.textContent = escaneoLote && escaneoLote.nombre
+          ? ('Lote ' + escaneoLote.nombre)
+          : 'Elegir lote';
+      }
+      if (escaneoMasivoLoteInfo) {
+        if (escaneoLote && escaneoLote.nombre) {
+          escaneoMasivoLoteInfo.textContent = escaneoLote.fecha_vencimiento
+            ? ('Vence ' + escaneoLote.fecha_vencimiento + '. Todas las series usan este lote.')
+            : 'Sin fecha. Todas las series usan este lote.';
+        } else {
+          escaneoMasivoLoteInfo.textContent = 'Elige el lote una vez. Todas las series de este ingreso lo usan.';
+        }
+      }
+    }
+
     function renderEscaneoLista() {
       if (!escaneoMasivoLista) return;
       escaneoMasivoLista.innerHTML = '';
@@ -606,6 +648,8 @@
       }
       escaneoProducto = producto;
       escaneoSeries = seriesIngresoDeProducto(producto.id);
+      escaneoLote = loteIngresoDeProducto(producto.id);
+      pintarEscaneoLote(producto);
       if (escaneoMasivoTitulo) escaneoMasivoTitulo.textContent = 'Escaneo masivo';
       if (escaneoMasivoSub) escaneoMasivoSub.textContent = producto.nombre || 'Producto';
       if (escaneoMasivoInput) escaneoMasivoInput.value = '';
@@ -625,6 +669,7 @@
       escaneoMasivo.setAttribute('aria-hidden', 'true');
       escaneoProducto = null;
       escaneoSeries = [];
+      escaneoLote = null;
       if (!productoPicker || productoPicker.hidden) {
         document.body.style.overflow = '';
         document.body.classList.remove('ios-sheet-open');
@@ -633,9 +678,16 @@
 
     function confirmarEscaneoMasivo() {
       if (!escaneoProducto || !escaneoSeries.length) return;
+      if (productoPideLote(escaneoProducto) && !(escaneoLote && escaneoLote.id)) {
+        window.alert('Elige el lote de "' + (escaneoProducto.nombre || 'producto') + '". Todas las series lo usan.');
+        return;
+      }
       var alm = resolveAlmacenId();
       var catalogId = escaneoProducto.id;
       var precio = escaneoProducto.precio_unitario != null ? Number(escaneoProducto.precio_unitario) : null;
+      var loteNombre = escaneoLote ? (escaneoLote.nombre || '') : '';
+      var loteId = escaneoLote ? (escaneoLote.id || '') : '';
+      var loteFecha = escaneoLote ? (escaneoLote.fecha_vencimiento || '') : '';
       lineas = lineas.filter(function (ln) {
         return !(String(ln.catalog_item_id) === String(catalogId) && ln.maneja_serie);
       });
@@ -653,6 +705,9 @@
           almacen_id: alm,
           numero_serie: num,
           producto_serie_id: '',
+          lote: loteNombre,
+          producto_lote_id: loteId,
+          fecha_vencimiento: loteFecha,
         });
       });
       renderLineas();
@@ -682,11 +737,13 @@
       if (!sheet) return;
       sheet.hidden = true;
       sheet.setAttribute('aria-hidden', 'true');
-      document.body.classList.remove('ios-sheet-open');
+      sheet.classList.remove('is-over');
+      var scanAbierto = escaneoMasivo && !escaneoMasivo.hidden;
+      if (!scanAbierto) document.body.classList.remove('ios-sheet-open');
     }
 
-    function abrirLotePicker(prod, idx) {
-      if (!prod || !prod.id) return;
+    function abrirLotePicker(onElegir) {
+      if (typeof onElegir !== 'function') return;
       var sheet = document.getElementById('lotePickerSheet');
       if (!sheet) {
         sheet = document.createElement('div');
@@ -707,6 +764,7 @@
       }
       sheet.hidden = false;
       sheet.setAttribute('aria-hidden', 'false');
+      sheet.classList.toggle('is-over', !!(escaneoMasivo && !escaneoMasivo.hidden));
       document.body.classList.add('ios-sheet-open');
       sheet.querySelector('[data-admin]').href = appBase + '/lotes';
       var status = sheet.querySelector('[data-status]');
@@ -732,12 +790,8 @@
             b.innerHTML = '<strong>' + escAttr(lot.nombre) + '</strong>' +
               (lot.fecha_vencimiento ? '<small>Vence ' + escAttr(lot.fecha_vencimiento) + '</small>' : '<small>Sin fecha</small>');
             b.addEventListener('click', function () {
-              if (!lineas[idx]) return;
-              lineas[idx].lote = lot.nombre || '';
-              lineas[idx].producto_lote_id = lot.id || '';
-              if (lot.fecha_vencimiento) lineas[idx].fecha_vencimiento = lot.fecha_vencimiento;
+              onElegir(lot);
               cerrarLotePicker();
-              renderLineas();
             });
             lista.appendChild(b);
           });
@@ -836,7 +890,13 @@
         var elegirLoteBtn = row.querySelector('[data-elegir-lote]');
         if (elegirLoteBtn) {
           elegirLoteBtn.addEventListener('click', function () {
-            abrirLotePicker(prod || { id: ln.catalog_item_id, nombre: ln.nombre }, idx);
+            abrirLotePicker(function (lot) {
+              if (!lineas[idx]) return;
+              lineas[idx].lote = lot.nombre || '';
+              lineas[idx].producto_lote_id = lot.id || '';
+              if (lot.fecha_vencimiento) lineas[idx].fecha_vencimiento = lot.fecha_vencimiento;
+              renderLineas();
+            });
           });
         }
         var venceInput = row.querySelector('[data-vence]');
@@ -1079,6 +1139,16 @@
         escaneoSeries = [];
         renderEscaneoLista();
         escaneoMasivoInput && escaneoMasivoInput.focus();
+      });
+      escaneoMasivoElegirLote && escaneoMasivoElegirLote.addEventListener('click', function () {
+        abrirLotePicker(function (lot) {
+          escaneoLote = {
+            id: lot.id || '',
+            nombre: lot.nombre || '',
+            fecha_vencimiento: lot.fecha_vencimiento || '',
+          };
+          pintarEscaneoLote(escaneoProducto);
+        });
       });
       escaneoMasivoAgregar && escaneoMasivoAgregar.addEventListener('click', function () {
         agregarSeriesDesdeTexto(escaneoMasivoInput ? escaneoMasivoInput.value : '');
