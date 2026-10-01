@@ -4421,6 +4421,11 @@ select.ios-hist-input,
   color: #007AFF;
   font-weight: 700;
 }
+.ios-orden-linea-lote .ios-lote-fecha {
+  align-self: center;
+  font-size: 13px;
+  white-space: nowrap;
+}
 @media (max-width: 520px) {
   .ios-lote-nuevo { grid-template-columns: 1fr 0.9fr; }
 }

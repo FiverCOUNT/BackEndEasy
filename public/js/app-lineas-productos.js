@@ -714,6 +714,14 @@
       cerrarEscaneoMasivo();
     }
 
+    function textoFechaLote(raw) {
+      var partes = String(raw || '').slice(0, 10).split('-');
+      var meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+      var mes = meses[Number(partes[1]) - 1];
+      if (partes.length !== 3 || !mes) return '';
+      return Number(partes[2]) + ' de ' + mes + ' ' + partes[0];
+    }
+
     function escAttr(s) {
       return String(s == null ? '' : s)
         .replace(/&/g, '&amp;')
@@ -823,18 +831,19 @@
           '<span class="ios-orden-linea-unidad">' + unidadLbl + '</span></div>';
         var serieHtml = '';
         var pideLote = isIngreso && (ln.maneja_lote === true || (prod && prod.maneja_lote === true));
-        var pideVence = isIngreso && (ln.maneja_vencimiento === true || (prod && prod.maneja_vencimiento === true));
+        var pideVence = isIngreso && !pideLote && (ln.maneja_vencimiento === true || (prod && prod.maneja_vencimiento === true));
         var loteHtml = '';
-        if (pideLote || pideVence) {
+        if (pideLote) {
+          var fechaLote = ln.producto_lote_id ? (textoFechaLote(ln.fecha_vencimiento) || 'Sin fecha') : '';
           loteHtml = '<div class="ios-orden-linea-lote">' +
-            (pideLote
-              ? '<button type="button" class="ios-orden-linea-serie-btn" data-elegir-lote>' +
-                  (ln.lote ? ('Lote ' + escAttr(ln.lote)) : 'Elegir lote') +
-                '</button>'
-              : '') +
-            (pideVence
-              ? '<input type="date" value="' + escAttr(ln.fecha_vencimiento || '') + '" data-vence />'
-              : '') +
+            '<button type="button" class="ios-orden-linea-serie-btn" data-elegir-lote>' +
+              (ln.lote ? ('Lote ' + escAttr(ln.lote)) : 'Elegir lote') +
+            '</button>' +
+            (fechaLote ? '<span class="ios-lote-fecha">' + escAttr(fechaLote) + '</span>' : '') +
+          '</div>';
+        } else if (pideVence) {
+          loteHtml = '<div class="ios-orden-linea-lote">' +
+            '<input type="date" value="' + escAttr(ln.fecha_vencimiento || '') + '" data-vence />' +
           '</div>';
         }
         if (ln.maneja_serie) {
@@ -894,7 +903,7 @@
               if (!lineas[idx]) return;
               lineas[idx].lote = lot.nombre || '';
               lineas[idx].producto_lote_id = lot.id || '';
-              if (lot.fecha_vencimiento) lineas[idx].fecha_vencimiento = lot.fecha_vencimiento;
+              lineas[idx].fecha_vencimiento = lot.fecha_vencimiento || '';
               renderLineas();
             });
           });
@@ -977,7 +986,7 @@
         var sinLote = lineas.find(function (ln) {
           var prodLn = productoPorId(ln.catalog_item_id);
           var pide = ln.maneja_lote === true || (prodLn && prodLn.maneja_lote === true);
-          return pide && !String(ln.lote || '').trim();
+          return pide && !String(ln.producto_lote_id || '').trim();
         });
         if (sinLote) {
           window.alert('Indica el lote de: ' + (sinLote.nombre || 'producto'));
@@ -985,7 +994,8 @@
         }
         var sinVence = lineas.find(function (ln) {
           var prodLn = productoPorId(ln.catalog_item_id);
-          var pide = ln.maneja_vencimiento === true || (prodLn && prodLn.maneja_vencimiento === true);
+          var conLote = ln.maneja_lote === true || (prodLn && prodLn.maneja_lote === true);
+          var pide = !conLote && (ln.maneja_vencimiento === true || (prodLn && prodLn.maneja_vencimiento === true));
           return pide && !/^\d{4}-\d{2}-\d{2}$/.test(String(ln.fecha_vencimiento || ''));
         });
         if (sinVence) {
