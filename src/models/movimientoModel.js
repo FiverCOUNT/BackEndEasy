@@ -112,8 +112,9 @@ function toApiLinea(linea) {
     almacen_id: linea.almacenId,
     producto_serie_id: linea.productoSerieId,
     producto_serie: linea.productoSerie ? productoSerieModel.toApi(linea.productoSerie) : null,
-    lote: linea.lote || null,
-    fecha_vencimiento: linea.fechaVencimiento || null,
+    producto_lote_id: linea.productoLoteId || null,
+    lote: linea.productoLote?.numeroLote || null,
+    fecha_vencimiento: linea.productoLote?.fechaVencimiento || null,
   };
 }
 
@@ -171,6 +172,7 @@ const movimientoInclude = {
   lineas: {
     include: {
       productoSerie: true,
+      productoLote: { select: { id: true, numeroLote: true, fechaVencimiento: true } },
       catalogItem: { select: { id: true, manejaSerie: true } },
     },
     orderBy: { lineaId: 'asc' },
@@ -182,8 +184,7 @@ const movimientoInclude = {
     select: { id: true, email: true },
   },
 };
-function snapshotLineaFromItem(item, { almacenId, cantidad, productoSerieId, lote, fechaVencimiento }) {
-  const fecha = String(fechaVencimiento || '').trim().slice(0, 10);
+function snapshotLineaFromItem(item, { almacenId, cantidad, productoSerieId, productoLoteId }) {
   return {
     catalogItemId: item.id,
     nombre: item.nombre,
@@ -198,9 +199,54 @@ function snapshotLineaFromItem(item, { almacenId, cantidad, productoSerieId, lot
     cantidad,
     almacenId,
     productoSerieId: productoSerieId || null,
-    lote: String(lote || '').trim().slice(0, 64) || null,
-    fechaVencimiento: /^\d{4}-\d{2}-\d{2}$/.test(fecha) ? fecha : null,
+    productoLoteId: productoLoteId || null,
   };
+}
+
+async function resolverProductoLoteId(tx, { companyRuc, catalogItemId, numero, fecha, productoLoteId }) {
+  const existingId = String(productoLoteId || '').trim();
+  if (existingId) return existingId;
+  const numeroLote = String(numero || '').trim().slice(0, 64);
+  if (!numeroLote || !catalogItemId || !companyRuc) return null;
+  const fechaRaw = String(fecha || '').trim().slice(0, 10);
+  const fechaVencimiento = /^\d{4}-\d{2}-\d{2}$/.test(fechaRaw) ? fechaRaw : null;
+  const client = tx || prisma;
+  const found = await client.productoLote.findUnique({
+    where: {
+      companyRuc_catalogItemId_numeroLote: { companyRuc, catalogItemId, numeroLote },
+    },
+  });
+  if (found) {
+    if (fechaVencimiento && found.fechaVencimiento !== fechaVencimiento) {
+      await client.productoLote.update({
+        where: { id: found.id },
+        data: { fechaVencimiento },
+      });
+    }
+    return found.id;
+  }
+  const id = randomUUID();
+  await client.productoLote.create({
+    data: {
+      id,
+      companyRuc,
+      catalogItemId,
+      numeroLote,
+      fechaVencimiento,
+    },
+  });
+  return id;
+}
+
+async function snapshotConLote(tx, companyRuc, item, linea, extra) {
+  const productoLoteId = await resolverProductoLoteId(tx, {
+    companyRuc,
+    catalogItemId: item.id,
+    numero: linea?.lote,
+    fecha: linea?.fechaVencimiento,
+    productoLoteId: linea?.productoLoteId,
+  });
+  return snapshotLineaFromItem(item, { ...extra, productoLoteId });
 }
 
 async function nextNumeroEntrada(companyRuc, tx) {
@@ -543,9 +589,12 @@ async function registrarEntrada({
         if (ingresaSeries) {
           if (!esRegreso) {
             const serieId = serieIdByNumero.get(linea.numeroSerie);
-            lineasCreate.push(snapshotLineaFromItem(
+            lineasCreate.push(await snapshotConLote(
+              tx,
+              companyRuc,
               { ...item, manejaSerie: true, manejaStock: true },
-              { almacenId, cantidad: 1, productoSerieId: serieId, lote: linea.lote, fechaVencimiento: linea.fechaVencimiento },
+              linea,
+              { almacenId, cantidad: 1, productoSerieId: serieId },
             ));
             continue;
           }
@@ -624,12 +673,10 @@ async function registrarEntrada({
             });
           }
 
-          lineasCreate.push(snapshotLineaFromItem(item, {
+          lineasCreate.push(await snapshotConLote(tx, companyRuc, item, linea, {
             almacenId,
             cantidad: 1,
             productoSerieId: serie.id,
-            lote: linea.lote,
-            fechaVencimiento: linea.fechaVencimiento,
           }));
         } else if (afectaSaldo) {
           const key = inventarioModel.saldoKey(item.id, almacenId);
@@ -661,20 +708,16 @@ async function registrarEntrada({
           }
 
           lineasCreate.push(
-            snapshotLineaFromItem(item, {
+            await snapshotConLote(tx, companyRuc, item, linea, {
               almacenId: almacenId,
               cantidad: linea.cantidad,
-              lote: linea.lote,
-              fechaVencimiento: linea.fechaVencimiento,
             }),
           );
         } else {
           lineasCreate.push(
-            snapshotLineaFromItem(item, {
+            await snapshotConLote(tx, companyRuc, item, linea, {
               almacenId: almacenId,
               cantidad: linea.cantidad,
-              lote: linea.lote,
-              fechaVencimiento: linea.fechaVencimiento,
             }),
           );
         }
@@ -830,15 +873,14 @@ async function registrarEntradaEnCamino({
   try {
     await prisma.$transaction(async (tx) => {
       const numero = await nextNumeroEntrada(companyRuc, tx);
-      const lineasCreate = parsedLineas.map((linea) => {
+      const lineasCreate = [];
+      for (const linea of parsedLineas) {
         const item = itemsById.get(linea.catalogItemId);
-        return snapshotLineaFromItem(item, {
+        lineasCreate.push(await snapshotConLote(tx, companyRuc, item, linea, {
           almacenId,
           cantidad: linea.cantidad,
-          lote: linea.lote,
-          fechaVencimiento: linea.fechaVencimiento,
-        });
-      });
+        }));
+      }
 
       await tx.movimiento.create({
         data: {
@@ -1067,12 +1109,10 @@ async function registrarSalida({
             await tx.inventario.deleteMany({ where: { productoSerieId: serie.id } });
           }
 
-          lineasCreate.push(snapshotLineaFromItem(item, {
+          lineasCreate.push(await snapshotConLote(tx, companyRuc, item, linea, {
             almacenId: almSerie,
             cantidad: 1,
             productoSerieId: serie.id,
-            lote: linea.lote,
-            fechaVencimiento: linea.fechaVencimiento,
           }));
         } else if (usaInventarioCantidad(item, linea)) {
           const key = inventarioModel.saldoKey(item.id, almLinea);
@@ -1128,18 +1168,14 @@ async function registrarSalida({
             });
           }
 
-          lineasCreate.push(snapshotLineaFromItem(item, {
+          lineasCreate.push(await snapshotConLote(tx, companyRuc, item, linea, {
             almacenId: almLinea,
             cantidad: linea.cantidad,
-            lote: linea.lote,
-            fechaVencimiento: linea.fechaVencimiento,
           }));
         } else {
-          lineasCreate.push(snapshotLineaFromItem(item, {
+          lineasCreate.push(await snapshotConLote(tx, companyRuc, item, linea, {
             almacenId: almLinea,
             cantidad: linea.cantidad,
-            lote: linea.lote,
-            fechaVencimiento: linea.fechaVencimiento,
           }));
         }
       }
@@ -1308,8 +1344,7 @@ async function regresarSalida({
         productoSerieId: l.productoSerieId,
         numeroSerie: l.productoSerie?.numeroSerie || undefined,
         almacenId: destinoId,
-        lote: l.lote || undefined,
-        fechaVencimiento: l.fechaVencimiento || undefined,
+        productoLoteId: l.productoLoteId || undefined,
       });
       continue;
     }
@@ -1319,8 +1354,7 @@ async function regresarSalida({
       catalogItemId,
       cantidad,
       almacenId: destinoId,
-      lote: l.lote || undefined,
-      fechaVencimiento: l.fechaVencimiento || undefined,
+      productoLoteId: l.productoLoteId || undefined,
     });
   }
   if (!lineas.length) return { error: 'lineas_vacias' };

@@ -226,21 +226,36 @@ model LineaCatalogoItem {
   cantidad        Decimal  @db.Decimal(14, 4)
   almacenId       String?  @map("almacen_id") @db.VarChar(36)
   productoSerieId String?  @map("producto_serie_id") @db.VarChar(36)
-  /// Código de lote de esta línea. Vacío si no aplica.
-  lote            String?  @db.VarChar(64)
-  /// YYYY-MM-DD. Vencimiento de esta línea.
-  fechaVencimiento String? @map("fecha_vencimiento") @db.VarChar(10)
+  productoLoteId  String?  @map("producto_lote_id") @db.VarChar(36)
 
   movimiento    Movimiento     @relation(fields: [movimientoId], references: [id], onDelete: Cascade)
   productoSerie ProductoSerie? @relation(fields: [productoSerieId], references: [id], onDelete: SetNull)
+  productoLote  ProductoLote?  @relation(fields: [productoLoteId], references: [id], onDelete: SetNull)
   catalogItem   CatalogItem    @relation(fields: [catalogItemId], references: [id])
   almacen       Almacen?       @relation(fields: [almacenId], references: [id], onDelete: SetNull)
 
   @@index([movimientoId])
   @@index([catalogItemId])
   @@index([productoSerieId])
+  @@index([productoLoteId])
   @@index([almacenId])
   @@map("linea_catalogo_items")
+}
+
+/// Partida de un producto: el nombre del lote y su caducidad.
+model ProductoLote {
+  id               String  @id @db.VarChar(36)
+  companyRuc       String  @map("company_ruc") @db.VarChar(11)
+  catalogItemId    String  @map("catalog_item_id") @db.VarChar(36)
+  numeroLote       String  @map("numero_lote") @db.VarChar(64)
+  fechaVencimiento String? @map("fecha_vencimiento") @db.VarChar(10)
+
+  catalogItem CatalogItem         @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+  lineas      LineaCatalogoItem[]
+
+  @@unique([companyRuc, catalogItemId, numeroLote], map: "producto_lotes_company_item_numero_key")
+  @@index([catalogItemId])
+  @@map("producto_lotes")
 }
 
 enum CatalogItemKind {
@@ -269,6 +284,7 @@ model CatalogItem {
   duracionMinutos Int?     @map("duracion_minutos")
 
   productoSeries ProductoSerie[]
+  productoLotes  ProductoLote[]
   lineasCatalogo LineaCatalogoItem[]
   saleDetails    SaleDetail[]
   inventario     Inventario[]
