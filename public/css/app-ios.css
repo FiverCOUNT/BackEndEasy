@@ -1629,6 +1629,16 @@ a.ios-selected-card-change {
   grid-template-columns: 1fr 1fr auto;
   gap: 8px;
 }
+.ios-filter-row.is-with-lote {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) minmax(0, 1fr) auto;
+}
+.ios-lote-filter-btn {
+  width: 100%;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .ios-filter-row select,
 .ios-select {
   appearance: none;
@@ -2975,7 +2985,8 @@ a.ios-selected-card-change {
 }
 
 @media (max-width: 860px) {
-  .ios-filter-row { grid-template-columns: 1fr; }
+  .ios-filter-row,
+  .ios-filter-row.is-with-lote { grid-template-columns: 1fr; }
 }
 
 /* â€”â€” Ajustes â€”â€” */

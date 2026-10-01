@@ -122,9 +122,19 @@ async function list(req, res, next) {
       almacenId = res.locals.userAlmacenId || almacenId;
     }
 
-    const almacenes = isAdmin
-      ? await almacenModel.findByCompanyRuc(companyRuc, { soloActivos: true })
-      : [];
+    const loteId = String(req.query.lote || '').trim();
+    const [almacenes, lotes] = await Promise.all([
+      isAdmin
+        ? almacenModel.findByCompanyRuc(companyRuc, { soloActivos: true })
+        : Promise.resolve([]),
+      productoLoteModel.listByCompany(companyRuc),
+    ]);
+    const lote = loteId ? lotes.find((row) => row.id === loteId) : null;
+    let ids = null;
+    if (lote) {
+      const delLote = await productoLoteModel.productosDelLote(companyRuc, lote.id);
+      ids = [...new Set((delLote?.items || []).map((item) => item.id).filter(Boolean))];
+    }
 
     const { total, items: pageItems } = await catalogItemModel.findPaginated({
       q,
@@ -135,6 +145,7 @@ async function list(req, res, next) {
       skip,
       soloActivos: !isAdmin,
       almacenId,
+      ids,
     });
 
     const enriched = pageItems;
@@ -147,6 +158,7 @@ async function list(req, res, next) {
         q,
         kind: kindFilter || undefined,
         almacen: almacenId || undefined,
+        lote: lote ? lote.id : undefined,
         msg: req.query.msg,
         tipo: req.query.tipo,
       },
@@ -168,6 +180,9 @@ async function list(req, res, next) {
       kind: kindFilter,
       almacenId,
       almacenes,
+      loteId: lote ? lote.id : '',
+      loteNombre: lote ? lote.nombre : '',
+      lotes,
       loadMore,
       flash: parseFlash(req),
     }));

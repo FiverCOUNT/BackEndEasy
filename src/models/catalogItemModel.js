@@ -61,7 +61,13 @@ function toPublic(item) {
   };
 }
 
-function buildSearchWhere({ q = '', kind = '', companyRuc = '', soloActivos = false } = {}) {
+function buildSearchWhere({
+  q = '',
+  kind = '',
+  companyRuc = '',
+  soloActivos = false,
+  ids = null,
+} = {}) {
   const where = {};
 
   if (companyRuc) {
@@ -74,6 +80,10 @@ function buildSearchWhere({ q = '', kind = '', companyRuc = '', soloActivos = fa
 
   if (soloActivos) {
     where.activo = true;
+  }
+
+  if (Array.isArray(ids)) {
+    where.id = { in: ids };
   }
 
   const term = (q || '').trim();
@@ -203,8 +213,12 @@ async function findPaginated({
   skip = 0,
   soloActivos = false,
   almacenId = null,
+  ids = null,
 }) {
-  const where = buildSearchWhere({ q, kind, companyRuc, soloActivos });
+  if (Array.isArray(ids) && ids.length === 0) {
+    return { total: 0, items: [] };
+  }
+  const where = buildSearchWhere({ q, kind, companyRuc, soloActivos, ids });
 
   const [total, rows] = await Promise.all([
     prisma.catalogItem.count({ where }),
