@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title><%= title %> · Easy</title>
-  <link rel="stylesheet" href="/css/app-ios.css?v=lote-productos" />
+  <link rel="stylesheet" href="/css/app-ios.css?v=valor-der" />
 </head>
 <body class="ios-app">
   <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
@@ -134,16 +134,19 @@
       statusEl.textContent = productos + ' producto' + (productos === 1 ? '' : 's');
       items.forEach(function (it) {
         var row = document.createElement('div');
-        row.className = 'ios-sheet-item';
+        row.className = 'ios-sheet-item is-side';
+        var copy = '<div class="ios-sheet-item-copy"><strong>' + esc(it.nombre) + '</strong>';
+        var valor = '';
         if (it.tipo === 'serie') {
-          var html = '<strong>' + esc(it.nombre) + '</strong>';
           (it.series || []).forEach(function (s) {
-            html += '<span>Serie ' + esc(s.numero_serie || '—') + '</span>';
+            copy += '<span>Serie ' + esc(s.numero_serie || '—') + '</span>';
           });
-          row.innerHTML = html;
+          valor = (it.series || []).length + ' und';
         } else {
-          row.innerHTML = '<strong>' + esc(it.nombre) + '</strong><span>' + esc(it.cantidad) + ' ' + esc(it.unidad || '') + '</span>';
+          valor = String(it.cantidad || '') + ' ' + String(it.unidad || '');
         }
+        copy += '</div>';
+        row.innerHTML = copy + '<span class="ios-valor">' + esc(valor.trim()) + '</span>';
         lista.appendChild(row);
       });
     }

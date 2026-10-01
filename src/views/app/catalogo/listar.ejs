@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title><%= title %> · Easy</title>
-  <link rel="stylesheet" href="/css/app-ios.css?v=cat-lote" />
+  <link rel="stylesheet" href="/css/app-ios.css?v=valor-der" />
 </head>
 <body class="ios-app">
   <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
@@ -104,9 +104,6 @@
                 <% if (it.unidad) { %> · <%= it.unidad %><% } %>
                 <% if (it.codigoSunat) { %> · SUNAT <%= it.codigoSunat %><% } %>
               </div>
-              <% if (it.stockLabel) { %>
-                <div class="ios-catalog-stock"><%= it.stockLabel %></div>
-              <% } %>
               <% if (it.compraLabel) { %>
                 <div class="ios-catalog-sub">Compra <%= it.compraLabel %></div>
               <% } %>
@@ -120,6 +117,9 @@
             <% if (conSerie || !isWebAdmin) { %></div><% } else { %></a><% } %>
             <div class="ios-catalog-right">
               <span class="ios-price"><%= it.precioLabel %></span>
+              <% if (it.stockLabel) { %>
+                <span class="ios-catalog-stock"><%= it.stockLabel %></span>
+              <% } %>
               <% if (!isWebAdmin && conSerie) { %>
                 <button
                   type="button"
