@@ -130,32 +130,21 @@
         statusEl.textContent = 'Este lote no tiene productos en stock.';
         return;
       }
-      var series = 0;
       var productos = items.length;
+      statusEl.textContent = productos + ' producto' + (productos === 1 ? '' : 's');
       items.forEach(function (it) {
-        if (it.tipo === 'serie') series += (it.series || []).length;
-      });
-      statusEl.textContent = productos + ' producto' + (productos === 1 ? '' : 's')
-        + (series ? (' · ' + series + ' serie' + (series === 1 ? '' : 's')) : '');
-      items.forEach(function (it) {
+        var row = document.createElement('div');
+        row.className = 'ios-sheet-item';
         if (it.tipo === 'serie') {
-          var head = document.createElement('div');
-          head.className = 'ios-sheet-item';
-          head.innerHTML = '<strong>' + esc(it.nombre) + '</strong><span>' + esc(it.series.length) + ' serie' + (it.series.length === 1 ? '' : 's') + '</span>';
-          lista.appendChild(head);
+          var html = '<strong>' + esc(it.nombre) + '</strong>';
           (it.series || []).forEach(function (s) {
-            var row = document.createElement('div');
-            row.className = 'ios-sheet-item';
-            var meta = [s.estado || '', s.almacen_nombre || ''].filter(Boolean).join(' · ');
-            row.innerHTML = '<strong>' + esc(s.numero_serie || '—') + '</strong><span>' + esc(meta) + '</span>';
-            lista.appendChild(row);
+            html += '<span>Serie ' + esc(s.numero_serie || '—') + '</span>';
           });
-          return;
+          row.innerHTML = html;
+        } else {
+          row.innerHTML = '<strong>' + esc(it.nombre) + '</strong><span>' + esc(it.cantidad) + ' ' + esc(it.unidad || '') + '</span>';
         }
-        var rowQty = document.createElement('div');
-        rowQty.className = 'ios-sheet-item';
-        rowQty.innerHTML = '<strong>' + esc(it.nombre) + '</strong><span>' + esc(it.cantidad) + ' ' + esc(it.unidad || '') + '</span>';
-        lista.appendChild(rowQty);
+        lista.appendChild(row);
       });
     }
 
