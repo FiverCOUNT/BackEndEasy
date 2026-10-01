@@ -1576,6 +1576,8 @@ function mapIngresoError(result) {
     cantidad_series: 'Con serie la cantidad debe ser 1.',
     cantidad_invalida: 'Cantidad inválida.',
     serie_existente: `La serie ya existe${result.numeroSerie ? `: ${result.numeroSerie}` : ''}.`,
+    lote_requerido: `Indica el lote${result.nombre ? ` de ${result.nombre}` : ''}.`,
+    vencimiento_requerido: `Indica la fecha de vencimiento${result.nombre ? ` de ${result.nombre}` : ''}.`,
     cliente_requerido: 'Selecciona un cliente.',
     cliente_not_found: 'Cliente no encontrado.',
   };

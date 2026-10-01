@@ -40,6 +40,8 @@ function formFromBody(body, companyRuc) {
     activo: parsed.activo,
     manejaStock: parsed.manejaStock,
     manejaSerie: parsed.manejaSerie,
+    manejaLote: parsed.manejaLote,
+    manejaVencimiento: parsed.manejaVencimiento,
     duracionMinutos: parsed.duracionMinutos != null ? String(parsed.duracionMinutos) : '60',
   };
 }
@@ -61,6 +63,8 @@ function formFromItem(item) {
     activo: p.activo,
     manejaStock: p.manejaStock,
     manejaSerie: p.manejaSerie,
+    manejaLote: p.manejaLote,
+    manejaVencimiento: p.manejaVencimiento,
     duracionMinutos: p.duracionMinutos != null ? String(p.duracionMinutos) : '60',
   };
 }
@@ -186,6 +190,8 @@ async function showCreateForm(req, res, next) {
         activo: true,
         manejaStock: true,
         manejaSerie: false,
+        manejaLote: false,
+        manejaVencimiento: false,
         afectacionIgv: '10',
         precioUnitario: '',
         precioCompra: '',

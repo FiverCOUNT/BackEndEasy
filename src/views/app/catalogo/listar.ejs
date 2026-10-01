@@ -101,6 +101,13 @@
               <% if (it.compraLabel) { %>
                 <div class="ios-catalog-sub">Compra <%= it.compraLabel %></div>
               <% } %>
+              <% if (it.manejaLote || it.maneja_lote || it.manejaVencimiento || it.maneja_vencimiento) { %>
+                <div class="ios-catalog-sub">
+                  <% if (it.manejaLote || it.maneja_lote) { %>Con lote<% } %>
+                  <% if ((it.manejaLote || it.maneja_lote) && (it.manejaVencimiento || it.maneja_vencimiento)) { %> · <% } %>
+                  <% if (it.manejaVencimiento || it.maneja_vencimiento) { %>Con vencimiento<% } %>
+                </div>
+              <% } %>
             <% if (conSerie || !isWebAdmin) { %></div><% } else { %></a><% } %>
             <div class="ios-catalog-right">
               <span class="ios-price"><%= it.precioLabel %></span>

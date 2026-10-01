@@ -35,6 +35,8 @@ function toApi(item) {
     activo: item.activo !== false,
     maneja_stock: Boolean(item.manejaStock),
     maneja_serie: Boolean(item.manejaSerie),
+    maneja_lote: Boolean(item.manejaLote),
+    maneja_vencimiento: Boolean(item.manejaVencimiento),
     stock_actual: toNumber(item.stockActual),
     duracion_minutos: item.duracionMinutos,
   };
@@ -52,6 +54,8 @@ function toPublic(item) {
     afectacionIgv: api.afectacion_igv,
     manejaStock: api.maneja_stock,
     manejaSerie: api.maneja_serie,
+    manejaLote: api.maneja_lote,
+    manejaVencimiento: api.maneja_vencimiento,
     stockActual: api.stock_actual,
     duracionMinutos: api.duracion_minutos,
   };
@@ -133,6 +137,22 @@ function parseBody(body) {
       body.maneja_serie === 'on' ||
       body.maneja_serie === 'true' ||
       body.maneja_serie === true,
+    manejaLote: isProduct && (
+      body.manejaLote === 'on' ||
+      body.manejaLote === 'true' ||
+      body.manejaLote === true ||
+      body.maneja_lote === 'on' ||
+      body.maneja_lote === 'true' ||
+      body.maneja_lote === true
+    ),
+    manejaVencimiento: isProduct && (
+      body.manejaVencimiento === 'on' ||
+      body.manejaVencimiento === 'true' ||
+      body.manejaVencimiento === true ||
+      body.maneja_vencimiento === 'on' ||
+      body.maneja_vencimiento === 'true' ||
+      body.maneja_vencimiento === true
+    ),
     stockActual: toNumber(body.stockActual ?? body.stock_actual),
     duracionMinutos:
       body.duracionMinutos != null || body.duracion_minutos != null
@@ -335,6 +355,8 @@ async function create(body, id = randomUUID()) {
       activo: data.activo,
       manejaStock,
       manejaSerie,
+      manejaLote: data.kind === 'PRODUCT' ? data.manejaLote : false,
+      manejaVencimiento: data.kind === 'PRODUCT' ? data.manejaVencimiento : false,
       stockActual: null,
       duracionMinutos: data.kind === 'SERVICE' ? data.duracionMinutos : null,
     },
@@ -419,6 +441,8 @@ async function update(id, body) {
       activo: data.activo,
       manejaStock,
       manejaSerie,
+      manejaLote: data.kind === 'PRODUCT' ? data.manejaLote : false,
+      manejaVencimiento: data.kind === 'PRODUCT' ? data.manejaVencimiento : false,
       stockActual: null,
       duracionMinutos: data.kind === 'SERVICE' ? data.duracionMinutos : null,
     },

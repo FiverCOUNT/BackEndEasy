@@ -280,6 +280,10 @@ model CatalogItem {
   activo          Boolean  @default(true)
   manejaStock     Boolean  @default(false) @map("maneja_stock")
   manejaSerie     Boolean  @default(false) @map("maneja_serie")
+  /// Al ingresar este producto hay que indicar el lote.
+  manejaLote      Boolean  @default(false) @map("maneja_lote")
+  /// Al ingresar este producto hay que indicar la fecha de vencimiento.
+  manejaVencimiento Boolean @default(false) @map("maneja_vencimiento")
   stockActual     Decimal? @map("stock_actual") @db.Decimal(14, 4)
   duracionMinutos Int?     @map("duracion_minutos")
 

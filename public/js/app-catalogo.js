@@ -7,8 +7,12 @@
   const wrapProducto = document.getElementById('unidadProductoWrap');
   const wrapServicio = document.getElementById('unidadServicioWrap');
   const serieWrap = document.getElementById('serieWrap');
+  const loteSwitch = document.getElementById('loteSwitch');
+  const venceSwitch = document.getElementById('venceSwitch');
   const manejaSerie = document.getElementById('manejaSerie');
   const manejaStock = document.getElementById('manejaStock');
+  const manejaLote = document.getElementById('manejaLote');
+  const manejaVencimiento = document.getElementById('manejaVencimiento');
 
   function selectedKind() {
     const el = form.querySelector('input[name="kind"]:checked');
@@ -25,11 +29,15 @@
     if (wrapProducto) wrapProducto.hidden = isService;
     if (wrapServicio) wrapServicio.hidden = !isService;
     if (serieWrap) serieWrap.hidden = isService;
+    if (loteSwitch) loteSwitch.hidden = isService;
+    if (venceSwitch) venceSwitch.hidden = isService;
 
     if (isService) {
       unidadHidden.value = 'ZZ';
       if (manejaSerie) manejaSerie.checked = false;
       if (manejaStock) manejaStock.checked = false;
+      if (manejaLote) manejaLote.checked = false;
+      if (manejaVencimiento) manejaVencimiento.checked = false;
     } else {
       const chip = form.querySelector('input[name="unidadProducto"]:checked');
       unidadHidden.value = chip ? chip.value : 'NIU';

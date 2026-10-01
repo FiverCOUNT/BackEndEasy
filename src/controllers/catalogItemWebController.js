@@ -50,6 +50,8 @@ function formFromBody(body) {
     activo: parsed.activo,
     manejaStock: parsed.manejaStock,
     manejaSerie: parsed.manejaSerie,
+    manejaLote: parsed.manejaLote,
+    manejaVencimiento: parsed.manejaVencimiento,
     stockActual: parsed.stockActual != null ? String(parsed.stockActual) : '',
     duracionMinutos: parsed.duracionMinutos != null ? String(parsed.duracionMinutos) : '',
   };
@@ -71,6 +73,8 @@ function formFromItem(item) {
     activo: p.activo,
     manejaStock: p.manejaStock,
     manejaSerie: p.manejaSerie,
+    manejaLote: p.manejaLote,
+    manejaVencimiento: p.manejaVencimiento,
     stockActual: p.stockActual != null ? String(p.stockActual) : '',
     duracionMinutos: p.duracionMinutos != null ? String(p.duracionMinutos) : '',
   };

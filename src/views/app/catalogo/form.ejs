@@ -118,6 +118,20 @@
           </span>
           <input type="checkbox" name="manejaStock" <%= form.manejaStock ? 'checked' : '' %> id="manejaStock" />
         </label>
+        <label class="ios-switch-row" id="loteSwitch">
+          <span>
+            <strong>Tiene lote</strong>
+            <small>Se pide al ingresar</small>
+          </span>
+          <input type="checkbox" name="manejaLote" <%= form.manejaLote ? 'checked' : '' %> id="manejaLote" />
+        </label>
+        <label class="ios-switch-row" id="venceSwitch">
+          <span>
+            <strong>Tiene vencimiento</strong>
+            <small>Se pide al ingresar</small>
+          </span>
+          <input type="checkbox" name="manejaVencimiento" <%= form.manejaVencimiento ? 'checked' : '' %> id="manejaVencimiento" />
+        </label>
         <label class="ios-switch-row">
           <span>
             <strong>Activo</strong>
@@ -148,6 +162,6 @@
   </div>
 
   <%- include('../../partials/app-tabbar', { active: active }) %>
-  <script src="/js/app-catalogo.js?v=precio"></script>
+  <script src="/js/app-catalogo.js?v=flags-lote"></script>
 </body>
 </html>

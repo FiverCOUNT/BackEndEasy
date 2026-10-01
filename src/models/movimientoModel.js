@@ -18,6 +18,14 @@ function usaSeriesInventario(item) {
   return Boolean(item?.manejaSerie && unidadPermiteSerie(item.unidad));
 }
 
+function validarLoteIngreso(item, linea) {
+  if (!item || linea?.productoLoteId) return null;
+  if (item.manejaLote && !String(linea?.lote || '').trim()) return 'lote_requerido';
+  const fecha = String(linea?.fechaVencimiento || '').trim().slice(0, 10);
+  if (item.manejaVencimiento && !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return 'vencimiento_requerido';
+  return null;
+}
+
 function lineaUsaSeries(item, linea) {
   // Producto ya marcado con series, o ingreso que trae número de serie (activa series).
   if (usaSeriesInventario(item)) return true;
@@ -483,6 +491,11 @@ async function registrarEntrada({
     if (!item) return { error: 'item_not_found', catalogItemId: linea.catalogItemId };
     if (item.activo === false) {
       return { error: 'item_inactivo', catalogItemId: linea.catalogItemId };
+    }
+
+    if (!esRegreso) {
+      const faltaLote = validarLoteIngreso(item, linea);
+      if (faltaLote) return { error: faltaLote, nombre: item.nombre };
     }
 
     if (lineaUsaSeries(item, linea)) {
@@ -1378,6 +1391,7 @@ async function regresarSalida({
 module.exports = {
   toApiMovimiento,
   toApiLinea,
+  validarLoteIngreso,
   findById,
   findMany,
   findByCliente,

@@ -29,6 +29,8 @@
           precio_unitario: it.precioUnitario != null ? it.precioUnitario : (it.precio_unitario || 0),
           maneja_stock: it.manejaStock === true || it.maneja_stock === true,
           maneja_serie: it.manejaSerie === true || it.maneja_serie === true,
+          maneja_lote: it.manejaLote === true || it.maneja_lote === true,
+          maneja_vencimiento: it.manejaVencimiento === true || it.maneja_vencimiento === true,
           stock_actual: it.stock_actual != null ? it.stock_actual : (it.stockActual != null ? it.stockActual : null),
           kind: it.kind || 'PRODUCT',
         };
@@ -178,7 +180,7 @@
   <script src="/js/app-emit-loading.js"></script>
   <%- include('../../partials/app-barcode-serie') %>
   <script src="/js/app-barcode-serie.js?v=scan-salida"></script>
-  <script src="/js/app-lineas-productos.js?v=lote-linea"></script>
+  <script src="/js/app-lineas-productos.js?v=flags-lote"></script>
   <script>
   (function () {
     var form = document.getElementById('salidaForm');

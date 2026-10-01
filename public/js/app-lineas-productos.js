@@ -188,6 +188,8 @@
               precio_unitario: fresh.precio_unitario != null ? fresh.precio_unitario : p.precio_unitario,
               maneja_stock: fresh.maneja_stock === true,
               maneja_serie: fresh.maneja_serie === true,
+              maneja_lote: fresh.maneja_lote === true,
+              maneja_vencimiento: fresh.maneja_vencimiento === true,
               stock_actual: fresh.stock_actual,
               kind: fresh.kind || p.kind,
             });
@@ -454,6 +456,8 @@
           precio_unitario: precio,
           unidad: producto.unidad || 'NIU',
           maneja_serie: true,
+          maneja_lote: producto.maneja_lote === true,
+          maneja_vencimiento: producto.maneja_vencimiento === true,
           almacen_id: s.almacen_id || s.almacenId || alm,
           producto_serie_id: id,
           numero_serie: s.numero_serie || s.numeroSerie || '',
@@ -516,6 +520,8 @@
           unidad: p.unidad || 'NIU',
           maneja_serie: false,
           maneja_stock: controlaStock(p),
+          maneja_lote: p.maneja_lote === true,
+          maneja_vencimiento: p.maneja_vencimiento === true,
           almacen_id: alm,
         });
       }
@@ -642,6 +648,8 @@
           unidad: escaneoProducto.unidad || 'NIU',
           maneja_serie: true,
           maneja_stock: controlaStock(escaneoProducto),
+          maneja_lote: escaneoProducto.maneja_lote === true,
+          maneja_vencimiento: escaneoProducto.maneja_vencimiento === true,
           almacen_id: alm,
           numero_serie: num,
           producto_serie_id: '',
@@ -688,11 +696,19 @@
         var qtyHtml = '<div class="ios-orden-linea-qty-wrap">' + qtyInner +
           '<span class="ios-orden-linea-unidad">' + unidadLbl + '</span></div>';
         var serieHtml = '';
-        var loteHtml =
-          '<div class="ios-orden-linea-lote">' +
-            '<input type="text" maxlength="64" placeholder="Lote" value="' + escAttr(ln.lote || '') + '" data-lote />' +
-            '<input type="date" value="' + escAttr(ln.fecha_vencimiento || '') + '" data-vence />' +
+        var pideLote = isIngreso && (ln.maneja_lote === true || (prod && prod.maneja_lote === true));
+        var pideVence = isIngreso && (ln.maneja_vencimiento === true || (prod && prod.maneja_vencimiento === true));
+        var loteHtml = '';
+        if (pideLote || pideVence) {
+          loteHtml = '<div class="ios-orden-linea-lote">' +
+            (pideLote
+              ? '<input type="text" maxlength="64" placeholder="Lote" value="' + escAttr(ln.lote || '') + '" data-lote />'
+              : '') +
+            (pideVence
+              ? '<input type="date" value="' + escAttr(ln.fecha_vencimiento || '') + '" data-vence />'
+              : '') +
           '</div>';
+        }
         if (ln.maneja_serie) {
           if (ln.numero_serie) {
             serieHtml = '<small class="ios-orden-linea-serie">Serie: ' + ln.numero_serie + '</small>';
@@ -821,6 +837,26 @@
       if (!lineas.length) {
         window.alert('Agrega al menos un producto.');
         return false;
+      }
+      if (isIngreso) {
+        var sinLote = lineas.find(function (ln) {
+          var prodLn = productoPorId(ln.catalog_item_id);
+          var pide = ln.maneja_lote === true || (prodLn && prodLn.maneja_lote === true);
+          return pide && !String(ln.lote || '').trim();
+        });
+        if (sinLote) {
+          window.alert('Indica el lote de: ' + (sinLote.nombre || 'producto'));
+          return false;
+        }
+        var sinVence = lineas.find(function (ln) {
+          var prodLn = productoPorId(ln.catalog_item_id);
+          var pide = ln.maneja_vencimiento === true || (prodLn && prodLn.maneja_vencimiento === true);
+          return pide && !/^\d{4}-\d{2}-\d{2}$/.test(String(ln.fecha_vencimiento || ''));
+        });
+        if (sinVence) {
+          window.alert('Indica la fecha de vencimiento de: ' + (sinVence.nombre || 'producto'));
+          return false;
+        }
       }
       var sinSerie = lineas.find(function (ln) {
         if (!ln.maneja_serie) return false;
@@ -1025,6 +1061,8 @@
         almacen_id: ln.almacen_id || resolveAlmacenId(),
         maneja_serie: ln.maneja_serie === true || (cat && cat.maneja_serie === true && !!(ln.producto_serie_id || ln.numero_serie)),
         maneja_stock: ln.maneja_stock === true || (cat && controlaStock(cat)),
+        maneja_lote: ln.maneja_lote === true || (cat && cat.maneja_lote === true),
+        maneja_vencimiento: ln.maneja_vencimiento === true || (cat && cat.maneja_vencimiento === true),
         precio_unitario: ln.precio_unitario != null
           ? ln.precio_unitario
           : (cat && cat.precio_unitario != null ? Number(cat.precio_unitario) : null),
@@ -1049,6 +1087,8 @@
         unidad: item.unidad || 'NIU',
         maneja_serie: true,
         maneja_stock: true,
+        maneja_lote: item.maneja_lote === true,
+        maneja_vencimiento: item.maneja_vencimiento === true,
         almacen_id: serie.almacen_id || resolveAlmacenId(),
         producto_serie_id: serieId,
         numero_serie: numero,
