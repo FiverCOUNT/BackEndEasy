@@ -24,6 +24,23 @@ async function show(req, res, next) {
       almacenNombres,
     });
     data.filtros.vista = data.filtros.vista || (orden === 'venta' ? 'ingresos' : 'vendidos');
+    // Completa ranking con todos los almacenes (aunque tengan S/ 0) para el gráfico.
+    if (!data.filtros.almacen && Array.isArray(data.charts?.por_almacen)) {
+      const seen = new Set(data.charts.por_almacen.map((a) => a.id).filter(Boolean));
+      for (const a of almacenes) {
+        if (seen.has(a.id)) continue;
+        data.charts.por_almacen.push({
+          id: a.id,
+          nombre: a.nombre || a.codigo || a.id,
+          unidades: 0,
+          venta: 0,
+          margen: 0,
+          margen_pct: null,
+          tiene_costo: false,
+        });
+      }
+      data.charts.por_almacen.sort((x, y) => (y.venta - x.venta) || (y.unidades - x.unidades));
+    }
     res.render('app/analisis/index', layoutLocals(res, {
       title: 'Análisis',
       active: 'analisis',

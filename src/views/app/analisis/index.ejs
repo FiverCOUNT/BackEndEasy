@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title><%= title %> · Easy</title>
-  <link rel="stylesheet" href="/css/app-ios.css?v=analisis-almacen" />
+  <link rel="stylesheet" href="/css/app-ios.css?v=analisis-alm-bar" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js" defer></script>
 </head>
 <body class="ios-app">
@@ -75,15 +75,34 @@
         <p>Cuando emitas facturas o boletas verás los gráficos aquí.</p>
       </section>
     <% } else { %>
-      <section class="ios-analisis-charts is-simple">
-        <% if (!filtros.almacen && (charts.por_almacen || []).length > 1) { %>
-        <article class="ios-analisis-chart-card is-wide">
-          <h2>Ventas por tienda / almacén <small style="font-weight:600;color:#8E8E93;">(cuál vende más)</small></h2>
-          <div class="ios-analisis-chart-canvas is-h-wide">
+      <%
+        var rankingAlm = (!filtros.almacen && charts && charts.por_almacen) ? charts.por_almacen : [];
+        var topAlm = rankingAlm.length ? rankingAlm[0] : null;
+      %>
+      <% if (rankingAlm.length) { %>
+      <section class="ios-analisis-alm-block">
+        <div class="ios-analisis-alm-head">
+          <div>
+            <h2>Ventas por almacén</h2>
+            <p>Comparación de ingresos generados por cada tienda.</p>
+          </div>
+          <% if (topAlm && Number(topAlm.venta) > 0) { %>
+          <div class="ios-analisis-alm-winner">
+            <span>Más genera</span>
+            <strong><%= topAlm.nombre %></strong>
+            <small>S/ <%= Number(topAlm.venta || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></small>
+          </div>
+          <% } %>
+        </div>
+        <article class="ios-analisis-chart-card is-wide is-alm">
+          <div class="ios-analisis-chart-canvas is-h-alm">
             <canvas id="chartAlmacenes"></canvas>
           </div>
         </article>
-        <% } %>
+      </section>
+      <% } %>
+
+      <section class="ios-analisis-charts is-simple">
         <article class="ios-analisis-chart-card is-wide">
           <h2>Cantidad vendida · Top <%= filtros.top %> <small style="font-weight:600;color:#8E8E93;">(con unidad)</small></h2>
           <div class="ios-analisis-chart-canvas is-h-wide">
@@ -316,7 +335,64 @@
       });
     }
 
-    barH('chartAlmacenes', data.por_almacen || [], 'venta', '#FF9F0A', 'money');
+    function barAlmacenes(list) {
+      var el = document.getElementById('chartAlmacenes');
+      if (!el || !(list || []).length) return;
+      var maxV = Math.max.apply(null, list.map(function (r) { return Number(r.venta || 0); }));
+      var colors = list.map(function (r, i) {
+        if (Number(r.venta || 0) <= 0) return 'rgba(142,142,147,0.35)';
+        if (i === 0 && maxV > 0) return '#FF9F0A';
+        return '#FFD60A';
+      });
+      var h = Math.max(220, 160 + list.length * 18);
+      if (el.parentElement) el.parentElement.style.height = h + 'px';
+      new Chart(el, {
+        type: 'bar',
+        data: {
+          labels: list.map(function (r) { return shortName(r.nombre, 16); }),
+          datasets: [{
+            data: list.map(function (r) { return Number(r.venta || 0); }),
+            backgroundColor: colors,
+            borderRadius: 10,
+            maxBarThickness: 48,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                title: function (items) {
+                  var i = items && items[0] ? items[0].dataIndex : -1;
+                  return i >= 0 ? (list[i].nombre || '') : '';
+                },
+                label: function (ctx) {
+                  var row = list[ctx.dataIndex] || {};
+                  var parts = [money(ctx.raw)];
+                  if (row.unidades != null) {
+                    parts.push(Number(row.unidades).toLocaleString('es-PE') + ' und');
+                  }
+                  if (row.margen_pct != null) parts.push('margen ' + row.margen_pct + '%');
+                  return parts.join(' · ');
+                },
+              },
+            },
+          },
+          scales: {
+            x: { grid: { display: false } },
+            y: {
+              beginAtZero: true,
+              grid: { color: 'rgba(0,0,0,0.05)' },
+              ticks: { callback: function (v) { return money(v); } },
+            },
+          },
+        },
+      });
+    }
+
+    barAlmacenes(data.por_almacen || []);
     barH('chartUnidades', data.top_unidades || [], 'unidades', '#007AFF', 'qty');
     barH('chartIngresos', data.top_venta || [], 'venta', '#0A84FF', 'money');
     barH('chartMargen', data.top_margen || [], 'margen', '#34C759', 'money');
