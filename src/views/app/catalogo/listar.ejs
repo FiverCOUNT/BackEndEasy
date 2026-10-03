@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title><%= title %> · Easy</title>
-  <link rel="stylesheet" href="/css/app-ios.css?v=vence-rojo" />
+  <link rel="stylesheet" href="/css/app-ios.css?v=cat-vence" />
 </head>
 <body class="ios-app">
   <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
@@ -95,6 +95,12 @@
             <% } %>
               <div class="ios-catalog-title">
                 <strong><%= it.nombre %></strong>
+                <% if (it.avisoVence) { %>
+                  <span
+                    class="ios-vence-pill<%= it.avisoVence.vencido ? ' is-vencido' : '' %>"
+                    title="<%= it.avisoVence.lote ? ('Lote ' + it.avisoVence.lote + ' · ') : '' %><%= it.avisoVence.detalle %>"
+                  ><%= it.avisoVence.label %></span>
+                <% } %>
                 <% if (it.activo === false) { %>
                   <span class="ios-badge-warn">Inactivo</span>
                 <% } %>

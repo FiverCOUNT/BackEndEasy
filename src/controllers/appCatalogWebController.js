@@ -161,6 +161,11 @@ async function list(req, res, next) {
         })
       : pageItems;
 
+    const alertas = await productoLoteModel.alertasVencimientoPorItems(
+      companyRuc,
+      enriched.map((it) => it.id),
+    );
+
     const loadMore = buildLoadMoreMeta({
       total,
       limit: pageSize,
@@ -185,6 +190,7 @@ async function list(req, res, next) {
         compraLabel: (it.precioCompra ?? it.precio_compra) != null
           ? formatMoney(it.precioCompra ?? it.precio_compra)
           : null,
+        avisoVence: alertas.get(it.id) || null,
       })),
       total,
       q,

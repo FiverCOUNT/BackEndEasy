@@ -297,6 +297,108 @@ async function productosDelLote(companyRuc, loteId, { almacenId = null, catalogI
   return { lote: { id: lote.id, nombre: lote.nombre }, items };
 }
 
+function limaHoyYmd() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Lima',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const get = (t) => parts.find((p) => p.type === t)?.value || '';
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
+function diasHastaYmd(ymd) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(ymd || '').slice(0, 10));
+  if (!m) return null;
+  const vence = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const hoyParts = limaHoyYmd().split('-');
+  const hoy = Date.UTC(Number(hoyParts[0]), Number(hoyParts[1]) - 1, Number(hoyParts[2]));
+  return Math.floor((vence - hoy) / 86400000);
+}
+
+/** Mapa catalogItemId → aviso de vencimiento cercano (con stock del lote). */
+async function alertasVencimientoPorItems(companyRuc, catalogItemIds = []) {
+  const ids = [...new Set((catalogItemIds || []).map((id) => String(id || '').trim()).filter(Boolean))];
+  const out = new Map();
+  if (!companyRuc || !ids.length) return out;
+
+  const lineas = await prisma.lineaCatalogoItem.findMany({
+    where: {
+      catalogItemId: { in: ids },
+      productoLoteId: { not: null },
+      movimiento: { companyRuc, estado: { not: 'ANULADA' } },
+      productoLote: { fechaVencimiento: { not: null } },
+    },
+    select: {
+      cantidad: true,
+      catalogItemId: true,
+      productoSerieId: true,
+      movimiento: { select: { tipo: true, referenciaTipo: true } },
+      productoSerie: { select: { id: true, estado: true } },
+      productoLote: {
+        select: {
+          id: true,
+          nombre: true,
+          fechaVencimiento: true,
+          diasNotificacion: true,
+        },
+      },
+    },
+  });
+
+  const stockPorClave = new Map();
+  for (const linea of lineas) {
+    const lote = linea.productoLote;
+    const itemId = linea.catalogItemId;
+    if (!lote?.id || !itemId || !lote.fechaVencimiento) continue;
+    const key = `${itemId}|${lote.id}`;
+    if (!stockPorClave.has(key)) {
+      stockPorClave.set(key, {
+        itemId,
+        loteNombre: lote.nombre,
+        fecha: String(lote.fechaVencimiento).slice(0, 10),
+        diasAviso: Number(lote.diasNotificacion) > 0 ? Number(lote.diasNotificacion) : 60,
+        cantidad: 0,
+        series: new Set(),
+      });
+    }
+    const g = stockPorClave.get(key);
+    if (linea.productoSerieId && linea.productoSerie) {
+      const estado = linea.productoSerie.estado;
+      if (estado === 'DISPONIBLE' || estado === 'RESERVADO') g.series.add(linea.productoSerie.id);
+      continue;
+    }
+    const traslado = linea.movimiento?.referenciaTipo === 'TRASLADO';
+    const salida = linea.movimiento?.tipo === 'SALIDA' && !traslado;
+    g.cantidad += (salida ? -1 : 1) * Number(linea.cantidad || 0);
+  }
+
+  for (const g of stockPorClave.values()) {
+    const stock = g.series.size > 0 ? g.series.size : g.cantidad;
+    if (stock <= 0.0001) continue;
+    const dias = diasHastaYmd(g.fecha);
+    if (dias == null || dias > g.diasAviso) continue;
+    const prev = out.get(g.itemId);
+    const urgencia = dias;
+    if (prev && prev.dias < urgencia) continue;
+    const meses = [
+      'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+      'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+    ];
+    const p = g.fecha.split('-');
+    const fechaTxt = `${Number(p[2])} de ${meses[Number(p[1]) - 1]} ${p[0]}`;
+    out.set(g.itemId, {
+      dias,
+      vencido: dias < 0,
+      label: dias < 0 ? 'Vencido' : (dias === 0 ? 'Vence hoy' : 'Por vencer'),
+      detalle: `Vence ${fechaTxt}`,
+      lote: g.loteNombre,
+    });
+  }
+  return out;
+}
+
 module.exports = {
   toApi,
   normalizarFilas,
@@ -304,4 +406,5 @@ module.exports = {
   listByCatalogItem,
   guardarFilas,
   productosDelLote,
+  alertasVencimientoPorItems,
 };
