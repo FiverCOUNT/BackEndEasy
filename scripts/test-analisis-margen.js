@@ -247,6 +247,47 @@ test('gráficos usan solo el Top N del filtro', () => {
   assert.strictEqual(r.charts.top_unidades.length, 10);
   assert.ok(r.total_productos >= 10);
 });
+test('más vendido no tiene por qué ser el de mayor margen', () => {
+  const details = [
+    {
+      // Muchas unidades, margen bajo
+      cantidad: 100,
+      totalFactura: 1000,
+      precioCompra: 9,
+      invoice: { fechaEmision: '2026-03-01' },
+      catalogItem: {
+        id: 'volumen',
+        nombre: 'Cable barato',
+        codigo: 'VOL',
+        unidad: 'MTR',
+        kind: 'PRODUCT',
+        precioCompra: 9,
+      },
+    },
+    {
+      // Pocas unidades, margen alto
+      cantidad: 2,
+      totalFactura: 400,
+      precioCompra: 50,
+      invoice: { fechaEmision: '2026-03-01' },
+      catalogItem: {
+        id: 'premium',
+        nombre: 'Equipo premium',
+        codigo: 'PRE',
+        unidad: 'NIU',
+        kind: 'PRODUCT',
+        precioCompra: 50,
+      },
+    },
+  ];
+  const r = analisisModel.buildResumenFromDetails(details, {
+    solo_costo: '1',
+    top: 10,
+  }, { periodo: 'custom', desde: '2026-03-01', hasta: '2026-03-01' });
+  assert.strictEqual(r.charts.top_unidades[0].id, 'volumen');
+  assert.strictEqual(r.charts.top_margen_pct[0].id, 'premium');
+  assert.notStrictEqual(r.charts.top_unidades[0].id, r.charts.top_margen_pct[0].id);
+});
 
 console.log('\n== snapshot precio_compra (emisión) ==');
 test('snapshotPrecioCompra null si no hay costo', () => {

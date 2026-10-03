@@ -4665,6 +4665,19 @@ select.ios-hist-input,
 .ios-analisis-chart-canvas.is-h {
   height: 280px;
 }
+.ios-analisis-chart-canvas.is-h-wide {
+  height: 300px;
+}
+.ios-analisis-insight {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #F2F7FF;
+  color: #1C3A5F;
+  font-size: 13px;
+  line-height: 1.35;
+}
+.ios-analisis-insight strong { font-weight: 800; }
 .ios-analisis-table-wrap { margin-bottom: 24px; }
 .ios-analisis-row {
   display: grid;

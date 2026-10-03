@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title><%= title %> · Easy</title>
-  <link rel="stylesheet" href="/css/app-ios.css?v=analisis-bars" />
+  <link rel="stylesheet" href="/css/app-ios.css?v=analisis-rank" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js" defer></script>
 </head>
 <body class="ios-app">
@@ -105,24 +105,38 @@
         <a class="ios-btn-primary" href="<%= appBase %>/catalogo">Ir al catálogo</a>
       </section>
     <% } else { %>
+      <p class="ios-analisis-insight">
+        Un producto puede ser de los <strong>más vendidos</strong> y aun así tener
+        <strong>poco margen</strong>. Por eso los rankings van separados.
+      </p>
+
       <section class="ios-analisis-charts">
         <article class="ios-analisis-chart-card is-wide">
-          <h2>Top <%= filtros.top %> · Ventas vs costo vs margen</h2>
-          <p class="ios-hint" style="margin:0 0 8px;">Solo el ranking filtrado (Top <%= filtros.top %>), no todo el catálogo.</p>
+          <h2>Top <%= filtros.top %> por ingresos · Ventas vs costo vs margen</h2>
+          <p class="ios-hint" style="margin:0 0 8px;">Quién mueve más plata (no necesariamente quién gana más %).</p>
           <div class="ios-analisis-chart-canvas">
             <canvas id="chartComparativo"></canvas>
           </div>
         </article>
         <article class="ios-analisis-chart-card">
-          <h2>Top <%= filtros.top %> · Más vendidos</h2>
+          <h2>Top <%= filtros.top %> · Más vendidos (cantidad)</h2>
+          <p class="ios-hint" style="margin:0 0 8px;">Por unidades / metros / litros vendidos.</p>
           <div class="ios-analisis-chart-canvas is-h">
             <canvas id="chartUnidades"></canvas>
           </div>
         </article>
         <article class="ios-analisis-chart-card">
           <h2>Top <%= filtros.top %> · Mejor margen (S/)</h2>
+          <p class="ios-hint" style="margin:0 0 8px;">Ganancia bruta en soles (puede diferir del más vendido).</p>
           <div class="ios-analisis-chart-canvas is-h">
             <canvas id="chartMargen"></canvas>
+          </div>
+        </article>
+        <article class="ios-analisis-chart-card is-wide">
+          <h2>Top <%= filtros.top %> · Mejor margen (%)</h2>
+          <p class="ios-hint" style="margin:0 0 8px;">Rentabilidad por sol vendido. Útil para ver qué conviene impulsar.</p>
+          <div class="ios-analisis-chart-canvas is-h-wide">
+            <canvas id="chartMargenPct"></canvas>
           </div>
         </article>
       </section>
@@ -283,7 +297,51 @@
       });
     }
     barH('chartUnidades', data.top_unidades || [], 'unidades', '#007AFF', 'Unidades');
-    barH('chartMargen', data.top_margen || [], 'margen', '#34C759', 'Margen');
+    barH('chartMargen', data.top_margen || [], 'margen', '#34C759', 'Margen S/');
+
+    var elPct = document.getElementById('chartMargenPct');
+    var pctRows = data.top_margen_pct || [];
+    if (elPct && pctRows.length) {
+      if (elPct.parentElement) elPct.parentElement.style.height = Math.max(220, pctRows.length * 36 + 40) + 'px';
+      new Chart(elPct, {
+        type: 'bar',
+        data: {
+          labels: pctRows.map(function (r) { return shortName(r.nombre); }),
+          datasets: [{
+            label: 'Margen %',
+            data: pctRows.map(function (r) { return r.margen_pct; }),
+            backgroundColor: '#5856D6',
+            borderRadius: 8,
+            maxBarThickness: 26,
+          }],
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function (ctx) {
+                  var row = pctRows[ctx.dataIndex] || {};
+                  return (ctx.raw || 0) + '% · margen S/ '
+                    + Number(row.margen || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                },
+              },
+            },
+          },
+          scales: {
+            x: {
+              beginAtZero: true,
+              grid: { color: 'rgba(0,0,0,0.05)' },
+              ticks: { callback: function (v) { return v + '%'; } },
+            },
+            y: { grid: { display: false } },
+          },
+        },
+      });
+    }
   });
   </script>
 </body>

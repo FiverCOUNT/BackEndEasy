@@ -194,8 +194,22 @@ function buildResumenFromDetails(details, filters = {}, rango = null) {
   }
 
   const topList = productos.slice(0, top);
-  // Gráficos siempre sobre el mismo Top N del filtro (no todo el catálogo).
-  const chartRows = topList;
+
+  // Rankings independientes: más vendido ≠ mayor margen.
+  const topUnidades = [...productos]
+    .sort((a, b) => b.unidades - a.unidades || b.venta - a.venta)
+    .slice(0, top);
+  const topMargenSoles = [...productos]
+    .filter((p) => p.tiene_costo)
+    .sort((a, b) => b.margen - a.margen || b.margen_pct - a.margen_pct)
+    .slice(0, top);
+  const topMargenPct = [...productos]
+    .filter((p) => p.tiene_costo && p.margen_pct != null)
+    .sort((a, b) => (b.margen_pct || 0) - (a.margen_pct || 0) || b.margen - a.margen)
+    .slice(0, top);
+  const topVenta = [...productos]
+    .sort((a, b) => b.venta - a.venta || b.unidades - a.unidades)
+    .slice(0, top);
 
   return {
     filtros: {
@@ -212,10 +226,12 @@ function buildResumenFromDetails(details, filters = {}, rango = null) {
     productos: topList,
     total_productos: productos.length,
     charts: {
-      top_n: chartRows,
-      top_unidades: [...chartRows].sort((a, b) => b.unidades - a.unidades),
-      top_margen: [...chartRows].filter((p) => p.tiene_costo).sort((a, b) => b.margen - a.margen),
-      top_venta: [...chartRows].sort((a, b) => b.venta - a.venta),
+      // Comparativo usa ingresos (plata), no el orden de la tabla.
+      top_n: topVenta,
+      top_unidades: topUnidades,
+      top_margen: topMargenSoles,
+      top_margen_pct: topMargenPct,
+      top_venta: topVenta,
       serie,
       mix: {
         venta: kpis.venta,
