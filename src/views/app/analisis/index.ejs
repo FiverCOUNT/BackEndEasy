@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title><%= title %> · Easy</title>
-  <link rel="stylesheet" href="/css/app-ios.css?v=analisis-simple" />
+  <link rel="stylesheet" href="/css/app-ios.css?v=analisis-und" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js" defer></script>
 </head>
 <body class="ios-app">
@@ -69,7 +69,7 @@
     <% } else { %>
       <section class="ios-analisis-charts is-simple">
         <article class="ios-analisis-chart-card is-wide">
-          <h2>Cantidad vendida · Top <%= filtros.top %></h2>
+          <h2>Cantidad vendida · Top <%= filtros.top %> <small style="font-weight:600;color:#8E8E93;">(con unidad)</small></h2>
           <div class="ios-analisis-chart-canvas is-h-wide">
             <canvas id="chartUnidades"></canvas>
           </div>
@@ -115,22 +115,37 @@
     var money = function (v) {
       return 'S/ ' + Number(v || 0).toLocaleString('es-PE', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
     };
-    var shortName = function (n) {
+    var unidadLabel = function (u) {
+      var c = String(u || '').trim().toUpperCase();
+      if (c === 'NIU' || c === 'UND' || c === 'ZZ') return 'und';
+      if (c === 'MTR' || c === 'MT') return 'm';
+      if (c === 'LTR' || c === 'LT' || c === 'GLI') return 'lt';
+      if (c === 'KGM' || c === 'KG') return 'kg';
+      return c ? c.toLowerCase() : 'und';
+    };
+    var shortName = function (n, maxLen) {
       var s = String(n || '');
-      return s.length > 18 ? s.slice(0, 16) + '…' : s;
+      var m = maxLen || 18;
+      return s.length > m ? s.slice(0, m - 1) + '…' : s;
+    };
+    var labelConUnidad = function (r) {
+      return shortName(r.nombre, 14) + ' · ' + unidadLabel(r.unidad);
     };
     Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
     Chart.defaults.color = '#636366';
 
-    function barH(elId, list, valueKey, color, asMoney, asPct) {
+    function barH(elId, list, valueKey, color, mode) {
       var el = document.getElementById(elId);
       if (!el || !(list || []).length) return;
+      var showUnd = mode === 'qty';
       var h = Math.max(240, list.length * 34 + 48);
       if (el.parentElement) el.parentElement.style.height = h + 'px';
       new Chart(el, {
         type: 'bar',
         data: {
-          labels: list.map(function (r) { return shortName(r.nombre); }),
+          labels: list.map(function (r) {
+            return showUnd ? labelConUnidad(r) : shortName(r.nombre, 18);
+          }),
           datasets: [{
             data: list.map(function (r) { return r[valueKey]; }),
             backgroundColor: color,
@@ -146,10 +161,18 @@
             legend: { display: false },
             tooltip: {
               callbacks: {
+                title: function (items) {
+                  var i = items && items[0] ? items[0].dataIndex : -1;
+                  var row = i >= 0 ? list[i] : null;
+                  if (!row) return '';
+                  return row.nombre + (row.unidad ? ' (' + String(row.unidad).toUpperCase() + ')' : '');
+                },
                 label: function (ctx) {
-                  if (asPct) return (ctx.raw || 0) + '%';
-                  if (asMoney) return money(ctx.raw);
-                  return Number(ctx.raw || 0).toLocaleString('es-PE');
+                  var row = list[ctx.dataIndex] || {};
+                  var und = unidadLabel(row.unidad);
+                  if (mode === 'pct') return (ctx.raw || 0) + '%';
+                  if (mode === 'money') return money(ctx.raw);
+                  return Number(ctx.raw || 0).toLocaleString('es-PE') + ' ' + und;
                 },
               },
             },
@@ -160,8 +183,8 @@
               grid: { color: 'rgba(0,0,0,0.05)' },
               ticks: {
                 callback: function (v) {
-                  if (asPct) return v + '%';
-                  if (asMoney) return money(v);
+                  if (mode === 'pct') return v + '%';
+                  if (mode === 'money') return money(v);
                   return v;
                 },
               },
@@ -172,11 +195,10 @@
       });
     }
 
-    // Destacar el ranking elegido arriba; los 4 gráficos siguen independientes.
-    barH('chartUnidades', data.top_unidades || [], 'unidades', '#007AFF', false, false);
-    barH('chartIngresos', data.top_venta || [], 'venta', '#0A84FF', true, false);
-    barH('chartMargen', data.top_margen || [], 'margen', '#34C759', true, false);
-    barH('chartMargenPct', data.top_margen_pct || [], 'margen_pct', '#5856D6', false, true);
+    barH('chartUnidades', data.top_unidades || [], 'unidades', '#007AFF', 'qty');
+    barH('chartIngresos', data.top_venta || [], 'venta', '#0A84FF', 'money');
+    barH('chartMargen', data.top_margen || [], 'margen', '#34C759', 'money');
+    barH('chartMargenPct', data.top_margen_pct || [], 'margen_pct', '#5856D6', 'pct');
   });
   </script>
 </body>
