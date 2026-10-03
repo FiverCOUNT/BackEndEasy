@@ -516,15 +516,26 @@ function filaLoteFromBody(body) {
   };
 }
 
-async function renderLotes(res, { error, fila, flash }) {
+async function renderLotes(res, {
+  error,
+  fila,
+  flash,
+  productoId = '',
+  productoNombre = '',
+} = {}) {
   const companyRuc = companyRucOf(res);
-  const lotes = await productoLoteModel.listByCompany(companyRuc, { recientes: true });
+  const catalogItemId = String(productoId || '').trim();
+  const lotes = catalogItemId
+    ? await productoLoteModel.listByCatalogItem(companyRuc, catalogItemId)
+    : await productoLoteModel.listByCompany(companyRuc, { recientes: true });
   res.render('app/catalogo/lotes', layoutLocalsCatalog(res, {
-    title: 'Lotes',
+    title: productoNombre ? `Lotes · ${productoNombre}` : 'Lotes',
     active: 'lotes',
     error: error || null,
     fila: fila || { nombre: '', fecha_vencimiento: '' },
     lotes,
+    productoId: catalogItemId,
+    productoNombre: productoNombre || '',
     flash: flash || null,
   }));
 }
@@ -532,11 +543,30 @@ async function renderLotes(res, { error, fila, flash }) {
 async function showLotes(req, res, next) {
   try {
     const companyRuc = companyRucOf(res);
+    const productoId = String(req.query.producto || '').trim();
+    let productoNombre = '';
+    if (productoId) {
+      const item = await catalogItemModel.findById(productoId);
+      if (!assertOwned(item, companyRuc)) {
+        return res.status(404).render('app/forbidden', layoutLocalsCatalog(res, {
+          title: 'Acceso restringido',
+          active: 'lotes',
+          message: 'Producto no encontrado.',
+        }));
+      }
+      productoNombre = item.nombre || '';
+    }
     if (String(req.query.formato || '') === 'json') {
-      const lotes = await productoLoteModel.listByCompany(companyRuc);
+      const lotes = productoId
+        ? await productoLoteModel.listByCatalogItem(companyRuc, productoId)
+        : await productoLoteModel.listByCompany(companyRuc);
       return res.json({ success: true, items: lotes });
     }
-    await renderLotes(res, { flash: parseFlash(req) });
+    await renderLotes(res, {
+      flash: parseFlash(req),
+      productoId,
+      productoNombre,
+    });
   } catch (err) {
     next(err);
   }
@@ -556,6 +586,12 @@ async function productosLoteJson(req, res, next) {
 async function saveLotes(req, res, next) {
   try {
     const companyRuc = companyRucOf(res);
+    const productoId = String(req.body.producto || req.query.producto || '').trim();
+    let productoNombre = '';
+    if (productoId) {
+      const item = await catalogItemModel.findById(productoId);
+      if (assertOwned(item, companyRuc)) productoNombre = item.nombre || '';
+    }
     const result = await productoLoteModel.guardarFilas({
       companyRuc,
       nombres: req.body.lote_nombre,
@@ -565,11 +601,16 @@ async function saveLotes(req, res, next) {
       return renderLotes(res.status(400), {
         error: result.error,
         fila: filaLoteFromBody(req.body),
+        productoId,
+        productoNombre,
       });
     }
+    const dest = productoId
+      ? `${appPath('/lotes')}?producto=${encodeURIComponent(productoId)}`
+      : appPath('/lotes');
     return redirectWithFlash(
       res,
-      appPath('/lotes'),
+      dest,
       result.total ? 'Lote guardado.' : 'Escribe el nombre del lote.',
     );
   } catch (err) {

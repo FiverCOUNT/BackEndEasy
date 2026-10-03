@@ -134,7 +134,7 @@
                 <div class="ios-menu-panel">
                   <a href="<%= appBase %>/catalogo/<%= it.id %>/editar">Editar</a>
                   <% if (conLote) { %>
-                    <a href="<%= appBase %>/lotes">Lotes</a>
+                    <a href="<%= appBase %>/lotes?producto=<%= it.id %>">Lotes</a>
                   <% } %>
                   <% if (conSerie) { %>
                     <button type="button" data-series-item="<%= it.id %>" data-series-nombre="<%= serieNombre %>">Ver series</button>

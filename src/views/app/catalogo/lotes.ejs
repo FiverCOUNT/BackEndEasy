@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title><%= title %> · Easy</title>
-  <link rel="stylesheet" href="/css/app-ios.css?v=valor-der" />
+  <link rel="stylesheet" href="/css/app-ios.css?v=lote-prod" />
 </head>
 <body class="ios-app">
   <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
@@ -12,8 +12,14 @@
     <header class="ios-top">
       <div>
         <p class="ios-eyebrow"><%= companyNombre || 'Empresa' %></p>
-        <h1>Lotes</h1>
+        <h1><%= productoNombre ? 'Lotes del producto' : 'Lotes' %></h1>
+        <% if (productoNombre) { %>
+          <p class="ios-hint" style="margin:4px 0 0;"><%= productoNombre %></p>
+        <% } %>
       </div>
+      <% if (productoId) { %>
+        <a class="ios-btn-secondary" href="<%= appBase %>/lotes" style="flex-shrink:0;">Todos</a>
+      <% } %>
     </header>
 
     <% if (error) { %><div class="ios-flash is-error"><%= error %></div><% } %>
@@ -21,6 +27,7 @@
       <div class="ios-flash <%= flash.type === 'error' ? 'is-error' : 'is-ok' %>"><%= flash.text %></div>
     <% } %>
 
+    <% if (!productoId) { %>
     <section class="ios-section">
       <h3 class="ios-section-title">Nuevo lote</h3>
       <form class="ios-form" method="POST" action="<%= appBase %>/lotes">
@@ -47,14 +54,20 @@
         </section>
       </form>
     </section>
+    <% } %>
 
     <section class="ios-section">
-      <h3 class="ios-section-title">Recientes</h3>
+      <h3 class="ios-section-title"><%= productoId ? 'Lotes usados' : 'Recientes' %></h3>
       <% if (!(lotes || []).length) { %>
         <section class="ios-card-empty">
           <div class="ios-empty-icon">▣</div>
           <h2>Sin lotes</h2>
-          <p>El primer lote que guardes aparece aquí.</p>
+          <% if (productoId) { %>
+            <p>Este producto aún no tiene ingresos con lote.</p>
+            <a class="ios-btn-primary" href="<%= appBase %>/lotes">Ver todos los lotes</a>
+          <% } else { %>
+            <p>El primer lote que guardes aparece aquí.</p>
+          <% } %>
         </section>
       <% } else { %>
         <div class="ios-list ios-lote-list">
@@ -66,6 +79,8 @@
             if (partes.length === 3 && meses[Number(partes[1]) - 1]) {
               fecha = Number(partes[2]) + ' de ' + meses[Number(partes[1]) - 1] + ' ' + partes[0];
             }
+            var qty = lote.cantidad != null ? String(lote.cantidad) : '';
+            var und = lote.unidad || '';
           %>
             <article class="ios-row ios-row-static ios-lote-row">
               <span class="ios-row-icon">▣</span>
@@ -73,12 +88,17 @@
                 <strong><%= lote.nombre %></strong>
                 <small class="<%= fecha ? 'ios-lote-fecha' : '' %>"><%= fecha || 'Sin fecha' %></small>
               </span>
+              <% if (productoId && qty !== '') { %>
+                <span class="ios-valor"><%= qty %><%= und ? (' ' + und) : '' %></span>
+              <% } %>
+              <% if (!productoId) { %>
               <details class="ios-menu">
                 <summary aria-label="Opciones del lote">⋯</summary>
                 <div class="ios-menu-panel">
                   <button type="button" data-lote-productos="<%= lote.id %>" data-lote-nombre="<%= lote.nombre %>">Ver productos</button>
                 </div>
               </details>
+              <% } %>
             </article>
           <% }); %>
         </div>
@@ -104,6 +124,7 @@
   (function () {
     var appBase = '<%= appBase %>';
     var sheet = document.getElementById('loteProductosSheet');
+    if (!sheet) return;
     var titulo = document.getElementById('loteProductosTitulo');
     var sub = document.getElementById('loteProductosSub');
     var statusEl = document.getElementById('loteProductosStatus');
@@ -118,7 +139,6 @@
     }
 
     function cerrar() {
-      if (!sheet) return;
       sheet.hidden = true;
       sheet.setAttribute('aria-hidden', 'true');
       document.body.classList.remove('ios-sheet-open');
