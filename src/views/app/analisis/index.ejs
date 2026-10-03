@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title><%= title %> · Easy</title>
-  <link rel="stylesheet" href="/css/app-ios.css?v=analisis-und" />
+  <link rel="stylesheet" href="/css/app-ios.css?v=analisis-tips" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js" defer></script>
 </head>
 <body class="ios-app">
@@ -92,6 +92,108 @@
             <canvas id="chartMargenPct"></canvas>
           </div>
         </article>
+      </section>
+
+      <%
+        function undLbl(u) {
+          var c = String(u || '').toUpperCase();
+          if (c === 'NIU' || c === 'UND' || c === 'ZZ') return 'und';
+          if (c === 'MTR' || c === 'MT') return 'm';
+          if (c === 'LTR' || c === 'LT') return 'lt';
+          if (c === 'KGM' || c === 'KG') return 'kg';
+          return (c || 'und').toLowerCase();
+        }
+        function money2(n) {
+          return Number(n || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+        function tipProducto(p) {
+          var pct = p.margen_pct;
+          if (!p.tiene_costo || pct == null) {
+            return { cls: 'is-mute', text: 'Sin precio de compra: aún no se puede calcular el margen.' };
+          }
+          if (pct >= 50) {
+            return { cls: 'is-good', text: 'Buen margen. Conviene impulsar este producto.' };
+          }
+          if (pct >= 30) {
+            return { cls: 'is-mid', text: 'Margen aceptable. Revisa si puedes mejorar el costo o el precio.' };
+          }
+          if (pct >= 0) {
+            return { cls: 'is-low', text: 'Margen bajo. Vende mucho volumen, pero deja poca ganancia.' };
+          }
+          return { cls: 'is-bad', text: 'Margen negativo: se está vendiendo por debajo del costo.' };
+        }
+        var topVenta = (charts.top_venta || [])[0] || null;
+        var topQty = (charts.top_unidades || [])[0] || null;
+        var topPct = (charts.top_margen_pct || [])[0] || null;
+        var listaTips = (filtros.vista === 'ingresos' || filtros.orden === 'venta')
+          ? (charts.top_venta || [])
+          : (charts.top_unidades || []);
+      %>
+
+      <section class="ios-analisis-tips">
+        <div class="ios-analisis-tips-head">
+          <h2>Tip de productos</h2>
+          <p>Resumen claro del Top <%= filtros.top %>: cantidad, ingresos y margen.</p>
+        </div>
+
+        <div class="ios-analisis-highlights">
+          <% if (topQty) { %>
+          <article class="ios-analisis-hl is-blue">
+            <span class="ios-analisis-hl-tag">Más vendido</span>
+            <strong><%= topQty.nombre %></strong>
+            <p><%= Number(topQty.unidades).toLocaleString('es-PE') %> <%= undLbl(topQty.unidad) %> · S/ <%= money2(topQty.venta) %></p>
+          </article>
+          <% } %>
+          <% if (topVenta) { %>
+          <article class="ios-analisis-hl is-navy">
+            <span class="ios-analisis-hl-tag">Más ingresos</span>
+            <strong><%= topVenta.nombre %></strong>
+            <p>S/ <%= money2(topVenta.venta) %> · margen <%= topVenta.margen_pct != null ? topVenta.margen_pct + '%' : '—' %></p>
+          </article>
+          <% } %>
+          <% if (topPct) { %>
+          <article class="ios-analisis-hl is-green">
+            <span class="ios-analisis-hl-tag">Mejor margen %</span>
+            <strong><%= topPct.nombre %></strong>
+            <p><%= topPct.margen_pct %>% · ganancia S/ <%= money2(topPct.margen) %></p>
+          </article>
+          <% } %>
+        </div>
+
+        <div class="ios-analisis-tip-list">
+          <% listaTips.forEach(function(p, idx) {
+            var tip = tipProducto(p);
+          %>
+            <article class="ios-analisis-tip-card">
+              <div class="ios-analisis-tip-rank"><%= idx + 1 %></div>
+              <div class="ios-analisis-tip-body">
+                <div class="ios-analisis-tip-title">
+                  <strong><%= p.nombre %></strong>
+                  <span class="ios-analisis-und-pill"><%= String(p.unidad || 'NIU').toUpperCase() %></span>
+                </div>
+                <div class="ios-analisis-tip-metrics">
+                  <div>
+                    <span>Cantidad</span>
+                    <strong><%= Number(p.unidades).toLocaleString('es-PE') %> <%= undLbl(p.unidad) %></strong>
+                  </div>
+                  <div>
+                    <span>Ingresos</span>
+                    <strong>S/ <%= money2(p.venta) %></strong>
+                  </div>
+                  <div>
+                    <span>Margen</span>
+                    <strong class="<%= p.margen >= 0 ? 'is-ok' : 'is-bad' %>">S/ <%= money2(p.margen) %></strong>
+                  </div>
+                  <div>
+                    <span>Margen %</span>
+                    <strong class="<%= (p.margen_pct || 0) >= 40 ? 'is-ok' : '' %>"><%= p.margen_pct != null ? p.margen_pct + '%' : '—' %></strong>
+                  </div>
+                </div>
+                <p class="ios-analisis-tip-note <%= tip.cls %>"><%= tip.text %></p>
+              </div>
+            </article>
+          <% }); %>
+        </div>
       </section>
     <% } %>
   </main>

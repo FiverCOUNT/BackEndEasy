@@ -4687,6 +4687,148 @@ select.ios-hist-input,
   line-height: 1.35;
 }
 .ios-analisis-insight strong { font-weight: 800; }
+
+.ios-analisis-tips {
+  margin: 8px 0 28px;
+}
+.ios-analisis-tips-head {
+  margin: 0 0 12px;
+}
+.ios-analisis-tips-head h2 {
+  margin: 0 0 4px;
+  font-size: 18px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+}
+.ios-analisis-tips-head p {
+  margin: 0;
+  font-size: 13px;
+  color: #8E8E93;
+}
+.ios-analisis-highlights {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.ios-analisis-hl {
+  border-radius: 18px;
+  padding: 14px 14px 12px;
+  color: #fff;
+  min-width: 0;
+}
+.ios-analisis-hl.is-blue { background: linear-gradient(145deg, #0A84FF, #007AFF); }
+.ios-analisis-hl.is-navy { background: linear-gradient(145deg, #1C3A5F, #0F2744); }
+.ios-analisis-hl.is-green { background: linear-gradient(145deg, #34C759, #1B7A3D); }
+.ios-analisis-hl-tag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  opacity: 0.85;
+  margin-bottom: 6px;
+}
+.ios-analisis-hl strong {
+  display: block;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.2;
+  margin-bottom: 4px;
+}
+.ios-analisis-hl p {
+  margin: 0;
+  font-size: 12px;
+  opacity: 0.92;
+}
+.ios-analisis-tip-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ios-analisis-tip-card {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  gap: 12px;
+  align-items: start;
+  background: #fff;
+  border-radius: 18px;
+  padding: 14px;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.04);
+}
+.ios-analisis-tip-rank {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: #F2F2F7;
+  color: #3A3A3C;
+  font-size: 14px;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+}
+.ios-analisis-tip-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.ios-analisis-tip-title strong {
+  font-size: 15px;
+  color: #0f172a;
+}
+.ios-analisis-und-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #EEF5FF;
+  color: #007AFF;
+  font-size: 11px;
+  font-weight: 800;
+}
+.ios-analisis-tip-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.ios-analisis-tip-metrics > div {
+  background: #F8F8FA;
+  border-radius: 12px;
+  padding: 8px 10px;
+  min-width: 0;
+}
+.ios-analisis-tip-metrics span {
+  display: block;
+  font-size: 11px;
+  color: #8E8E93;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.ios-analisis-tip-metrics strong {
+  display: block;
+  font-size: 13px;
+  color: #0f172a;
+  font-weight: 800;
+}
+.ios-analisis-tip-metrics strong.is-ok { color: #1B7A3D; }
+.ios-analisis-tip-metrics strong.is-bad { color: #C62828; }
+.ios-analisis-tip-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 600;
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+.ios-analisis-tip-note.is-good { background: #EAF8EE; color: #1B7A3D; }
+.ios-analisis-tip-note.is-mid { background: #FFF7E8; color: #9A6700; }
+.ios-analisis-tip-note.is-low { background: #FFF1EB; color: #C2410C; }
+.ios-analisis-tip-note.is-bad { background: #FDECEC; color: #B42318; }
+.ios-analisis-tip-note.is-mute { background: #F2F2F7; color: #636366; }
 .ios-analisis-table-wrap { margin-bottom: 24px; }
 .ios-analisis-row {
   display: grid;
@@ -4740,8 +4882,11 @@ select.ios-hist-input,
   .ios-analisis-charts { grid-template-columns: 1fr; }
   .ios-analisis-filters .ios-analisis-filter-row,
   .ios-analisis-filters .ios-analisis-filter-row.is-simple { grid-template-columns: 1fr 1fr; }
+  .ios-analisis-highlights { grid-template-columns: 1fr; }
+  .ios-analisis-tip-metrics { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 560px) {
   .ios-analisis-row { grid-template-columns: 28px 1fr; }
   .ios-analisis-nums { grid-column: 2; text-align: left; flex-direction: row; flex-wrap: wrap; gap: 8px; }
+  .ios-analisis-tip-card { grid-template-columns: 28px 1fr; }
 }
