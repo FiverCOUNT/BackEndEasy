@@ -194,6 +194,8 @@ function buildResumenFromDetails(details, filters = {}, rango = null) {
   }
 
   const topList = productos.slice(0, top);
+  // Gráficos siempre sobre el mismo Top N del filtro (no todo el catálogo).
+  const chartRows = topList;
 
   return {
     filtros: {
@@ -210,9 +212,10 @@ function buildResumenFromDetails(details, filters = {}, rango = null) {
     productos: topList,
     total_productos: productos.length,
     charts: {
-      top_unidades: [...productos].sort((a, b) => b.unidades - a.unidades).slice(0, 10),
-      top_margen: [...productos].filter((p) => p.tiene_costo).sort((a, b) => b.margen - a.margen).slice(0, 10),
-      top_venta: [...productos].sort((a, b) => b.venta - a.venta).slice(0, 10),
+      top_n: chartRows,
+      top_unidades: [...chartRows].sort((a, b) => b.unidades - a.unidades),
+      top_margen: [...chartRows].filter((p) => p.tiene_costo).sort((a, b) => b.margen - a.margen),
+      top_venta: [...chartRows].sort((a, b) => b.venta - a.venta),
       serie,
       mix: {
         venta: kpis.venta,

@@ -219,6 +219,34 @@ test('charts.mix cuadra con kpis', () => {
   assert.strictEqual(r.charts.mix.costo, r.kpis.costo);
   assert.strictEqual(r.charts.mix.margen, r.kpis.margen);
 });
+test('gráficos usan solo el Top N del filtro', () => {
+  const many = [];
+  for (let i = 0; i < 15; i += 1) {
+    many.push({
+      cantidad: 15 - i,
+      totalFactura: (15 - i) * 20,
+      precioCompra: 5,
+      invoice: { fechaEmision: '2026-03-01' },
+      catalogItem: {
+        id: `t${i}`,
+        nombre: `Top ${i}`,
+        codigo: `T${i}`,
+        unidad: 'NIU',
+        kind: 'PRODUCT',
+        precioCompra: 5,
+      },
+    });
+  }
+  const r = analisisModel.buildResumenFromDetails(many, {
+    solo_costo: '1',
+    orden: 'unidades',
+    top: 10,
+  }, { periodo: 'custom', desde: '2026-03-01', hasta: '2026-03-01' });
+  assert.strictEqual(r.productos.length, 10);
+  assert.strictEqual(r.charts.top_n.length, 10);
+  assert.strictEqual(r.charts.top_unidades.length, 10);
+  assert.ok(r.total_productos >= 10);
+});
 
 console.log('\n== snapshot precio_compra (emisión) ==');
 test('snapshotPrecioCompra null si no hay costo', () => {

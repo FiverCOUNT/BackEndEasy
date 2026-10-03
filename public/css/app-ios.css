@@ -4637,22 +4637,33 @@ select.ios-hist-input,
 .ios-analisis-kpi.is-ok strong { color: #1B7A3D; }
 .ios-analisis-charts {
   display: grid;
-  grid-template-columns: 1.4fr 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 12px;
   margin-bottom: 18px;
 }
 .ios-analisis-chart-card {
   background: var(--ios-card, #fff);
   border-radius: 18px;
-  padding: 14px 14px 10px;
+  padding: 14px 14px 12px;
   box-shadow: 0 1px 0 rgba(0,0,0,0.04);
   min-width: 0;
 }
+.ios-analisis-chart-card.is-wide {
+  grid-column: 1 / -1;
+}
 .ios-analisis-chart-card h2 {
-  margin: 0 0 10px;
+  margin: 0 0 4px;
   font-size: 14px;
   font-weight: 800;
   color: #1C1C1E;
+}
+.ios-analisis-chart-canvas {
+  position: relative;
+  width: 100%;
+  height: 320px;
+}
+.ios-analisis-chart-canvas.is-h {
+  height: 280px;
 }
 .ios-analisis-table-wrap { margin-bottom: 24px; }
 .ios-analisis-row {
