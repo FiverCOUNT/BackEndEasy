@@ -1,4 +1,4 @@
-const { prisma } = require('../config/prisma');
+const prisma = require('../config/prisma');
 
 function toNum(v) {
   const n = Number(v);
@@ -72,58 +72,22 @@ function resolvePeriodo(query = {}) {
 }
 
 /**
- * Análisis de ventas / margen por producto (facturas y boletas aceptadas).
- * Usa precio_compra de la línea; si falta, cae al del catálogo.
+ * Agrega líneas sale_detail (ya cargadas) a KPIs / charts / ranking.
+ * Pura: útil para pruebas unitarias sin DB.
  */
-async function resumenProductos(companyRuc, filters = {}) {
-  const { periodo, desde, hasta } = resolvePeriodo(filters);
+function buildResumenFromDetails(details, filters = {}, rango = null) {
+  const resolved = rango || resolvePeriodo(filters);
+  const { periodo, desde, hasta } = resolved;
   const tipoDoc = String(filters.tipo || filters.tipo_doc || '').trim();
   const q = String(filters.q || '').trim().toLowerCase();
   const orden = String(filters.orden || 'unidades').trim();
-  const top = Math.min(100, Math.max(5, Number(filters.top) || 20));
+  const top = Math.min(100, Math.max(1, Number(filters.top) || 20));
   const soloConCosto = String(filters.solo_costo || '1') !== '0';
-
-  const tipoFilter = tipoDoc === '01' || tipoDoc === '03'
-    ? { tipoDoc }
-    : { tipoDoc: { in: ['01', '03'] } };
-
-  const details = await prisma.saleDetail.findMany({
-    where: {
-      catalogItemId: { not: null },
-      estado: 'ACTIVO',
-      invoice: {
-        companyRuc,
-        estado: { in: ['ACEPTADO', 'ENVIADO'] },
-        fechaEmision: { gte: desde, lte: hasta },
-        ...tipoFilter,
-      },
-    },
-    select: {
-      catalogItemId: true,
-      nombre: true,
-      cantidad: true,
-      mtoPrecioUnitario: true,
-      totalFactura: true,
-      precioCompra: true,
-      invoice: { select: { fechaEmision: true, tipoDoc: true } },
-      catalogItem: {
-        select: {
-          id: true,
-          nombre: true,
-          codigo: true,
-          unidad: true,
-          kind: true,
-          precioCompra: true,
-          precioUnitario: true,
-        },
-      },
-    },
-  });
 
   const byProduct = new Map();
   const byDay = new Map();
 
-  for (const d of details) {
+  for (const d of details || []) {
     const item = d.catalogItem;
     if (!item) continue;
     const nombre = item.nombre || d.nombre || 'Producto';
@@ -169,7 +133,7 @@ async function resumenProductos(companyRuc, filters = {}) {
 
     const dia = String(d.invoice?.fechaEmision || '').slice(0, 10);
     if (dia) {
-      if (!byDay.has(dia)) byDay.set(dia, { fecha: dia, venta: 0, costo: 0, unidades: 0, unidades: 0 });
+      if (!byDay.has(dia)) byDay.set(dia, { fecha: dia, venta: 0, costo: 0, margen: 0, unidades: 0 });
       const day = byDay.get(dia);
       day.venta += venta;
       day.unidades += qty;
@@ -259,7 +223,56 @@ async function resumenProductos(companyRuc, filters = {}) {
   };
 }
 
+/**
+ * Análisis de ventas / margen por producto (facturas y boletas aceptadas).
+ * Usa precio_compra de la línea; si falta, cae al del catálogo.
+ */
+async function resumenProductos(companyRuc, filters = {}) {
+  const { periodo, desde, hasta } = resolvePeriodo(filters);
+  const tipoDoc = String(filters.tipo || filters.tipo_doc || '').trim();
+
+  const tipoFilter = tipoDoc === '01' || tipoDoc === '03'
+    ? { tipoDoc }
+    : { tipoDoc: { in: ['01', '03'] } };
+
+  const details = await prisma.saleDetail.findMany({
+    where: {
+      catalogItemId: { not: null },
+      estado: 'ACTIVO',
+      invoice: {
+        companyRuc,
+        estado: { in: ['ACEPTADO', 'ENVIADO'] },
+        fechaEmision: { gte: desde, lte: hasta },
+        ...tipoFilter,
+      },
+    },
+    select: {
+      catalogItemId: true,
+      nombre: true,
+      cantidad: true,
+      mtoPrecioUnitario: true,
+      totalFactura: true,
+      precioCompra: true,
+      invoice: { select: { fechaEmision: true, tipoDoc: true } },
+      catalogItem: {
+        select: {
+          id: true,
+          nombre: true,
+          codigo: true,
+          unidad: true,
+          kind: true,
+          precioCompra: true,
+          precioUnitario: true,
+        },
+      },
+    },
+  });
+
+  return buildResumenFromDetails(details, filters, { periodo, desde, hasta });
+}
+
 module.exports = {
   resolvePeriodo,
+  buildResumenFromDetails,
   resumenProductos,
 };

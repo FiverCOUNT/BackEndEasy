@@ -3843,5 +3843,7 @@ module.exports = {
   updateSunatJson,
   marcarAnulado,
   invoiceGreIncluyeRuc,
+  calcularLinea,
+  snapshotPrecioCompra,
   INVOICE_INCLUDE,
 };

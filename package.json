@@ -22,6 +22,7 @@
     "test:compras-recibidos": "node scripts/test-compras-recibidos.js",
     "test:smoke-compras": "node scripts/smoke-compras-api.js",
     "test:web-app-panel": "node scripts/test-web-app-panel.js",
+    "test:analisis-margen": "node scripts/test-analisis-margen.js",
     "db:migrate-recibidos-compras": "node scripts/migrate-recibidos-invoices-to-compras.js"
   },
   "keywords": [
