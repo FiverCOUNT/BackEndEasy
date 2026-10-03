@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title><%= title %> · Easy</title>
-  <link rel="stylesheet" href="/css/app-ios.css?v=valor-der" />
+  <link rel="stylesheet" href="/css/app-ios.css?v=mov-od" />
 </head>
 <body class="ios-app">
   <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
@@ -139,9 +139,11 @@
             preview += ' y ' + (m.lineasCount - 1) + ' más';
           }
           var metaBits = [];
-          if (m.almacenNombre) metaBits.push(m.almacenNombre);
           metaBits.push(m.lineasCount + ' línea' + (m.lineasCount === 1 ? '' : 's'));
           if (who) metaBits.push(who);
+          var rutaOd = (m.origenNombre && m.destinoNombre)
+            ? (m.origenNombre + ' → ' + m.destinoNombre)
+            : (m.almacenNombre || '');
         %>
           <button type="button" class="ios-mov-card <%= isSalida ? 'is-out' : 'is-in' %>" data-mov-id="<%= m.id %>" aria-haspopup="dialog">
             <span class="ios-mov-avatar <%= isSalida ? 'is-out' : 'is-in' %>" aria-hidden="true"><%= inicial(who || m.clienteNombre || m.numero) %></span>
@@ -155,14 +157,15 @@
                   else if (refKey === 'VENTA' || refKey === 'ORDEN') pillClass = 'is-venta';
                   else if (refKey === 'TRASLADO') pillClass = 'is-traslado';
                   else if (refKey === 'COMPRA') pillClass = 'is-compra';
-                  else if (refKey === 'DEVOLUCION_CLIENTE') pillClass = 'is-dev';
+                  else if (refKey === 'DEVOLUCION_CLIENTE' || refKey === 'REGRESO_SALIDA') pillClass = 'is-dev';
                   else if (refKey === 'GUIA_REMISION') pillClass = 'is-guia';
                 %>
                   <span class="ios-mov-pill <%= pillClass %>"><%= pill %></span>
                 <% } %>
               </span>
               <small class="ios-mov-fecha"><%= m.fecha %></small>
-              <% if (preview) { %><small class="ios-mov-preview"><%= preview %></small><% } %>
+              <% if (rutaOd) { %><small class="ios-mov-route-mini"><%= rutaOd %></small><% } %>
+              <% if (preview && preview !== m.origenNombre && preview !== m.destinoNombre) { %><small class="ios-mov-preview"><%= preview %></small><% } %>
               <small><%= metaBits.join(' · ') %></small>
             </span>
             <span class="ios-chevron" aria-hidden="true">›</span>
@@ -490,14 +493,28 @@
         );
       }
       add('Fecha', m.fecha);
-      var origenLabel = labelRef(m.refTipo);
-      if (m.comprobanteId && (!origenLabel || m.refTipo === 'SALIDA_MANUAL')) origenLabel = 'Venta';
-      add('Origen', origenLabel);
+      var tipoLabel = labelRef(m.refTipo);
+      if (m.comprobanteId && (!tipoLabel || tipoLabel === '—' || m.refTipo === 'SALIDA_MANUAL')) tipoLabel = 'Venta';
+      if (m.esTraslado) tipoLabel = 'Traslado';
+      add('Tipo', tipoLabel);
       add('Estado', m.estado);
-      add('Almacén', m.almacenNombre);
-      if (m.almacenDestinoNombre) add('Destino (traslado)', m.almacenDestinoNombre);
-      add('Cliente', m.clienteNombre);
-      add('Doc. cliente', m.clienteDoc);
+
+      var origenTxt = m.origenNombre || m.almacenNombre || '—';
+      var destinoTxt = m.destinoNombre || m.almacenDestinoNombre || m.clienteNombre || '—';
+      rows.push(
+        '<div class="ios-mov-od">' +
+          '<div class="ios-mov-od-col">' +
+            '<span>Origen</span>' +
+            '<strong>' + esc(origenTxt) + '</strong>' +
+          '</div>' +
+          '<span class="ios-mov-od-arrow" aria-hidden="true">→</span>' +
+          '<div class="ios-mov-od-col is-dest">' +
+            '<span>Destino</span>' +
+            '<strong>' + esc(destinoTxt) + '</strong>' +
+          '</div>' +
+        '</div>'
+      );
+      if (m.clienteDoc) add('Doc. cliente', m.clienteDoc);
       add('Usuario', m.usuarioNombre || m.usuarioEmail || '—');
       if (m.observaciones) {
         if (m.comprobanteId) {

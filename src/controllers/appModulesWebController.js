@@ -55,6 +55,34 @@ function resolveUsuarioFilter(queryUsuario) {
   return Number.isInteger(id) && id > 0 ? id : null;
 }
 
+/** Origen / destino legibles (quién → dónde), no el tipo de movimiento. */
+function resolveOrigenDestinoLabels(m, almacenesById = {}) {
+  const tipo = String(m.tipo || '').toUpperCase();
+  const alm = almacenesById[m.almacen_id] || m.almacenNombre || 'Almacén';
+  const destAlm = almacenesById[m.almacen_destino_id] || m.almacenDestinoNombre || '';
+  const cliente = m.cliente?.razon_social
+    || m.clienteNombre
+    || (m.cliente?.numero_doc || m.clienteDoc
+      ? `Doc. ${m.cliente?.numero_doc || m.clienteDoc}`
+      : '');
+  const ref = String(m.referencia_tipo || m.refTipo || '').toUpperCase();
+  const esCompra = ref === 'COMPRA' || ref.startsWith('COMPRA');
+
+  if (tipo === 'ENTRADA') {
+    const origen = cliente
+      || (esCompra ? 'Proveedor' : 'Recepción externa');
+    return { origenNombre: origen, destinoNombre: alm, esTraslado: false };
+  }
+  if (destAlm) {
+    return { origenNombre: alm, destinoNombre: destAlm, esTraslado: true };
+  }
+  return {
+    origenNombre: alm,
+    destinoNombre: cliente || 'Cliente',
+    esTraslado: false,
+  };
+}
+
 function mapMovimientoListItem(m, almacenesById = {}, regresadosIds = null) {
   const usuario = m.usuario || null;
   const cliente = m.cliente || null;
@@ -63,6 +91,19 @@ function mapMovimientoListItem(m, almacenesById = {}, regresadosIds = null) {
   const esSalidaRegresable = String(m.tipo || '') === 'SALIDA'
     && !m.almacen_destino_id
     && String(m.estado || '').toUpperCase() !== 'ANULADA';
+  const mappedBase = {
+    tipo: m.tipo || '',
+    referencia_tipo: m.referencia_tipo || '',
+    almacen_id: m.almacen_id,
+    almacen_destino_id: m.almacen_destino_id,
+    cliente,
+    clienteNombre: cliente?.razon_social || '',
+    clienteDoc: cliente?.numero_doc || '',
+  };
+  const { origenNombre, destinoNombre, esTraslado } = resolveOrigenDestinoLabels(
+    mappedBase,
+    almacenesById,
+  );
   return {
     id: m.id,
     numero: m.numero || '—',
@@ -75,6 +116,9 @@ function mapMovimientoListItem(m, almacenesById = {}, regresadosIds = null) {
     comprobanteId: comprobanteId || '',
     almacenNombre: almacenesById[m.almacen_id] || '',
     almacenDestinoNombre: almacenesById[m.almacen_destino_id] || '',
+    origenNombre,
+    destinoNombre,
+    esTraslado,
     clienteNombre: cliente?.razon_social || '',
     clienteDoc: cliente?.numero_doc || '',
     usuarioNombre: usuario?.nombre || '',
