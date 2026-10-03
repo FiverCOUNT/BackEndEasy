@@ -575,7 +575,9 @@ async function showLotes(req, res, next) {
 async function productosLoteJson(req, res, next) {
   try {
     const companyRuc = companyRucOf(res);
-    const data = await productoLoteModel.productosDelLote(companyRuc, req.params.id);
+    const data = await productoLoteModel.productosDelLote(companyRuc, req.params.id, {
+      catalogItemId: String(req.query.producto || '').trim() || null,
+    });
     if (!data) return res.status(404).json({ success: false, message: 'Lote no encontrado.' });
     return res.json({ success: true, ...data });
   } catch (err) {

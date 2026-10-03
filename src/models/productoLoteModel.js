@@ -106,13 +106,15 @@ async function listByCatalogItem(companyRuc, catalogItemId) {
   return [...porLote.values()]
     .map((g) => {
       const series = g.series.size;
-      const qty = series > 0 ? series : Math.max(0, g.cantidad);
+      const esSerie = series > 0;
+      const qty = esSerie ? series : Math.max(0, g.cantidad);
       return {
         id: g.id,
         nombre: g.nombre,
         fecha_vencimiento: g.fecha_vencimiento,
         cantidad: cantidadVisible(qty),
-        unidad: series > 0 ? 'und' : unidadItem,
+        unidad: esSerie ? 'und' : unidadItem,
+        tipo: esSerie ? 'serie' : 'cantidad',
         creadoEn: g.creadoEn,
       };
     })
@@ -170,17 +172,19 @@ function cantidadVisible(value) {
   return String(rounded);
 }
 
-async function productosDelLote(companyRuc, loteId, { almacenId = null } = {}) {
+async function productosDelLote(companyRuc, loteId, { almacenId = null, catalogItemId = null } = {}) {
   const lote = await prisma.productoLote.findFirst({
     where: { id: String(loteId || ''), companyRuc },
     select: { id: true, nombre: true },
   });
   if (!lote) return null;
   const soloAlmacen = String(almacenId || '').trim();
+  const soloProducto = String(catalogItemId || '').trim();
 
   const lineas = await prisma.lineaCatalogoItem.findMany({
     where: {
       productoLoteId: lote.id,
+      ...(soloProducto ? { catalogItemId: soloProducto } : {}),
       movimiento: { companyRuc, estado: { not: 'ANULADA' } },
     },
     select: {

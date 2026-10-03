@@ -4456,6 +4456,23 @@ select.ios-hist-input,
 }
 .ios-lote-list { overflow: visible; }
 .ios-lote-row .ios-menu { margin-left: auto; flex-shrink: 0; }
+.ios-lote-row.is-tap {
+  cursor: pointer;
+  align-items: center;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+}
+.ios-lote-row.is-tap:active { background: #F2F2F7; }
+.ios-lote-nombre {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: #8E8E93;
+  margin-top: 2px;
+}
 .ios-lote-nuevo {
   display: grid;
   grid-template-columns: 1.4fr 1fr;
