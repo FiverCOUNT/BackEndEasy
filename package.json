@@ -24,6 +24,7 @@
     "test:web-app-panel": "node scripts/test-web-app-panel.js",
     "test:analisis-margen": "node scripts/test-analisis-margen.js",
     "test:unit": "node tests/run-unit.js",
+    "test:integration": "node tests/integration/run-integration.js",
     "test": "node tests/run-unit.js",
     "db:migrate-recibidos-compras": "node scripts/migrate-recibidos-invoices-to-compras.js"
   },
