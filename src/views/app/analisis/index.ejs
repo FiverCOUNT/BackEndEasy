@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title><%= title %> · Easy</title>
-  <link rel="stylesheet" href="/css/app-ios.css?v=analisis-rank" />
+  <link rel="stylesheet" href="/css/app-ios.css?v=analisis-simple" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js" defer></script>
 </head>
 <body class="ios-app">
@@ -19,10 +19,7 @@
     </header>
 
     <form class="ios-filters ios-analisis-filters" method="GET" action="<%= appBase %>/analisis">
-      <div class="ios-search">
-        <input type="search" name="q" value="<%= filtros.q || '' %>" placeholder="Buscar producto o código" autocomplete="off" />
-      </div>
-      <div class="ios-filter-row ios-analisis-filter-row">
+      <div class="ios-filter-row ios-analisis-filter-row is-simple">
         <select name="periodo" class="ios-select" aria-label="Periodo" onchange="this.form.submit()">
           <option value="hoy" <%= filtros.periodo === 'hoy' ? 'selected' : '' %>>Hoy</option>
           <option value="7d" <%= filtros.periodo === '7d' ? 'selected' : '' %>>7 días</option>
@@ -31,147 +28,83 @@
           <option value="mes_ant" <%= filtros.periodo === 'mes_ant' ? 'selected' : '' %>>Mes anterior</option>
           <option value="trimestre" <%= filtros.periodo === 'trimestre' ? 'selected' : '' %>>Último trimestre</option>
           <option value="anio" <%= filtros.periodo === 'anio' ? 'selected' : '' %>>Este año</option>
-          <option value="custom" <%= filtros.periodo === 'custom' ? 'selected' : '' %>>Personalizado</option>
         </select>
-        <select name="tipo" class="ios-select" aria-label="Tipo de documento">
-          <option value="" <%= !filtros.tipo ? 'selected' : '' %>>Factura + Boleta</option>
-          <option value="01" <%= filtros.tipo === '01' ? 'selected' : '' %>>Solo facturas</option>
-          <option value="03" <%= filtros.tipo === '03' ? 'selected' : '' %>>Solo boletas</option>
+        <select name="vista" class="ios-select" aria-label="Ranking" onchange="this.form.submit()">
+          <option value="vendidos" <%= (filtros.vista || filtros.orden) === 'vendidos' || filtros.orden === 'unidades' ? 'selected' : '' %>>Más vendidos</option>
+          <option value="ingresos" <%= (filtros.vista || filtros.orden) === 'ingresos' || filtros.orden === 'venta' ? 'selected' : '' %>>Más ingresos</option>
         </select>
-        <select name="orden" class="ios-select" aria-label="Ordenar por">
-          <option value="unidades" <%= filtros.orden === 'unidades' ? 'selected' : '' %>>Más vendidos (und)</option>
-          <option value="venta" <%= filtros.orden === 'venta' ? 'selected' : '' %>>Más ingresos</option>
-          <option value="margen" <%= filtros.orden === 'margen' ? 'selected' : '' %>>Mejor margen S/</option>
-          <option value="margen_pct" <%= filtros.orden === 'margen_pct' ? 'selected' : '' %>>Mejor margen %</option>
-          <option value="peor_margen" <%= filtros.orden === 'peor_margen' ? 'selected' : '' %>>Peor margen %</option>
-          <option value="nombre" <%= filtros.orden === 'nombre' ? 'selected' : '' %>>Nombre A–Z</option>
-        </select>
-        <select name="top" class="ios-select" aria-label="Top">
+        <select name="top" class="ios-select" aria-label="Top" onchange="this.form.submit()">
           <option value="10" <%= Number(filtros.top) === 10 ? 'selected' : '' %>>Top 10</option>
           <option value="20" <%= Number(filtros.top) === 20 ? 'selected' : '' %>>Top 20</option>
-          <option value="50" <%= Number(filtros.top) === 50 ? 'selected' : '' %>>Top 50</option>
-          <option value="100" <%= Number(filtros.top) === 100 ? 'selected' : '' %>>Top 100</option>
         </select>
-        <select name="solo_costo" class="ios-select" aria-label="Costo">
-          <option value="1" <%= filtros.solo_costo !== '0' ? 'selected' : '' %>>Con precio de compra</option>
-          <option value="0" <%= filtros.solo_costo === '0' ? 'selected' : '' %>>Todos los vendidos</option>
-        </select>
-        <button type="submit" class="ios-btn-secondary">Aplicar</button>
       </div>
-      <% if (filtros.periodo === 'custom') { %>
-      <div class="ios-filter-row">
-        <label class="ios-field">
-          <span>Desde</span>
-          <input type="date" name="desde" value="<%= filtros.desde %>" />
-        </label>
-        <label class="ios-field">
-          <span>Hasta</span>
-          <input type="date" name="hasta" value="<%= filtros.hasta %>" />
-        </label>
-      </div>
-      <% } else { %>
-        <input type="hidden" name="desde" value="<%= filtros.desde %>" />
-        <input type="hidden" name="hasta" value="<%= filtros.hasta %>" />
-      <% } %>
-      <p class="ios-hint">Periodo <%= filtros.desde %> → <%= filtros.hasta %> · Facturas/boletas aceptadas o enviadas</p>
+      <input type="hidden" name="solo_costo" value="0" />
+      <input type="hidden" name="desde" value="<%= filtros.desde %>" />
+      <input type="hidden" name="hasta" value="<%= filtros.hasta %>" />
+      <p class="ios-hint"><%= filtros.desde %> → <%= filtros.hasta %></p>
     </form>
 
-    <section class="ios-analisis-kpis">
+    <section class="ios-analisis-kpis is-3">
       <article class="ios-analisis-kpi">
         <span>Ventas</span>
         <strong>S/ <%= Number(kpis.venta || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></strong>
       </article>
-      <article class="ios-analisis-kpi">
-        <span>Costo</span>
-        <strong>S/ <%= Number(kpis.costo || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></strong>
-      </article>
       <article class="ios-analisis-kpi is-ok">
-        <span>Margen bruto</span>
+        <span>Margen</span>
         <strong>S/ <%= Number(kpis.margen || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></strong>
         <small><%= kpis.margen_pct %>%</small>
       </article>
       <article class="ios-analisis-kpi">
-        <span>Unidades</span>
+        <span>Cantidad vendida</span>
         <strong><%= Number(kpis.unidades || 0).toLocaleString('es-PE') %></strong>
-        <small><%= kpis.productos %> productos</small>
       </article>
     </section>
 
-    <% if (!productos.length) { %>
+    <% if (!(charts && ((charts.top_unidades || []).length || (charts.top_venta || []).length))) { %>
       <section class="ios-card-empty">
         <div class="ios-empty-icon">◈</div>
-        <h2>Sin datos para este filtro</h2>
-        <p>Registra precio de compra en el catálogo y emite ventas en el periodo elegido.</p>
-        <a class="ios-btn-primary" href="<%= appBase %>/catalogo">Ir al catálogo</a>
+        <h2>Sin ventas en este periodo</h2>
+        <p>Cuando emitas facturas o boletas verás los gráficos aquí.</p>
       </section>
     <% } else { %>
-      <p class="ios-analisis-insight">
-        Un producto puede ser de los <strong>más vendidos</strong> y aun así tener
-        <strong>poco margen</strong>. Por eso los rankings van separados.
-      </p>
-
-      <section class="ios-analisis-charts">
+      <section class="ios-analisis-charts is-simple">
         <article class="ios-analisis-chart-card is-wide">
-          <h2>Top <%= filtros.top %> por ingresos · Ventas vs costo vs margen</h2>
-          <p class="ios-hint" style="margin:0 0 8px;">Quién mueve más plata (no necesariamente quién gana más %).</p>
-          <div class="ios-analisis-chart-canvas">
-            <canvas id="chartComparativo"></canvas>
-          </div>
-        </article>
-        <article class="ios-analisis-chart-card">
-          <h2>Top <%= filtros.top %> · Más vendidos (cantidad)</h2>
-          <p class="ios-hint" style="margin:0 0 8px;">Por unidades / metros / litros vendidos.</p>
-          <div class="ios-analisis-chart-canvas is-h">
+          <h2>Cantidad vendida · Top <%= filtros.top %></h2>
+          <div class="ios-analisis-chart-canvas is-h-wide">
             <canvas id="chartUnidades"></canvas>
           </div>
         </article>
+        <article class="ios-analisis-chart-card is-wide">
+          <h2>Ingresos (S/) · Top <%= filtros.top %></h2>
+          <div class="ios-analisis-chart-canvas is-h-wide">
+            <canvas id="chartIngresos"></canvas>
+          </div>
+        </article>
         <article class="ios-analisis-chart-card">
-          <h2>Top <%= filtros.top %> · Mejor margen (S/)</h2>
-          <p class="ios-hint" style="margin:0 0 8px;">Ganancia bruta en soles (puede diferir del más vendido).</p>
+          <h2>Margen de ganancia (S/)</h2>
           <div class="ios-analisis-chart-canvas is-h">
             <canvas id="chartMargen"></canvas>
           </div>
         </article>
-        <article class="ios-analisis-chart-card is-wide">
-          <h2>Top <%= filtros.top %> · Mejor margen (%)</h2>
-          <p class="ios-hint" style="margin:0 0 8px;">Rentabilidad por sol vendido. Útil para ver qué conviene impulsar.</p>
-          <div class="ios-analisis-chart-canvas is-h-wide">
+        <article class="ios-analisis-chart-card">
+          <h2>Margen de ganancia (%)</h2>
+          <div class="ios-analisis-chart-canvas is-h">
             <canvas id="chartMargenPct"></canvas>
           </div>
         </article>
-      </section>
-
-      <section class="ios-analisis-table-wrap">
-        <h2 class="ios-section-title">Productos</h2>
-        <div class="ios-list ios-analisis-table">
-          <% productos.forEach(function(p, idx) { %>
-            <article class="ios-analisis-row">
-              <div class="ios-analisis-rank"><%= idx + 1 %></div>
-              <div class="ios-analisis-main">
-                <strong><%= p.nombre %></strong>
-                <span>
-                  <%= p.codigo ? (p.codigo + ' · ') : '' %><%= Number(p.unidades).toLocaleString('es-PE') %> und
-                  <% if (p.margen_pct != null) { %> · margen <%= p.margen_pct %>%<% } %>
-                </span>
-              </div>
-              <div class="ios-analisis-nums">
-                <strong>S/ <%= Number(p.venta).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></strong>
-                <span>Costo S/ <%= Number(p.costo).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></span>
-                <span class="<%= p.margen >= 0 ? 'is-ok' : 'is-bad' %>">Margen S/ <%= Number(p.margen).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></span>
-              </div>
-            </article>
-          <% }); %>
-        </div>
-        <% if (total_productos > productos.length) { %>
-          <p class="ios-hint">Mostrando <%= productos.length %> de <%= total_productos %>. Sube el Top para ver más.</p>
-        <% } %>
       </section>
     <% } %>
   </main>
 
   <%- include('../../partials/app-tabbar', { active: active, appBase: appBase }) %>
 
-  <script type="application/json" id="analisis-charts-data"><%- JSON.stringify(charts || {}).replace(/</g, '\\u003c') %></script>
+  <script type="application/json" id="analisis-charts-data"><%- JSON.stringify({
+    vista: filtros.vista || (filtros.orden === 'venta' ? 'ingresos' : 'vendidos'),
+    top_unidades: (charts && charts.top_unidades) || [],
+    top_venta: (charts && charts.top_venta) || [],
+    top_margen: (charts && charts.top_margen) || [],
+    top_margen_pct: (charts && charts.top_margen_pct) || [],
+  }).replace(/</g, '\\u003c') %></script>
   <script>
   document.addEventListener('DOMContentLoaded', function () {
     if (typeof Chart === 'undefined') return;
@@ -184,84 +117,25 @@
     };
     var shortName = function (n) {
       var s = String(n || '');
-      return s.length > 16 ? s.slice(0, 14) + '…' : s;
+      return s.length > 18 ? s.slice(0, 16) + '…' : s;
     };
     Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
     Chart.defaults.color = '#636366';
-    Chart.defaults.plugins.legend.labels.boxWidth = 12;
 
-    var rows = data.top_n || data.top_venta || [];
-    var elComp = document.getElementById('chartComparativo');
-    if (elComp && rows.length) {
-      new Chart(elComp, {
-        type: 'bar',
-        data: {
-          labels: rows.map(function (r) { return shortName(r.nombre); }),
-          datasets: [
-            {
-              label: 'Ventas',
-              data: rows.map(function (r) { return r.venta; }),
-              backgroundColor: '#007AFF',
-              borderRadius: 6,
-              maxBarThickness: 22,
-            },
-            {
-              label: 'Costo',
-              data: rows.map(function (r) { return r.costo; }),
-              backgroundColor: '#FF9500',
-              borderRadius: 6,
-              maxBarThickness: 22,
-            },
-            {
-              label: 'Margen',
-              data: rows.map(function (r) { return r.margen; }),
-              backgroundColor: '#34C759',
-              borderRadius: 6,
-              maxBarThickness: 22,
-            },
-          ],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          interaction: { mode: 'index', intersect: false },
-          plugins: {
-            legend: { position: 'top', align: 'end' },
-            tooltip: {
-              callbacks: {
-                label: function (ctx) {
-                  return ctx.dataset.label + ': ' + money(ctx.raw);
-                },
-              },
-            },
-          },
-          scales: {
-            x: { grid: { display: false }, ticks: { maxRotation: 45, minRotation: 0 } },
-            y: {
-              beginAtZero: true,
-              grid: { color: 'rgba(0,0,0,0.05)' },
-              ticks: { callback: function (v) { return money(v); } },
-            },
-          },
-        },
-      });
-    }
-
-    function barH(elId, list, valueKey, color, label) {
+    function barH(elId, list, valueKey, color, asMoney, asPct) {
       var el = document.getElementById(elId);
       if (!el || !(list || []).length) return;
-      var h = Math.max(220, list.length * 36 + 40);
+      var h = Math.max(240, list.length * 34 + 48);
       if (el.parentElement) el.parentElement.style.height = h + 'px';
       new Chart(el, {
         type: 'bar',
         data: {
           labels: list.map(function (r) { return shortName(r.nombre); }),
           datasets: [{
-            label: label,
             data: list.map(function (r) { return r[valueKey]; }),
             backgroundColor: color,
             borderRadius: 8,
-            maxBarThickness: 26,
+            maxBarThickness: 24,
           }],
         },
         options: {
@@ -273,10 +147,9 @@
             tooltip: {
               callbacks: {
                 label: function (ctx) {
-                  if (valueKey === 'unidades') {
-                    return Number(ctx.raw || 0).toLocaleString('es-PE') + ' und';
-                  }
-                  return money(ctx.raw);
+                  if (asPct) return (ctx.raw || 0) + '%';
+                  if (asMoney) return money(ctx.raw);
+                  return Number(ctx.raw || 0).toLocaleString('es-PE');
                 },
               },
             },
@@ -287,7 +160,9 @@
               grid: { color: 'rgba(0,0,0,0.05)' },
               ticks: {
                 callback: function (v) {
-                  return valueKey === 'unidades' ? v : money(v);
+                  if (asPct) return v + '%';
+                  if (asMoney) return money(v);
+                  return v;
                 },
               },
             },
@@ -296,52 +171,12 @@
         },
       });
     }
-    barH('chartUnidades', data.top_unidades || [], 'unidades', '#007AFF', 'Unidades');
-    barH('chartMargen', data.top_margen || [], 'margen', '#34C759', 'Margen S/');
 
-    var elPct = document.getElementById('chartMargenPct');
-    var pctRows = data.top_margen_pct || [];
-    if (elPct && pctRows.length) {
-      if (elPct.parentElement) elPct.parentElement.style.height = Math.max(220, pctRows.length * 36 + 40) + 'px';
-      new Chart(elPct, {
-        type: 'bar',
-        data: {
-          labels: pctRows.map(function (r) { return shortName(r.nombre); }),
-          datasets: [{
-            label: 'Margen %',
-            data: pctRows.map(function (r) { return r.margen_pct; }),
-            backgroundColor: '#5856D6',
-            borderRadius: 8,
-            maxBarThickness: 26,
-          }],
-        },
-        options: {
-          indexAxis: 'y',
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              callbacks: {
-                label: function (ctx) {
-                  var row = pctRows[ctx.dataIndex] || {};
-                  return (ctx.raw || 0) + '% · margen S/ '
-                    + Number(row.margen || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                },
-              },
-            },
-          },
-          scales: {
-            x: {
-              beginAtZero: true,
-              grid: { color: 'rgba(0,0,0,0.05)' },
-              ticks: { callback: function (v) { return v + '%'; } },
-            },
-            y: { grid: { display: false } },
-          },
-        },
-      });
-    }
+    // Destacar el ranking elegido arriba; los 4 gráficos siguen independientes.
+    barH('chartUnidades', data.top_unidades || [], 'unidades', '#007AFF', false, false);
+    barH('chartIngresos', data.top_venta || [], 'venta', '#0A84FF', true, false);
+    barH('chartMargen', data.top_margen || [], 'margen', '#34C759', true, false);
+    barH('chartMargenPct', data.top_margen_pct || [], 'margen_pct', '#5856D6', false, true);
   });
   </script>
 </body>

@@ -221,12 +221,12 @@ function buildResumenFromDetails(details, filters = {}, rango = null) {
       orden,
       top,
       solo_costo: soloConCosto ? '1' : '0',
+      vista: String(filters.vista || (orden === 'venta' ? 'ingresos' : 'vendidos')),
     },
     kpis,
     productos: topList,
     total_productos: productos.length,
     charts: {
-      // Comparativo usa ingresos (plata), no el orden de la tabla.
       top_n: topVenta,
       top_unidades: topUnidades,
       top_margen: topMargenSoles,
