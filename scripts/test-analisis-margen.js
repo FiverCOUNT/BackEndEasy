@@ -294,6 +294,61 @@ test('más vendido no tiene por qué ser el de mayor margen', () => {
   assert.strictEqual(prem.margen_unitario, 150);
   assert.strictEqual(prem.margen_pct, 75);
 });
+test('filtro por almacén y ranking por tienda', () => {
+  const details = [
+    {
+      cantidad: 1,
+      totalFactura: 100,
+      precioCompra: 40,
+      almacenId: 'a1',
+      invoice: { fechaEmision: '2026-03-01', almacenId: 'a1' },
+      catalogItem: {
+        id: 'p1', nombre: 'X', codigo: 'X', unidad: 'NIU', kind: 'PRODUCT', precioCompra: 40,
+      },
+    },
+    {
+      cantidad: 5,
+      totalFactura: 500,
+      precioCompra: 40,
+      almacenId: null,
+      invoice: { fechaEmision: '2026-03-01', almacenId: 'a2', almacen: { id: 'a2', nombre: 'Tienda 2' } },
+      catalogItem: {
+        id: 'p1', nombre: 'X', codigo: 'X', unidad: 'NIU', kind: 'PRODUCT', precioCompra: 40,
+      },
+    },
+    {
+      cantidad: 2,
+      totalFactura: 200,
+      precioCompra: 40,
+      almacenId: 'a1',
+      invoice: { fechaEmision: '2026-03-01', almacenId: 'a1' },
+      catalogItem: {
+        id: 'p2', nombre: 'Y', codigo: 'Y', unidad: 'NIU', kind: 'PRODUCT', precioCompra: 40,
+      },
+    },
+  ];
+  const all = analisisModel.buildResumenFromDetails(details, {
+    solo_costo: '0',
+    top: 10,
+    almacenNombres: { a1: 'Tienda 1', a2: 'Tienda 2' },
+  }, { periodo: 'custom', desde: '2026-03-01', hasta: '2026-03-01' });
+  assert.strictEqual(all.kpis.venta, 800);
+  assert.strictEqual(all.charts.por_almacen.length, 2);
+  assert.strictEqual(all.charts.por_almacen[0].id, 'a2');
+  assert.strictEqual(all.charts.por_almacen[0].nombre, 'Tienda 2');
+  assert.strictEqual(all.charts.por_almacen[0].venta, 500);
+
+  const soloA1 = analisisModel.buildResumenFromDetails(details, {
+    solo_costo: '0',
+    top: 10,
+    almacen: 'a1',
+    almacenNombres: { a1: 'Tienda 1', a2: 'Tienda 2' },
+  }, { periodo: 'custom', desde: '2026-03-01', hasta: '2026-03-01' });
+  assert.strictEqual(soloA1.filtros.almacen, 'a1');
+  assert.strictEqual(soloA1.kpis.venta, 300);
+  assert.strictEqual(soloA1.charts.por_almacen.length, 1);
+  assert.strictEqual(soloA1.charts.por_almacen[0].id, 'a1');
+});
 
 console.log('\n== snapshot precio_compra (emisión) ==');
 test('snapshotPrecioCompra null si no hay costo', () => {

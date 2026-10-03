@@ -4605,6 +4605,9 @@ select.ios-hist-input,
 .ios-analisis-filters .ios-analisis-filter-row.is-simple {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
+.ios-analisis-filters .ios-analisis-filter-row.is-almacen {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
 .ios-analisis-kpis {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -4886,7 +4889,8 @@ select.ios-hist-input,
   .ios-analisis-kpis.is-3 { grid-template-columns: 1fr 1fr; }
   .ios-analisis-charts { grid-template-columns: 1fr; }
   .ios-analisis-filters .ios-analisis-filter-row,
-  .ios-analisis-filters .ios-analisis-filter-row.is-simple { grid-template-columns: 1fr 1fr; }
+  .ios-analisis-filters .ios-analisis-filter-row.is-simple,
+  .ios-analisis-filters .ios-analisis-filter-row.is-almacen { grid-template-columns: 1fr 1fr; }
   .ios-analisis-highlights { grid-template-columns: 1fr; }
   .ios-analisis-tip-metrics { grid-template-columns: 1fr 1fr; }
 }

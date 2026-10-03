@@ -75,6 +75,10 @@ function resolvePeriodo(query = {}) {
  * Agrega líneas sale_detail (ya cargadas) a KPIs / charts / ranking.
  * Pura: útil para pruebas unitarias sin DB.
  */
+function resolveAlmacenId(detail) {
+  return String(detail?.almacenId || detail?.invoice?.almacenId || '').trim() || '';
+}
+
 function buildResumenFromDetails(details, filters = {}, rango = null) {
   const resolved = rango || resolvePeriodo(filters);
   const { periodo, desde, hasta } = resolved;
@@ -83,13 +87,21 @@ function buildResumenFromDetails(details, filters = {}, rango = null) {
   const orden = String(filters.orden || 'unidades').trim();
   const top = Math.min(100, Math.max(1, Number(filters.top) || 20));
   const soloConCosto = String(filters.solo_costo || '1') !== '0';
+  const filtroAlmacen = String(filters.almacen || filters.almacenId || '').trim();
+  const nombresAlmacen = filters.almacenNombres && typeof filters.almacenNombres === 'object'
+    ? filters.almacenNombres
+    : {};
 
   const byProduct = new Map();
   const byDay = new Map();
+  const byAlmacen = new Map();
 
   for (const d of details || []) {
     const item = d.catalogItem;
     if (!item) continue;
+    const almId = resolveAlmacenId(d);
+    if (filtroAlmacen && almId !== filtroAlmacen) continue;
+
     const nombre = item.nombre || d.nombre || 'Producto';
     if (q && !nombre.toLowerCase().includes(q) && !String(item.codigo || '').toLowerCase().includes(q)) {
       continue;
@@ -129,6 +141,27 @@ function buildResumenFromDetails(details, filters = {}, rango = null) {
       g.costo += costo;
       g.margen += margen;
       g.tiene_costo = true;
+    }
+
+    const almKey = almId || '_sin';
+    if (!byAlmacen.has(almKey)) {
+      byAlmacen.set(almKey, {
+        id: almId || null,
+        nombre: almId
+          ? (nombresAlmacen[almId] || d.almacen?.nombre || d.invoice?.almacen?.nombre || 'Almacén')
+          : 'Sin almacén',
+        unidades: 0,
+        venta: 0,
+        margen: 0,
+        tiene_costo: false,
+      });
+    }
+    const ga = byAlmacen.get(almKey);
+    ga.unidades += qty;
+    ga.venta += venta;
+    if (margen != null) {
+      ga.margen += margen;
+      ga.tiene_costo = true;
     }
 
     const dia = String(d.invoice?.fechaEmision || '').slice(0, 10);
@@ -226,6 +259,18 @@ function buildResumenFromDetails(details, filters = {}, rango = null) {
     .sort((a, b) => b.venta - a.venta || b.unidades - a.unidades)
     .slice(0, top);
 
+  const porAlmacen = [...byAlmacen.values()]
+    .map((a) => ({
+      ...a,
+      unidades: Math.round(a.unidades * 10000) / 10000,
+      venta: Math.round(a.venta * 100) / 100,
+      margen: Math.round(a.margen * 100) / 100,
+      margen_pct: a.venta > 0 && a.tiene_costo
+        ? Math.round((a.margen / a.venta) * 1000) / 10
+        : null,
+    }))
+    .sort((a, b) => b.venta - a.venta || b.unidades - a.unidades);
+
   return {
     filtros: {
       periodo,
@@ -235,6 +280,7 @@ function buildResumenFromDetails(details, filters = {}, rango = null) {
       q: filters.q || '',
       orden,
       top,
+      almacen: filtroAlmacen,
       solo_costo: soloConCosto ? '1' : '0',
       vista: String(filters.vista || (orden === 'venta' ? 'ingresos' : 'vendidos')),
     },
@@ -247,6 +293,7 @@ function buildResumenFromDetails(details, filters = {}, rango = null) {
       top_margen: topMargenSoles,
       top_margen_pct: topMargenPct,
       top_venta: topVenta,
+      por_almacen: porAlmacen,
       serie,
       mix: {
         venta: kpis.venta,
@@ -269,17 +316,27 @@ async function resumenProductos(companyRuc, filters = {}) {
     ? { tipoDoc }
     : { tipoDoc: { in: ['01', '03'] } };
 
-  const details = await prisma.saleDetail.findMany({
-    where: {
-      catalogItemId: { not: null },
-      estado: 'ACTIVO',
-      invoice: {
-        companyRuc,
-        estado: { in: ['ACEPTADO', 'ENVIADO'] },
-        fechaEmision: { gte: desde, lte: hasta },
-        ...tipoFilter,
-      },
+  const filtroAlmacen = String(filters.almacen || filters.almacenId || '').trim();
+  const where = {
+    catalogItemId: { not: null },
+    estado: 'ACTIVO',
+    invoice: {
+      companyRuc,
+      estado: { in: ['ACEPTADO', 'ENVIADO'] },
+      fechaEmision: { gte: desde, lte: hasta },
+      ...tipoFilter,
     },
+  };
+  // Prefiltro DB: línea del almacén o factura del almacén (sin almacén en línea).
+  if (filtroAlmacen) {
+    where.OR = [
+      { almacenId: filtroAlmacen },
+      { AND: [{ almacenId: null }, { invoice: { almacenId: filtroAlmacen } }] },
+    ];
+  }
+
+  const details = await prisma.saleDetail.findMany({
+    where,
     select: {
       catalogItemId: true,
       nombre: true,
@@ -287,7 +344,16 @@ async function resumenProductos(companyRuc, filters = {}) {
       mtoPrecioUnitario: true,
       totalFactura: true,
       precioCompra: true,
-      invoice: { select: { fechaEmision: true, tipoDoc: true } },
+      almacenId: true,
+      almacen: { select: { id: true, nombre: true } },
+      invoice: {
+        select: {
+          fechaEmision: true,
+          tipoDoc: true,
+          almacenId: true,
+          almacen: { select: { id: true, nombre: true } },
+        },
+      },
       catalogItem: {
         select: {
           id: true,
@@ -307,6 +373,7 @@ async function resumenProductos(companyRuc, filters = {}) {
 
 module.exports = {
   resolvePeriodo,
+  resolveAlmacenId,
   buildResumenFromDetails,
   resumenProductos,
 };

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title><%= title %> · Easy</title>
-  <link rel="stylesheet" href="/css/app-ios.css?v=analisis-tips2" />
+  <link rel="stylesheet" href="/css/app-ios.css?v=analisis-almacen" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js" defer></script>
 </head>
 <body class="ios-app">
@@ -19,7 +19,7 @@
     </header>
 
     <form class="ios-filters ios-analisis-filters" method="GET" action="<%= appBase %>/analisis">
-      <div class="ios-filter-row ios-analisis-filter-row is-simple">
+      <div class="ios-filter-row ios-analisis-filter-row is-almacen">
         <select name="periodo" class="ios-select" aria-label="Periodo" onchange="this.form.submit()">
           <option value="hoy" <%= filtros.periodo === 'hoy' ? 'selected' : '' %>>Hoy</option>
           <option value="7d" <%= filtros.periodo === '7d' ? 'selected' : '' %>>7 días</option>
@@ -28,6 +28,14 @@
           <option value="mes_ant" <%= filtros.periodo === 'mes_ant' ? 'selected' : '' %>>Mes anterior</option>
           <option value="trimestre" <%= filtros.periodo === 'trimestre' ? 'selected' : '' %>>Último trimestre</option>
           <option value="anio" <%= filtros.periodo === 'anio' ? 'selected' : '' %>>Este año</option>
+        </select>
+        <select name="almacen" class="ios-select" aria-label="Almacén / tienda" onchange="this.form.submit()">
+          <option value="" <%= !filtros.almacen ? 'selected' : '' %>>Todos los almacenes</option>
+          <% (almacenes || []).forEach(function(a) { %>
+            <option value="<%= a.id %>" <%= filtros.almacen === a.id ? 'selected' : '' %>>
+              <%= a.nombre %><%= a.codigo ? ' (' + a.codigo + ')' : '' %>
+            </option>
+          <% }); %>
         </select>
         <select name="vista" class="ios-select" aria-label="Ranking" onchange="this.form.submit()">
           <option value="vendidos" <%= (filtros.vista || filtros.orden) === 'vendidos' || filtros.orden === 'unidades' ? 'selected' : '' %>>Más vendidos</option>
@@ -41,7 +49,7 @@
       <input type="hidden" name="solo_costo" value="0" />
       <input type="hidden" name="desde" value="<%= filtros.desde %>" />
       <input type="hidden" name="hasta" value="<%= filtros.hasta %>" />
-      <p class="ios-hint"><%= filtros.desde %> → <%= filtros.hasta %></p>
+      <p class="ios-hint"><%= filtros.desde %> → <%= filtros.hasta %><% if (filtros.almacen) { %> · una tienda<% } else { %> · todas las tiendas<% } %></p>
     </form>
 
     <section class="ios-analisis-kpis is-3">
@@ -68,6 +76,14 @@
       </section>
     <% } else { %>
       <section class="ios-analisis-charts is-simple">
+        <% if (!filtros.almacen && (charts.por_almacen || []).length > 1) { %>
+        <article class="ios-analisis-chart-card is-wide">
+          <h2>Ventas por tienda / almacén <small style="font-weight:600;color:#8E8E93;">(cuál vende más)</small></h2>
+          <div class="ios-analisis-chart-canvas is-h-wide">
+            <canvas id="chartAlmacenes"></canvas>
+          </div>
+        </article>
+        <% } %>
         <article class="ios-analisis-chart-card is-wide">
           <h2>Cantidad vendida · Top <%= filtros.top %> <small style="font-weight:600;color:#8E8E93;">(con unidad)</small></h2>
           <div class="ios-analisis-chart-canvas is-h-wide">
@@ -208,6 +224,7 @@
     top_venta: (charts && charts.top_venta) || [],
     top_margen: (charts && charts.top_margen) || [],
     top_margen_pct: (charts && charts.top_margen_pct) || [],
+    por_almacen: (charts && charts.por_almacen) || [],
   }).replace(/</g, '\\u003c') %></script>
   <script>
   document.addEventListener('DOMContentLoaded', function () {
@@ -299,6 +316,7 @@
       });
     }
 
+    barH('chartAlmacenes', data.por_almacen || [], 'venta', '#FF9F0A', 'money');
     barH('chartUnidades', data.top_unidades || [], 'unidades', '#007AFF', 'qty');
     barH('chartIngresos', data.top_venta || [], 'venta', '#0A84FF', 'money');
     barH('chartMargen', data.top_margen || [], 'margen', '#34C759', 'money');
