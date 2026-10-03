@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title><%= title %> · Easy</title>
-  <link rel="stylesheet" href="/css/app-ios.css?v=serie-filtro" />
+  <link rel="stylesheet" href="/css/app-ios.css?v=cat-sin-lote-filtro" />
 </head>
 <body class="ios-app">
   <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
@@ -34,7 +34,7 @@
           autocomplete="off"
         />
       </div>
-      <div class="ios-filter-row is-with-lote">
+      <div class="ios-filter-row">
         <select name="kind" aria-label="Tipo" class="ios-select">
           <option value="" <%= !kind ? 'selected' : '' %>>Todos</option>
           <option value="PRODUCT" <%= kind === 'PRODUCT' ? 'selected' : '' %>>Productos</option>
@@ -50,12 +50,8 @@
           <% }); %>
         </select>
         <% } %>
-        <button type="button" class="ios-select ios-lote-filter-btn" id="catalogoLoteAbrir">
-          <%= loteNombre || 'Lote' %>
-        </button>
         <button type="submit" class="ios-btn-secondary">Filtrar</button>
       </div>
-      <input type="hidden" name="lote" id="catalogoLoteId" value="<%= loteId || '' %>" />
     </form>
 
     <p class="ios-count"><%= total %> ítem<%= total === 1 ? '' : 's' %></p>
@@ -64,11 +60,7 @@
       <section class="ios-card-empty">
         <div class="ios-empty-icon">▦</div>
         <h2>Sin resultados</h2>
-        <% if (loteNombre) { %>
-        <p>Ningún producto en stock del lote <%= loteNombre %>.</p>
-        <% } else { %>
         <p>Agrega tu primer producto o servicio.</p>
-        <% } %>
         <% if (isWebAdmin) { %>
         <a class="ios-btn-primary" href="<%= appBase %>/catalogo/crear">Nuevo ítem</a>
         <% } %>
@@ -168,19 +160,6 @@
       <%- include('../../partials/app-load-more', { loadMore: loadMore }) %>
     <% } %>
   </main>
-
-  <div id="catalogoLoteSheet" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
-    <div class="ios-sheet-panel" role="dialog" aria-modal="true">
-      <div class="ios-sheet-head">
-        <button type="button" class="ios-sheet-back" id="catalogoLoteCerrar">← Volver</button>
-        <h3>Lote</h3>
-        <span style="width:56px;"></span>
-      </div>
-      <input type="search" id="catalogoLoteBuscar" class="ios-sheet-search" placeholder="Escribe el lote…" autocomplete="off" />
-      <div class="ios-sheet-status" id="catalogoLoteStatus"></div>
-      <div class="ios-sheet-list" id="catalogoLoteLista"></div>
-    </div>
-  </div>
 
   <div id="seriesSheet" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
     <div class="ios-sheet-panel" role="dialog" aria-modal="true">
@@ -332,81 +311,6 @@
     document.addEventListener('keydown', function (ev) {
       if (ev.key === 'Escape' && sheet && !sheet.hidden) closeSheet();
     });
-  })();
-  (function () {
-    var form = document.querySelector('.ios-filters');
-    var abrir = document.getElementById('catalogoLoteAbrir');
-    var hidden = document.getElementById('catalogoLoteId');
-    var sheet = document.getElementById('catalogoLoteSheet');
-    var buscar = document.getElementById('catalogoLoteBuscar');
-    var lista = document.getElementById('catalogoLoteLista');
-    var statusEl = document.getElementById('catalogoLoteStatus');
-    var lotes = <%- JSON.stringify(lotes || []).replace(/</g, '\\u003c') %>;
-
-    function esc(s) {
-      return String(s == null ? '' : s)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-    }
-
-    function cerrar() {
-      if (!sheet) return;
-      sheet.hidden = true;
-      sheet.setAttribute('aria-hidden', 'true');
-      document.body.classList.remove('ios-sheet-open');
-    }
-
-    function elegir(id) {
-      if (hidden) hidden.value = id || '';
-      cerrar();
-      if (form) form.submit();
-    }
-
-    function pintar(texto) {
-      var q = String(texto || '').trim().toLowerCase();
-      var visibles = lotes.filter(function (l) {
-        return !q || String(l.nombre || '').toLowerCase().indexOf(q) >= 0;
-      });
-      lista.innerHTML = '';
-      var todos = document.createElement('button');
-      todos.type = 'button';
-      todos.className = 'ios-sheet-item';
-      todos.innerHTML = '<strong>Todos los lotes</strong><span>Sin filtrar</span>';
-      todos.addEventListener('click', function () { elegir(''); });
-      if (!q) lista.appendChild(todos);
-      if (!visibles.length) {
-        statusEl.textContent = q ? 'No hay un lote con ese nombre.' : 'Todavía no hay lotes.';
-        return;
-      }
-      statusEl.textContent = visibles.length + ' lote' + (visibles.length === 1 ? '' : 's');
-      visibles.forEach(function (l) {
-        var b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'ios-sheet-item';
-        var fecha = l.fecha_vencimiento ? ('Vence ' + l.fecha_vencimiento) : 'Sin fecha';
-        b.innerHTML = '<strong>' + esc(l.nombre) + '</strong><span>' + esc(fecha) + '</span>';
-        b.addEventListener('click', function () { elegir(l.id); });
-        lista.appendChild(b);
-      });
-    }
-
-    if (abrir && sheet) {
-      abrir.addEventListener('click', function () {
-        if (buscar) buscar.value = '';
-        pintar('');
-        sheet.hidden = false;
-        sheet.setAttribute('aria-hidden', 'false');
-        document.body.classList.add('ios-sheet-open');
-        setTimeout(function () { buscar && buscar.focus(); }, 40);
-      });
-      buscar && buscar.addEventListener('input', function () { pintar(buscar.value); });
-      document.getElementById('catalogoLoteCerrar').addEventListener('click', cerrar);
-      sheet.addEventListener('click', function (ev) {
-        if (ev.target === sheet) cerrar();
-      });
-    }
   })();
   </script>
 </body>

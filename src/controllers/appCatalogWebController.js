@@ -123,24 +123,9 @@ async function list(req, res, next) {
       almacenId = res.locals.userAlmacenId || almacenId;
     }
 
-    const loteId = String(req.query.lote || '').trim();
-    const [almacenes, lotes] = await Promise.all([
-      isAdmin
-        ? almacenModel.findByCompanyRuc(companyRuc, { soloActivos: true })
-        : Promise.resolve([]),
-      productoLoteModel.listByCompany(companyRuc),
-    ]);
-    const lote = loteId ? lotes.find((row) => row.id === loteId) : null;
-    let ids = null;
-    const qtyByItem = new Map();
-    if (lote) {
-      const delLote = await productoLoteModel.productosDelLote(companyRuc, lote.id, { almacenId });
-      for (const row of delLote?.items || []) {
-        if (!row.id) continue;
-        qtyByItem.set(row.id, (qtyByItem.get(row.id) || 0) + Number(row.cantidad || 0));
-      }
-      ids = [...qtyByItem.keys()];
-    }
+    const almacenes = isAdmin
+      ? await almacenModel.findByCompanyRuc(companyRuc, { soloActivos: true })
+      : [];
 
     const { total, items: pageItems } = await catalogItemModel.findPaginated({
       q,
@@ -151,19 +136,11 @@ async function list(req, res, next) {
       skip,
       soloActivos: !isAdmin,
       almacenId,
-      ids,
     });
-
-    const enriched = lote
-      ? pageItems.map((it) => {
-          const qty = qtyByItem.get(it.id) || 0;
-          return { ...it, stockActual: qty, stock_actual: qty };
-        })
-      : pageItems;
 
     const alertas = await productoLoteModel.alertasVencimientoPorItems(
       companyRuc,
-      enriched.map((it) => it.id),
+      pageItems.map((it) => it.id),
     );
 
     const loadMore = buildLoadMoreMeta({
@@ -174,7 +151,6 @@ async function list(req, res, next) {
         q,
         kind: kindFilter || undefined,
         almacen: almacenId || undefined,
-        lote: lote ? lote.id : undefined,
         msg: req.query.msg,
         tipo: req.query.tipo,
       },
@@ -183,7 +159,7 @@ async function list(req, res, next) {
     res.render('app/catalogo/listar', layoutLocalsCatalog(res, {
       title: 'Catálogo',
       active: 'catalogo',
-      items: enriched.map((it) => ({
+      items: pageItems.map((it) => ({
         ...it,
         stockLabel: stockLabel(it),
         precioLabel: formatMoney(it.precioUnitario ?? it.precio_unitario),
@@ -197,9 +173,6 @@ async function list(req, res, next) {
       kind: kindFilter,
       almacenId,
       almacenes,
-      loteId: lote ? lote.id : '',
-      loteNombre: lote ? lote.nombre : '',
-      lotes,
       loadMore,
       flash: parseFlash(req),
     }));
