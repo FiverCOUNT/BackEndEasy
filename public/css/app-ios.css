@@ -1949,6 +1949,16 @@ a.ios-selected-card-change {
   gap: 8px;
   padding: 0 2px 2px;
 }
+.ios-sheet-panel > .ios-serie-filtros {
+  margin: 0 0 8px;
+}
+.ios-lote-prod-head {
+  background: #F2F2F7;
+  pointer-events: none;
+}
+.ios-lote-prod-head strong {
+  color: #1C1C1E;
+}
 .ios-serie-filtro {
   border: 0;
   background: #F2F2F7;

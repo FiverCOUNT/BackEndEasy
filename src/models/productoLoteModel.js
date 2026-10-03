@@ -248,13 +248,13 @@ async function productosDelLote(companyRuc, loteId, { almacenId = null, catalogI
     }
     const grupo = porItem.get(id);
     if (linea.productoSerieId && linea.productoSerie) {
-      const estado = linea.productoSerie.estado;
+      const estado = String(linea.productoSerie.estado || '').toUpperCase();
       const almSerie = linea.productoSerie.almacen?.id || linea.productoSerie.almacenId || '';
       if (soloAlmacen && almSerie !== soloAlmacen) continue;
-      if (estado === 'DISPONIBLE' || estado === 'RESERVADO') {
+      if (estado === 'DISPONIBLE' || estado === 'RESERVADO' || estado === 'ENTREGADO' || estado === 'VENDIDO') {
         grupo.series.set(linea.productoSerie.id, {
           numero_serie: linea.productoSerie.numeroSerie,
-          estado: estado === 'DISPONIBLE' ? 'Disponible' : 'Reservado',
+          estado,
           almacen_nombre: linea.productoSerie.almacen?.nombre || '',
         });
       }
@@ -273,11 +273,12 @@ async function productosDelLote(companyRuc, loteId, { almacenId = null, catalogI
       String(a.numero_serie).localeCompare(String(b.numero_serie), 'es')
     ));
     if (series.length) {
+      const disponibles = series.filter((s) => s.estado === 'DISPONIBLE' || s.estado === 'RESERVADO').length;
       items.push({
         id: grupo.id,
         nombre: grupo.nombre,
         tipo: 'serie',
-        cantidad: series.length,
+        cantidad: disponibles,
         unidad: 'und',
         series,
       });

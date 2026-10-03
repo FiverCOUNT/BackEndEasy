@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title><%= title %> · Easy</title>
-  <link rel="stylesheet" href="/css/app-ios.css?v=lote-notif" />
+  <link rel="stylesheet" href="/css/app-ios.css?v=lote-series" />
 </head>
 <body class="ios-app">
   <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
@@ -158,6 +158,10 @@
         </div>
         <span style="width:56px;"></span>
       </div>
+      <div class="ios-serie-filtros" id="loteSeriesFiltros" hidden>
+        <button type="button" class="ios-serie-filtro is-on" data-lote-serie-estado="DISPONIBLE">Disponible</button>
+        <button type="button" class="ios-serie-filtro" data-lote-serie-estado="ENTREGADO">Entregado</button>
+      </div>
       <div class="ios-sheet-status" id="loteProductosStatus">Cargando…</div>
       <div class="ios-sheet-list" id="loteProductosLista"></div>
     </div>
@@ -174,6 +178,10 @@
     var sub = document.getElementById('loteProductosSub');
     var statusEl = document.getElementById('loteProductosStatus');
     var lista = document.getElementById('loteProductosLista');
+    var filtros = document.getElementById('loteSeriesFiltros');
+    var estadoFiltro = 'DISPONIBLE';
+    var cacheSeries = [];
+    var cacheMeta = null;
 
     function esc(s) {
       return String(s == null ? '' : s)
@@ -183,10 +191,40 @@
         .replace(/"/g, '&quot;');
     }
 
+    function estadoInfo(raw) {
+      var estado = String(raw || '').toUpperCase();
+      if (estado === 'DISPONIBLE') {
+        return { key: 'DISPONIBLE', label: 'Disponible', chip: 'ios-status-chip is-ok' };
+      }
+      if (estado.indexOf('ENTREG') >= 0 || estado === 'VENDIDO') {
+        return { key: 'ENTREGADO', label: 'Entregado', chip: 'ios-status-chip is-out' };
+      }
+      if (estado.indexOf('RESERV') >= 0) {
+        return { key: 'DISPONIBLE', label: 'Reservado', chip: 'ios-status-chip is-warn' };
+      }
+      return { key: estado || 'OTRO', label: raw || '—', chip: 'ios-status-chip is-mute' };
+    }
+
+    function pintarFiltros() {
+      if (!filtros) return;
+      filtros.querySelectorAll('[data-lote-serie-estado]').forEach(function (btn) {
+        btn.classList.toggle('is-on', btn.getAttribute('data-lote-serie-estado') === estadoFiltro);
+      });
+    }
+
+    function setFiltrosVisible(on) {
+      if (!filtros) return;
+      filtros.hidden = !on;
+      if (on) pintarFiltros();
+    }
+
     function cerrar() {
       sheet.hidden = true;
       sheet.setAttribute('aria-hidden', 'true');
       document.body.classList.remove('ios-sheet-open');
+      setFiltrosVisible(false);
+      cacheSeries = [];
+      cacheMeta = null;
     }
 
     function abrirSheet(tituloTxt, subTxt) {
@@ -194,79 +232,133 @@
       sub.textContent = subTxt || '';
       statusEl.textContent = 'Cargando…';
       lista.innerHTML = '';
+      estadoFiltro = 'DISPONIBLE';
+      setFiltrosVisible(false);
+      cacheSeries = [];
+      cacheMeta = null;
       sheet.hidden = false;
       sheet.setAttribute('aria-hidden', 'false');
       document.body.classList.add('ios-sheet-open');
+    }
+
+    function renderSeriesLista() {
+      lista.innerHTML = '';
+      if (cacheMeta && cacheMeta.nombre) {
+        var head = document.createElement('div');
+        head.className = 'ios-sheet-item is-side ios-lote-prod-head';
+        var disp = cacheSeries.filter(function (s) {
+          var k = estadoInfo(s.estado).key;
+          return k === 'DISPONIBLE';
+        }).length;
+        head.innerHTML =
+          '<div class="ios-sheet-item-copy"><strong>' + esc(cacheMeta.nombre) + '</strong></div>' +
+          '<span class="ios-valor">' + disp + ' und</span>';
+        lista.appendChild(head);
+      }
+      var visibles = cacheSeries.filter(function (s) {
+        return estadoInfo(s.estado).key === estadoFiltro;
+      });
+      if (!visibles.length) {
+        statusEl.textContent = estadoFiltro === 'ENTREGADO'
+          ? 'No hay series entregadas'
+          : 'No hay series disponibles';
+        return;
+      }
+      statusEl.textContent = visibles.length + ' serie' + (visibles.length === 1 ? '' : 's');
+      visibles.forEach(function (s) {
+        var info = estadoInfo(s.estado);
+        var row = document.createElement('div');
+        row.className = 'ios-sheet-item';
+        var alm = s.almacen_nombre ? ('<span class="ios-serie-alm">' + esc(s.almacen_nombre) + '</span>') : '';
+        row.innerHTML =
+          '<strong>' + esc(s.numero_serie || '—') + '</strong>' +
+          '<span class="ios-serie-meta"><span class="' + info.chip + '">' + esc(info.label) + '</span>' + alm + '</span>';
+        lista.appendChild(row);
+      });
+    }
+
+    function pintarSeriesDeProducto(it) {
+      cacheMeta = { nombre: it.nombre || productoNombre || 'Producto' };
+      cacheSeries = it.series || [];
+      setFiltrosVisible(true);
+      renderSeriesLista();
     }
 
     function pintarProductos(items) {
       lista.innerHTML = '';
       if (!items.length) {
         statusEl.textContent = 'Este lote no tiene productos en stock.';
+        setFiltrosVisible(false);
         return;
       }
+      var soloSerie = items.length === 1 && items[0].tipo === 'serie';
+      if (soloSerie) {
+        pintarSeriesDeProducto(items[0]);
+        return;
+      }
+      setFiltrosVisible(false);
       statusEl.textContent = items.length + ' producto' + (items.length === 1 ? '' : 's');
       items.forEach(function (it) {
         var row = document.createElement('div');
         row.className = 'ios-sheet-item is-side';
-        var copy = '<div class="ios-sheet-item-copy"><strong>' + esc(it.nombre) + '</strong>';
-        var valor = '';
         if (it.tipo === 'serie') {
-          (it.series || []).forEach(function (s) {
-            copy += '<span>Serie ' + esc(s.numero_serie || '—') + '</span>';
+          var series = it.series || [];
+          var disp = series.filter(function (s) { return estadoInfo(s.estado).key === 'DISPONIBLE'; }).length;
+          var ent = series.filter(function (s) { return estadoInfo(s.estado).key === 'ENTREGADO'; }).length;
+          row.innerHTML =
+            '<div class="ios-sheet-item-copy">' +
+              '<strong>' + esc(it.nombre) + '</strong>' +
+              '<span class="ios-serie-meta">' +
+                '<span class="ios-status-chip is-ok">' + disp + ' disp.</span>' +
+                (ent ? '<span class="ios-status-chip is-out">' + ent + ' ent.</span>' : '') +
+              '</span>' +
+            '</div>' +
+            '<span class="ios-valor">' + disp + ' und</span>';
+          row.style.cursor = 'pointer';
+          row.addEventListener('click', function () {
+            titulo.textContent = it.nombre || 'Producto';
+            pintarSeriesDeProducto(it);
           });
-          valor = (it.series || []).length + ' und';
         } else {
-          valor = String(it.cantidad || '') + ' ' + String(it.unidad || '');
+          row.innerHTML =
+            '<div class="ios-sheet-item-copy"><strong>' + esc(it.nombre) + '</strong></div>' +
+            '<span class="ios-valor">' + esc(String(it.cantidad || '') + ' ' + String(it.unidad || '')) + '</span>';
         }
-        copy += '</div>';
-        row.innerHTML = copy + '<span class="ios-valor">' + esc(valor.trim()) + '</span>';
         lista.appendChild(row);
       });
     }
 
-    function pintarDetalleProducto(items, loteNombre) {
+    function pintarDetalleProducto(items) {
       lista.innerHTML = '';
       var it = (items || [])[0];
       if (!it) {
         statusEl.textContent = 'Sin stock disponible en este lote.';
+        setFiltrosVisible(false);
         return;
       }
       if (it.tipo === 'serie') {
-        var series = it.series || [];
-        statusEl.textContent = series.length + ' serie' + (series.length === 1 ? '' : 's') + ' disponible' + (series.length === 1 ? '' : 's');
-        series.forEach(function (s) {
-          var row = document.createElement('div');
-          row.className = 'ios-sheet-item is-side';
-          var estado = String(s.estado || '').toUpperCase();
-          var chipClass = 'ios-status-chip';
-          if (estado === 'DISPONIBLE' || estado === 'DISPONIBLE') chipClass += ' is-ok';
-          else if (estado.indexOf('ENTREG') >= 0) chipClass += ' is-out';
-          else if (estado.indexOf('RESERV') >= 0) chipClass += ' is-warn';
-          var label = estado === 'DISPONIBLE' ? 'Disponible'
-            : (estado.indexOf('ENTREG') >= 0 ? 'Entregado' : (s.estado || '—'));
-          var alm = s.almacen_nombre ? ('<span class="ios-serie-alm">' + esc(s.almacen_nombre) + '</span>') : '';
-          row.innerHTML =
-            '<div class="ios-sheet-item-copy">' +
-              '<strong>' + esc(s.numero_serie || '—') + '</strong>' +
-              '<span class="ios-serie-meta"><span class="' + chipClass + '">' + esc(label) + '</span>' + alm + '</span>' +
-            '</div>' +
-            '<span class="ios-valor">1 und</span>';
-          lista.appendChild(row);
-        });
+        pintarSeriesDeProducto(it);
         return;
       }
+      setFiltrosVisible(false);
       statusEl.textContent = 'Cantidad disponible';
       var row = document.createElement('div');
       row.className = 'ios-sheet-item is-side';
       row.innerHTML =
         '<div class="ios-sheet-item-copy">' +
           '<strong>' + esc(productoNombre || it.nombre) + '</strong>' +
-          '<span class="ios-lote-nombre">' + esc(loteNombre || '') + '</span>' +
         '</div>' +
         '<span class="ios-valor">' + esc(String(it.cantidad || '') + ' ' + String(it.unidad || '')) + '</span>';
       lista.appendChild(row);
     }
+
+    filtros && filtros.addEventListener('click', function (ev) {
+      var btn = ev.target.closest('[data-lote-serie-estado]');
+      if (!btn) return;
+      estadoFiltro = btn.getAttribute('data-lote-serie-estado') || 'DISPONIBLE';
+      pintarFiltros();
+      renderSeriesLista();
+    });
 
     document.addEventListener('click', function (ev) {
       var detalleBtn = ev.target.closest('[data-lote-detalle]');
