@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> · Easy</title>
+  <link rel="stylesheet" href="/css/app-ios.css?v=analisis-1" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js" defer></script>
+</head>
+<body class="ios-app">
+  <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
+
+  <main class="ios-main">
+    <header class="ios-top">
+      <div>
+        <p class="ios-eyebrow"><%= companyNombre || 'Empresa' %></p>
+        <h1>Análisis</h1>
+      </div>
+    </header>
+
+    <form class="ios-filters ios-analisis-filters" method="GET" action="<%= appBase %>/analisis">
+      <div class="ios-search">
+        <input type="search" name="q" value="<%= filtros.q || '' %>" placeholder="Buscar producto o código" autocomplete="off" />
+      </div>
+      <div class="ios-filter-row ios-analisis-filter-row">
+        <select name="periodo" class="ios-select" aria-label="Periodo" onchange="this.form.submit()">
+          <option value="hoy" <%= filtros.periodo === 'hoy' ? 'selected' : '' %>>Hoy</option>
+          <option value="7d" <%= filtros.periodo === '7d' ? 'selected' : '' %>>7 días</option>
+          <option value="30d" <%= filtros.periodo === '30d' ? 'selected' : '' %>>30 días</option>
+          <option value="mes" <%= filtros.periodo === 'mes' ? 'selected' : '' %>>Este mes</option>
+          <option value="mes_ant" <%= filtros.periodo === 'mes_ant' ? 'selected' : '' %>>Mes anterior</option>
+          <option value="trimestre" <%= filtros.periodo === 'trimestre' ? 'selected' : '' %>>Último trimestre</option>
+          <option value="anio" <%= filtros.periodo === 'anio' ? 'selected' : '' %>>Este año</option>
+          <option value="custom" <%= filtros.periodo === 'custom' ? 'selected' : '' %>>Personalizado</option>
+        </select>
+        <select name="tipo" class="ios-select" aria-label="Tipo de documento">
+          <option value="" <%= !filtros.tipo ? 'selected' : '' %>>Factura + Boleta</option>
+          <option value="01" <%= filtros.tipo === '01' ? 'selected' : '' %>>Solo facturas</option>
+          <option value="03" <%= filtros.tipo === '03' ? 'selected' : '' %>>Solo boletas</option>
+        </select>
+        <select name="orden" class="ios-select" aria-label="Ordenar por">
+          <option value="unidades" <%= filtros.orden === 'unidades' ? 'selected' : '' %>>Más vendidos (und)</option>
+          <option value="venta" <%= filtros.orden === 'venta' ? 'selected' : '' %>>Más ingresos</option>
+          <option value="margen" <%= filtros.orden === 'margen' ? 'selected' : '' %>>Mejor margen S/</option>
+          <option value="margen_pct" <%= filtros.orden === 'margen_pct' ? 'selected' : '' %>>Mejor margen %</option>
+          <option value="peor_margen" <%= filtros.orden === 'peor_margen' ? 'selected' : '' %>>Peor margen %</option>
+          <option value="nombre" <%= filtros.orden === 'nombre' ? 'selected' : '' %>>Nombre A–Z</option>
+        </select>
+        <select name="top" class="ios-select" aria-label="Top">
+          <option value="10" <%= Number(filtros.top) === 10 ? 'selected' : '' %>>Top 10</option>
+          <option value="20" <%= Number(filtros.top) === 20 ? 'selected' : '' %>>Top 20</option>
+          <option value="50" <%= Number(filtros.top) === 50 ? 'selected' : '' %>>Top 50</option>
+          <option value="100" <%= Number(filtros.top) === 100 ? 'selected' : '' %>>Top 100</option>
+        </select>
+        <select name="solo_costo" class="ios-select" aria-label="Costo">
+          <option value="1" <%= filtros.solo_costo !== '0' ? 'selected' : '' %>>Con precio de compra</option>
+          <option value="0" <%= filtros.solo_costo === '0' ? 'selected' : '' %>>Todos los vendidos</option>
+        </select>
+        <button type="submit" class="ios-btn-secondary">Aplicar</button>
+      </div>
+      <% if (filtros.periodo === 'custom') { %>
+      <div class="ios-filter-row">
+        <label class="ios-field">
+          <span>Desde</span>
+          <input type="date" name="desde" value="<%= filtros.desde %>" />
+        </label>
+        <label class="ios-field">
+          <span>Hasta</span>
+          <input type="date" name="hasta" value="<%= filtros.hasta %>" />
+        </label>
+      </div>
+      <% } else { %>
+        <input type="hidden" name="desde" value="<%= filtros.desde %>" />
+        <input type="hidden" name="hasta" value="<%= filtros.hasta %>" />
+      <% } %>
+      <p class="ios-hint">Periodo <%= filtros.desde %> → <%= filtros.hasta %> · Facturas/boletas aceptadas o enviadas</p>
+    </form>
+
+    <section class="ios-analisis-kpis">
+      <article class="ios-analisis-kpi">
+        <span>Ventas</span>
+        <strong>S/ <%= Number(kpis.venta || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></strong>
+      </article>
+      <article class="ios-analisis-kpi">
+        <span>Costo</span>
+        <strong>S/ <%= Number(kpis.costo || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></strong>
+      </article>
+      <article class="ios-analisis-kpi is-ok">
+        <span>Margen bruto</span>
+        <strong>S/ <%= Number(kpis.margen || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></strong>
+        <small><%= kpis.margen_pct %>%</small>
+      </article>
+      <article class="ios-analisis-kpi">
+        <span>Unidades</span>
+        <strong><%= Number(kpis.unidades || 0).toLocaleString('es-PE') %></strong>
+        <small><%= kpis.productos %> productos</small>
+      </article>
+    </section>
+
+    <% if (!productos.length) { %>
+      <section class="ios-card-empty">
+        <div class="ios-empty-icon">◈</div>
+        <h2>Sin datos para este filtro</h2>
+        <p>Registra precio de compra en el catálogo y emite ventas en el periodo elegido.</p>
+        <a class="ios-btn-primary" href="<%= appBase %>/catalogo">Ir al catálogo</a>
+      </section>
+    <% } else { %>
+      <section class="ios-analisis-charts">
+        <article class="ios-analisis-chart-card">
+          <h2>Ventas, costo y margen</h2>
+          <canvas id="chartSerie" height="120"></canvas>
+        </article>
+        <article class="ios-analisis-chart-card">
+          <h2>Mix económico</h2>
+          <canvas id="chartMix" height="120"></canvas>
+        </article>
+        <article class="ios-analisis-chart-card">
+          <h2>Top vendidos (unidades)</h2>
+          <canvas id="chartUnidades" height="160"></canvas>
+        </article>
+        <article class="ios-analisis-chart-card">
+          <h2>Top margen (S/)</h2>
+          <canvas id="chartMargen" height="160"></canvas>
+        </article>
+      </section>
+
+      <section class="ios-analisis-table-wrap">
+        <h2 class="ios-section-title">Productos</h2>
+        <div class="ios-list ios-analisis-table">
+          <% productos.forEach(function(p, idx) { %>
+            <article class="ios-analisis-row">
+              <div class="ios-analisis-rank"><%= idx + 1 %></div>
+              <div class="ios-analisis-main">
+                <strong><%= p.nombre %></strong>
+                <span>
+                  <%= p.codigo ? (p.codigo + ' · ') : '' %><%= Number(p.unidades).toLocaleString('es-PE') %> und
+                  <% if (p.margen_pct != null) { %> · margen <%= p.margen_pct %>%<% } %>
+                </span>
+              </div>
+              <div class="ios-analisis-nums">
+                <strong>S/ <%= Number(p.venta).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></strong>
+                <span>Costo S/ <%= Number(p.costo).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></span>
+                <span class="<%= p.margen >= 0 ? 'is-ok' : 'is-bad' %>">Margen S/ <%= Number(p.margen).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></span>
+              </div>
+            </article>
+          <% }); %>
+        </div>
+        <% if (total_productos > productos.length) { %>
+          <p class="ios-hint">Mostrando <%= productos.length %> de <%= total_productos %>. Sube el Top para ver más.</p>
+        <% } %>
+      </section>
+    <% } %>
+  </main>
+
+  <%- include('../../partials/app-tabbar', { active: active, appBase: appBase }) %>
+
+  <script type="application/json" id="analisis-charts-data"><%- JSON.stringify(charts || {}).replace(/</g, '\\u003c') %></script>
+  <script>
+  document.addEventListener('DOMContentLoaded', function () {
+    if (typeof Chart === 'undefined') return;
+    var raw = document.getElementById('analisis-charts-data');
+    if (!raw) return;
+    var data;
+    try { data = JSON.parse(raw.textContent || '{}'); } catch (e) { return; }
+    var money = function (v) {
+      return 'S/ ' + Number(v || 0).toLocaleString('es-PE', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    };
+    Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    Chart.defaults.color = '#636366';
+    Chart.defaults.plugins.legend.labels.boxWidth = 12;
+
+    var serie = data.serie || [];
+    var elSerie = document.getElementById('chartSerie');
+    if (elSerie && serie.length) {
+      new Chart(elSerie, {
+        type: 'line',
+        data: {
+          labels: serie.map(function (r) { return r.fecha.slice(5); }),
+          datasets: [
+            { label: 'Ventas', data: serie.map(function (r) { return r.venta; }), borderColor: '#007AFF', backgroundColor: 'rgba(0,122,255,0.12)', fill: true, tension: 0.35, pointRadius: 0 },
+            { label: 'Costo', data: serie.map(function (r) { return r.costo; }), borderColor: '#FF9500', backgroundColor: 'transparent', tension: 0.35, pointRadius: 0 },
+            { label: 'Margen', data: serie.map(function (r) { return r.margen; }), borderColor: '#34C759', backgroundColor: 'transparent', tension: 0.35, pointRadius: 0 },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          interaction: { mode: 'index', intersect: false },
+          scales: {
+            x: { grid: { display: false } },
+            y: { beginAtZero: true, ticks: { callback: function (v) { return money(v); } } },
+          },
+        },
+      });
+    }
+
+    var mix = data.mix || {};
+    var elMix = document.getElementById('chartMix');
+    if (elMix) {
+      new Chart(elMix, {
+        type: 'doughnut',
+        data: {
+          labels: ['Costo', 'Margen'],
+          datasets: [{
+            data: [Math.max(0, mix.costo || 0), Math.max(0, mix.margen || 0)],
+            backgroundColor: ['#FF9500', '#34C759'],
+            borderWidth: 0,
+          }],
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            tooltip: {
+              callbacks: {
+                label: function (ctx) {
+                  return ctx.label + ': ' + money(ctx.raw);
+                },
+              },
+            },
+          },
+        },
+      });
+    }
+
+    function barChart(elId, rows, valueKey, color) {
+      var el = document.getElementById(elId);
+      if (!el || !(rows || []).length) return;
+      new Chart(el, {
+        type: 'bar',
+        data: {
+          labels: rows.map(function (r) {
+            var n = String(r.nombre || '');
+            return n.length > 18 ? n.slice(0, 16) + '…' : n;
+          }),
+          datasets: [{
+            label: valueKey === 'unidades' ? 'Unidades' : 'S/',
+            data: rows.map(function (r) { return r[valueKey]; }),
+            backgroundColor: color,
+            borderRadius: 8,
+            maxBarThickness: 28,
+          }],
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.04)' } },
+            y: { grid: { display: false } },
+          },
+        },
+      });
+    }
+    barChart('chartUnidades', data.top_unidades || [], 'unidades', '#007AFF');
+    barChart('chartMargen', data.top_margen || [], 'margen', '#34C759');
+  });
+  </script>
+</body>
+</html>

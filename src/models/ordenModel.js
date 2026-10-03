@@ -75,6 +75,13 @@ function calcularLineaDesdeInput(linea, catalogItem = null) {
     mtoIgv,
     porcentajeIgv,
     total,
+    precioCompra: (() => {
+      const raw = linea.precio_compra ?? linea.precioCompra
+        ?? catalogItem?.precioCompra ?? catalogItem?.precio_compra;
+      if (raw == null || raw === '') return null;
+      const n = Number(raw);
+      return Number.isFinite(n) ? n : null;
+    })(),
   };
 }
 
@@ -118,6 +125,7 @@ function toDetalleApi(d) {
     mto_igv: toDec(d.mtoIgv),
     porcentaje_igv: toDec(d.porcentajeIgv),
     total: toDec(d.total),
+    precio_compra: toDec(d.precioCompra),
     almacen_id: d.almacenId,
     producto_serie_id: d.productoSerieId || null,
     almacen: d.almacen
@@ -543,6 +551,7 @@ async function create(companyRuc, body = {}) {
             mtoIgv: d.mtoIgv,
             porcentajeIgv: d.porcentajeIgv,
             total: d.total,
+            precioCompra: d.precioCompra != null ? d.precioCompra : null,
             almacenId: d.almacenId,
             productoSerieId: d.productoSerieId || null,
           })),
@@ -652,6 +661,7 @@ async function update(companyRuc, id, body = {}) {
           mtoIgv: d.mtoIgv,
           porcentajeIgv: d.porcentajeIgv,
           total: d.total,
+          precioCompra: d.precioCompra != null ? d.precioCompra : null,
           almacenId: d.almacenId,
           productoSerieId: d.productoSerieId || null,
         })),

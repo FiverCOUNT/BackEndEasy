@@ -1,6 +1,7 @@
 const express = require('express');
 const appModulesWebController = require('../controllers/appModulesWebController');
 const appCatalogWebController = require('../controllers/appCatalogWebController');
+const appAnalisisWebController = require('../controllers/appAnalisisWebController');
 const appAjustesWebController = require('../controllers/appAjustesWebController');
 const appMetodosPagoWebController = require('../controllers/appMetodosPagoWebController');
 const appUsuariosWebController = require('../controllers/appUsuariosWebController');
@@ -102,6 +103,7 @@ router.post('/clientes/:id', appModulesWebController.updateCliente);
 router.get('/clientes/:id', appModulesWebController.showClienteDetail);
 
 router.get('/catalogo/series/buscar', appCatalogWebController.buscarSerieJson);
+router.get('/analisis', requireWebAppAdmin, appAnalisisWebController.show);
 router.get('/catalogo', appCatalogWebController.list);
 router.get('/catalogo/codigos-sunat', appCatalogWebController.searchCodigosSunat);
 router.get('/catalogo/crear', requireWebAppAdmin, appCatalogWebController.showCreateForm);
@@ -121,10 +123,10 @@ router.post('/compras/sync', requireWebAppAdmin, appModulesWebController.sincron
 router.post('/compras/sincronizar', requireWebAppAdmin, appModulesWebController.sincronizarCompras);
 router.post('/compras/eliminar', requireWebAppAdmin, appModulesWebController.eliminarCompras);
 router.get('/compras/sync', requireWebAppAdmin, (req, res) => {
-  res.redirect(`${APP_BASE}/compras?msg=${encodeURIComponent('Usa el botón Sync / Forzar sync')}&tipo=error`);
+  res.redirect(`${APP_BASE}/compras?msg=${encodeURIComponent('Usa el bot?n Sync / Forzar sync')}&tipo=error`);
 });
 router.get('/compras/sincronizar', requireWebAppAdmin, (req, res) => {
-  res.redirect(`${APP_BASE}/compras?msg=${encodeURIComponent('Usa el botón Sync / Forzar sync')}&tipo=error`);
+  res.redirect(`${APP_BASE}/compras?msg=${encodeURIComponent('Usa el bot?n Sync / Forzar sync')}&tipo=error`);
 });
 router.get('/compras/:id/pdf', requireWebAppAdmin, appModulesWebController.compraPdf);
 router.get('/compras/:id', requireWebAppAdmin, appModulesWebController.compraDetalleJson);

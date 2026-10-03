@@ -144,6 +144,15 @@ function toNumber(value, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+/** Costo de catálogo; null si no hay (no forzar 0). */
+function snapshotPrecioCompra(item) {
+  if (!item) return null;
+  const raw = item.precioCompra ?? item.precio_compra;
+  if (raw == null || raw === '') return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
 function resolveTipoConfig(tipoRaw, company = null) {
   return resolveTipoConfigFromSeries(tipoRaw, company);
 }
@@ -742,6 +751,7 @@ function calcularLinea(catalogItem, cantidad, precioOverride = null) {
       totalFactura: total,
       porcentajeIgv: 18,
       tipAfeIgv: afectacion,
+      precioCompra: snapshotPrecioCompra(catalogItem),
     };
   }
 
@@ -759,6 +769,7 @@ function calcularLinea(catalogItem, cantidad, precioOverride = null) {
     totalFactura: valorVenta,
     porcentajeIgv: 0,
     tipAfeIgv: afectacion,
+    precioCompra: snapshotPrecioCompra(catalogItem),
   };
 }
 
@@ -1368,6 +1379,7 @@ function saleDetailDesdeLineaDocumentoAfectado(
     tipAfeIgv: origen.tipAfeIgv || '10',
     codigo: origen.codigo || undefined,
     codigoSunat: origen.codigoSunat || undefined,
+    precioCompra: snapshotPrecioCompra(origen) ?? snapshotPrecioCompra(catalogItem),
   };
 
   const creditoTotal = Math.abs(qty - qtyOrig) < 0.0001
@@ -1526,6 +1538,9 @@ function toSaleDetailCreateInput(detail) {
     porcentajeIgv: detail.porcentajeIgv ?? 0,
     estado: detail.estado || 'ACTIVO',
   };
+
+  const precioCompraSnap = snapshotPrecioCompra(detail);
+  if (precioCompraSnap != null) row.precioCompra = precioCompraSnap;
 
   if (detail.codigo) row.codigo = String(detail.codigo).slice(0, 64);
   if (detail.codigoSunat) row.codigoSunat = String(detail.codigoSunat).slice(0, 32);
@@ -1854,6 +1869,7 @@ function toApiSaleDetail(detail) {
     mto_valor_unitario: toNumber(detail.mtoValorUnitario),
     mto_base_igv: toNumber(detail.mtoBaseIgv),
     porcentaje_igv: toNumber(detail.porcentajeIgv),
+    precio_compra: snapshotPrecioCompra(detail),
     producto_serie_id: detail.productoSerieId,
     estado: detail.estado || 'ACTIVO',
     almacen_id: detail.almacenId || null,

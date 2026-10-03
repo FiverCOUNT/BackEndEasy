@@ -111,6 +111,7 @@ function toApiLinea(linea) {
     descripcion: linea.descripcion,
     unidad: linea.unidad,
     precio_unitario: linea.precioUnitario != null ? toNumber(linea.precioUnitario) : null,
+    precio_compra: linea.precioCompra != null ? toNumber(linea.precioCompra) : null,
     afectacion_igv: linea.afectacionIgv,
     kind: linea.kind,
     maneja_stock: linea.manejaStock,
@@ -192,6 +193,12 @@ const movimientoInclude = {
   },
 };
 function snapshotLineaFromItem(item, { almacenId, cantidad, productoSerieId, productoLoteId }) {
+  const compraRaw = item.precioCompra ?? item.precio_compra;
+  let precioCompra = null;
+  if (compraRaw != null && compraRaw !== '') {
+    const n = Number(compraRaw);
+    if (Number.isFinite(n)) precioCompra = n;
+  }
   return {
     catalogItemId: item.id,
     nombre: item.nombre,
@@ -199,6 +206,7 @@ function snapshotLineaFromItem(item, { almacenId, cantidad, productoSerieId, pro
     descripcion: item.descripcion,
     unidad: item.unidad,
     precioUnitario: item.precioUnitario,
+    precioCompra,
     afectacionIgv: item.afectacionIgv,
     kind: item.kind,
     manejaStock: item.manejaStock,

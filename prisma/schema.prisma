@@ -111,6 +111,8 @@ model SaleDetail {
   mtoValorUnitario  Decimal? @map("mto_valor_unitario") @db.Decimal(14, 4)
   mtoBaseIgv        Decimal? @map("mto_base_igv") @db.Decimal(14, 4)
   porcentajeIgv     Decimal? @map("porcentaje_igv") @db.Decimal(6, 2)
+  /// Snapshot del costo de catálogo al emitir (no afecta totales SUNAT).
+  precioCompra      Decimal? @map("precio_compra") @db.Decimal(14, 4)
   productoSerieId   String?  @map("producto_serie_id") @db.VarChar(36)
   /// Si tiene valor, la línea participa en movimiento de inventario de ese almacén.
   /// Null = digitada / solo referencia (no afecta stock).
@@ -219,6 +221,8 @@ model LineaCatalogoItem {
   descripcion     String?  @db.VarChar(500)
   unidad          String?  @db.VarChar(10)
   precioUnitario  Decimal? @map("precio_unitario") @db.Decimal(14, 4)
+  /// Snapshot del costo de catálogo al ingresar/sacar (análisis de margen).
+  precioCompra    Decimal? @map("precio_compra") @db.Decimal(14, 4)
   afectacionIgv   String?  @map("afectacion_igv") @db.VarChar(4)
   kind            String?  @db.VarChar(50)
   manejaStock     Boolean? @map("maneja_stock")
@@ -695,6 +699,8 @@ model OrdenDetalle {
   mtoIgv            Decimal? @map("mto_igv") @db.Decimal(14, 4)
   porcentajeIgv     Decimal? @map("porcentaje_igv") @db.Decimal(6, 2)
   total             Decimal? @map("total") @db.Decimal(14, 4)
+  /// Snapshot del costo de catálogo al crear la orden (análisis).
+  precioCompra      Decimal? @map("precio_compra") @db.Decimal(14, 4)
   almacenId         String?  @map("almacen_id") @db.VarChar(36)
   /// Serie física reservada / elegida en la orden (NIU con maneja_serie).
   productoSerieId   String?  @map("producto_serie_id") @db.VarChar(36)
