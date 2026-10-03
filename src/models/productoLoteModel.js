@@ -317,19 +317,27 @@ function diasHastaYmd(ymd) {
   return Math.floor((vence - hoy) / 86400000);
 }
 
-/** Mapa catalogItemId → aviso de vencimiento cercano (con stock del lote). */
-async function alertasVencimientoPorItems(companyRuc, catalogItemIds = []) {
-  const ids = [...new Set((catalogItemIds || []).map((id) => String(id || '').trim()).filter(Boolean))];
+/** Mapa catalogItemId → aviso de vencimiento cercano (con stock del lote).
+ *  Si `catalogItemIds` es null/undefined, evalúa todos los ítems de la empresa.
+ */
+async function alertasVencimientoPorItems(companyRuc, catalogItemIds) {
   const out = new Map();
-  if (!companyRuc || !ids.length) return out;
+  if (!companyRuc) return out;
+  const filtrarIds = Array.isArray(catalogItemIds);
+  const ids = filtrarIds
+    ? [...new Set(catalogItemIds.map((id) => String(id || '').trim()).filter(Boolean))]
+    : null;
+  if (filtrarIds && !ids.length) return out;
+
+  const where = {
+    productoLoteId: { not: null },
+    movimiento: { companyRuc, estado: { not: 'ANULADA' } },
+    productoLote: { fechaVencimiento: { not: null } },
+  };
+  if (ids) where.catalogItemId = { in: ids };
 
   const lineas = await prisma.lineaCatalogoItem.findMany({
-    where: {
-      catalogItemId: { in: ids },
-      productoLoteId: { not: null },
-      movimiento: { companyRuc, estado: { not: 'ANULADA' } },
-      productoLote: { fechaVencimiento: { not: null } },
-    },
+    where,
     select: {
       cantidad: true,
       catalogItemId: true,
@@ -399,6 +407,12 @@ async function alertasVencimientoPorItems(companyRuc, catalogItemIds = []) {
   return out;
 }
 
+/** Cantidad de productos del catálogo con lote por vencer / vencido (stock > 0). */
+async function countAlertasVencimiento(companyRuc) {
+  const map = await alertasVencimientoPorItems(companyRuc);
+  return map.size;
+}
+
 module.exports = {
   toApi,
   normalizarFilas,
@@ -407,4 +421,5 @@ module.exports = {
   guardarFilas,
   productosDelLote,
   alertasVencimientoPorItems,
+  countAlertasVencimiento,
 };

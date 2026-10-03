@@ -1954,6 +1954,32 @@ a.ios-selected-card-change {
 .ios-inline input { flex: 1; min-width: 0; }
 .ios-hint { font-size: 12px; color: var(--ios-muted); }
 
+.ios-serie-filtros {
+  display: flex;
+  gap: 8px;
+  padding: 0 2px 2px;
+}
+.ios-serie-filtro {
+  border: 0;
+  background: #F2F2F7;
+  color: #3A3A3C;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 8px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.ios-serie-filtro.is-on {
+  background: #007AFF;
+  color: #fff;
+}
+.ios-serie-filtro[data-serie-estado="DISPONIBLE"].is-on {
+  background: #1B7A3D;
+}
+.ios-serie-filtro[data-serie-estado="ENTREGADO"].is-on {
+  background: #3A4450;
+}
 .ios-serie-meta {
   display: flex;
   flex-wrap: wrap;

@@ -73,6 +73,8 @@ function layoutLocals(res, extra = {}) {
     isWebAdmin: isAdmin,
     userAlmacenId: res.locals.userAlmacenId || webUser.almacenId || null,
     navItems: navItemsForUser(webUser),
+    ordenesNoVistas: Number(res.locals.ordenesNoVistas) || 0,
+    catalogoPorVencer: Number(res.locals.catalogoPorVencer) || 0,
     ...extra,
   };
 }

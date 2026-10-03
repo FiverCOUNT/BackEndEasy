@@ -34,6 +34,9 @@
         <% if (item.id === 'ordenes' && typeof ordenesNoVistas === 'number' && ordenesNoVistas > 0) { %>
           <span class="ios-nav-badge"><%= ordenesNoVistas > 99 ? '99+' : ordenesNoVistas %></span>
         <% } %>
+        <% if (item.id === 'catalogo' && typeof catalogoPorVencer === 'number' && catalogoPorVencer > 0) { %>
+          <span class="ios-nav-badge" title="Productos con lote por vencer"><%= catalogoPorVencer > 99 ? '99+' : catalogoPorVencer %></span>
+        <% } %>
       </a>
     <% }); %>
   </nav>

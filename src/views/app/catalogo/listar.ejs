@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title><%= title %> · Easy</title>
-  <link rel="stylesheet" href="/css/app-ios.css?v=cat-vence" />
+  <link rel="stylesheet" href="/css/app-ios.css?v=serie-filtro" />
 </head>
 <body class="ios-app">
   <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
@@ -190,6 +190,10 @@
         <span style="width:56px;"></span>
       </div>
       <input type="search" id="seriesSheetBusqueda" class="ios-sheet-search" placeholder="Buscar número de serie…" autocomplete="off" />
+      <div class="ios-serie-filtros" id="seriesSheetFiltros" role="tablist" aria-label="Estado de serie">
+        <button type="button" class="ios-serie-filtro is-on" data-serie-estado="DISPONIBLE">Disponible</button>
+        <button type="button" class="ios-serie-filtro" data-serie-estado="ENTREGADO">Entregado</button>
+      </div>
       <div class="ios-sheet-status" id="seriesSheetStatus">Cargando…</div>
       <div class="ios-sheet-list" id="seriesSheetLista"></div>
     </div>
@@ -205,7 +209,9 @@
     var statusEl = document.getElementById('seriesSheetStatus');
     var lista = document.getElementById('seriesSheetLista');
     var busqueda = document.getElementById('seriesSheetBusqueda');
+    var filtros = document.getElementById('seriesSheetFiltros');
     var itemId = '';
+    var estadoFiltro = 'DISPONIBLE';
     var timer = null;
 
     function esc(s) {
@@ -214,6 +220,13 @@
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
+    }
+
+    function pintarFiltros() {
+      if (!filtros) return;
+      filtros.querySelectorAll('[data-serie-estado]').forEach(function (btn) {
+        btn.classList.toggle('is-on', btn.getAttribute('data-serie-estado') === estadoFiltro);
+      });
     }
 
     function closeSheet() {
@@ -225,6 +238,8 @@
 
     function openSheet(id, nombre) {
       itemId = id;
+      estadoFiltro = 'DISPONIBLE';
+      pintarFiltros();
       if (title) title.textContent = nombre || 'Series';
       if (busqueda) busqueda.value = '';
       if (lista) lista.innerHTML = '';
@@ -239,7 +254,8 @@
     function loadSeries(q) {
       if (!itemId) return;
       if (statusEl) statusEl.textContent = 'Buscando…';
-      var url = appBase + '/catalogo/' + encodeURIComponent(itemId) + '/series?q=' + encodeURIComponent(q || '');
+      var url = appBase + '/catalogo/' + encodeURIComponent(itemId) + '/series?q=' + encodeURIComponent(q || '')
+        + '&estado=' + encodeURIComponent(estadoFiltro || 'DISPONIBLE');
       if (almacenFiltro) url += '&almacen=' + encodeURIComponent(almacenFiltro);
       fetch(url, { headers: { Accept: 'application/json' } })
         .then(function (r) { return r.json(); })
@@ -248,7 +264,11 @@
           if (!lista) return;
           lista.innerHTML = '';
           if (!items.length) {
-            if (statusEl) statusEl.textContent = q ? 'Sin series para esa búsqueda' : 'No hay series registradas';
+            if (statusEl) {
+              statusEl.textContent = q
+                ? 'Sin series para esa búsqueda'
+                : (estadoFiltro === 'ENTREGADO' ? 'No hay series entregadas' : 'No hay series disponibles');
+            }
             return;
           }
           if (statusEl) statusEl.textContent = items.length + ' serie' + (items.length === 1 ? '' : 's');
@@ -281,6 +301,14 @@
           if (statusEl) statusEl.textContent = 'No se pudieron cargar las series';
         });
     }
+
+    filtros && filtros.addEventListener('click', function (ev) {
+      var btn = ev.target.closest('[data-serie-estado]');
+      if (!btn) return;
+      estadoFiltro = btn.getAttribute('data-serie-estado') || 'DISPONIBLE';
+      pintarFiltros();
+      loadSeries(busqueda ? busqueda.value.trim() : '');
+    });
 
     document.addEventListener('click', function (ev) {
       var btn = ev.target.closest('[data-series-item]');

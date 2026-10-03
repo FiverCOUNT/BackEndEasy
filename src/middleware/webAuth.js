@@ -128,6 +128,12 @@ async function requireWebApp(req, res, next) {
   } catch {
     res.locals.ordenesNoVistas = 0;
   }
+  try {
+    const productoLoteModel = require('../models/productoLoteModel');
+    res.locals.catalogoPorVencer = await productoLoteModel.countAlertasVencimiento(user.companyRuc);
+  } catch {
+    res.locals.catalogoPorVencer = 0;
+  }
   return next();
 }
 
