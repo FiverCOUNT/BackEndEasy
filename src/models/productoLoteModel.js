@@ -3,30 +3,42 @@ const prisma = require('../config/prisma');
 
 function toApi(row) {
   if (!row) return null;
+  const dias = row.diasNotificacion != null ? Number(row.diasNotificacion) : null;
   return {
     id: row.id,
     nombre: row.nombre,
     fecha_vencimiento: row.fechaVencimiento || null,
+    dias_notificacion: Number.isFinite(dias) && dias > 0 ? dias : null,
   };
 }
 
-function normalizarFilas(nombres, fechas) {
+function normalizarFilas(nombres, fechas, diasNotifs) {
   const nums = [].concat(nombres || []);
   const fecs = [].concat(fechas || []);
-  const n = Math.max(nums.length, fecs.length);
+  const diasArr = [].concat(diasNotifs || []);
+  const n = Math.max(nums.length, fecs.length, diasArr.length);
   const filas = [];
   const vistos = new Set();
   for (let i = 0; i < n; i += 1) {
     const nombre = String(nums[i] || '').trim().slice(0, 64);
     const fechaRaw = String(fecs[i] || '').trim().slice(0, 10);
-    if (!nombre && !fechaRaw) continue;
+    const diasRaw = String(diasArr[i] || '').trim();
+    if (!nombre && !fechaRaw && !diasRaw) continue;
     if (!nombre) return { error: 'El nombre del lote es obligatorio.' };
     const key = nombre.toLowerCase();
     if (vistos.has(key)) return { error: `El lote ${nombre} está repetido.` };
     vistos.add(key);
     const fecha = /^\d{4}-\d{2}-\d{2}$/.test(fechaRaw) ? fechaRaw : '';
     if (fechaRaw && !fecha) return { error: `La fecha de ${nombre} no es válida.` };
-    filas.push({ nombre, fecha: fecha || null });
+    let diasNotificacion = null;
+    if (diasRaw) {
+      const d = Number(diasRaw);
+      if (!Number.isFinite(d) || d < 1 || d > 3650 || !Number.isInteger(d)) {
+        return { error: `Los días de notificación de ${nombre} no son válidos.` };
+      }
+      diasNotificacion = d;
+    }
+    filas.push({ nombre, fecha: fecha || null, diasNotificacion });
   }
   return { filas };
 }
@@ -70,6 +82,7 @@ async function listByCatalogItem(companyRuc, catalogItemId) {
           id: true,
           nombre: true,
           fechaVencimiento: true,
+          diasNotificacion: true,
           creadoEn: true,
         },
       },
@@ -85,6 +98,7 @@ async function listByCatalogItem(companyRuc, catalogItemId) {
         id: lote.id,
         nombre: lote.nombre,
         fecha_vencimiento: lote.fechaVencimiento || null,
+        dias_notificacion: lote.diasNotificacion != null ? Number(lote.diasNotificacion) : null,
         creadoEn: lote.creadoEn,
         cantidad: 0,
         series: new Set(),
@@ -112,6 +126,9 @@ async function listByCatalogItem(companyRuc, catalogItemId) {
         id: g.id,
         nombre: g.nombre,
         fecha_vencimiento: g.fecha_vencimiento,
+        dias_notificacion: Number.isFinite(g.dias_notificacion) && g.dias_notificacion > 0
+          ? g.dias_notificacion
+          : null,
         cantidad: cantidadVisible(qty),
         unidad: esSerie ? 'und' : unidadItem,
         tipo: esSerie ? 'serie' : 'cantidad',
@@ -126,8 +143,8 @@ async function listByCatalogItem(companyRuc, catalogItemId) {
     });
 }
 
-async function guardarFilas({ companyRuc, nombres, fechas }) {
-  const parsed = normalizarFilas(nombres, fechas);
+async function guardarFilas({ companyRuc, nombres, fechas, diasNotificacion }) {
+  const parsed = normalizarFilas(nombres, fechas, diasNotificacion);
   if (parsed.error) return parsed;
   for (const fila of parsed.filas) {
     const found = await prisma.productoLote.findUnique({
@@ -136,10 +153,17 @@ async function guardarFilas({ companyRuc, nombres, fechas }) {
       },
     });
     if (found) {
+      const data = {};
       if (fila.fecha && found.fechaVencimiento !== fila.fecha) {
+        data.fechaVencimiento = fila.fecha;
+      }
+      if (fila.diasNotificacion != null && found.diasNotificacion !== fila.diasNotificacion) {
+        data.diasNotificacion = fila.diasNotificacion;
+      }
+      if (Object.keys(data).length) {
         await prisma.productoLote.update({
           where: { id: found.id },
-          data: { fechaVencimiento: fila.fecha },
+          data,
         });
       }
     } else {
@@ -149,6 +173,7 @@ async function guardarFilas({ companyRuc, nombres, fechas }) {
           companyRuc,
           nombre: fila.nombre,
           fechaVencimiento: fila.fecha,
+          diasNotificacion: fila.diasNotificacion,
         },
       });
     }

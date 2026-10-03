@@ -4519,10 +4519,19 @@ select.ios-hist-input,
 }
 .ios-lote-nuevo {
   display: grid;
-  grid-template-columns: 1.4fr 1fr;
+  grid-template-columns: 1.2fr 0.9fr;
   gap: 8px;
 }
-.ios-lote-nuevo input {
+.ios-lote-card .ios-field { margin: 0; }
+.ios-lote-card .ios-field > span {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ios-muted);
+  margin-bottom: 6px;
+}
+.ios-lote-nuevo input,
+.ios-lote-card .ios-field > input {
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
@@ -4545,5 +4554,5 @@ select.ios-hist-input,
   white-space: nowrap;
 }
 @media (max-width: 520px) {
-  .ios-lote-nuevo { grid-template-columns: 1fr 0.9fr; }
+  .ios-lote-nuevo { grid-template-columns: 1fr; }
 }

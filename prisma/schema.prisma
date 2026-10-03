@@ -249,6 +249,8 @@ model ProductoLote {
   companyRuc       String   @map("company_ruc") @db.VarChar(11)
   nombre           String   @db.VarChar(64)
   fechaVencimiento String?  @map("fecha_vencimiento") @db.VarChar(10)
+  /// Días antes del vencimiento para avisar.
+  diasNotificacion Int?     @map("dias_notificacion")
   creadoEn         DateTime @default(now()) @map("creado_en")
 
   lineas LineaCatalogoItem[]

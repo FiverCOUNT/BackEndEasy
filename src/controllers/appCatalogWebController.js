@@ -510,9 +510,11 @@ async function buscarSerieJson(req, res, next) {
 function filaLoteFromBody(body) {
   const nombres = [].concat(body?.lote_nombre || []);
   const fechas = [].concat(body?.lote_fecha || []);
+  const dias = [].concat(body?.lote_dias_notificacion || []);
   return {
     nombre: String(nombres[0] || ''),
     fecha_vencimiento: String(fechas[0] || '').slice(0, 10),
+    dias_notificacion: String(dias[0] || '').trim(),
   };
 }
 
@@ -532,7 +534,7 @@ async function renderLotes(res, {
     title: productoNombre ? `Lotes · ${productoNombre}` : 'Lotes',
     active: 'lotes',
     error: error || null,
-    fila: fila || { nombre: '', fecha_vencimiento: '' },
+    fila: fila || { nombre: '', fecha_vencimiento: '', dias_notificacion: '60' },
     lotes,
     productoId: catalogItemId,
     productoNombre: productoNombre || '',
@@ -598,6 +600,7 @@ async function saveLotes(req, res, next) {
       companyRuc,
       nombres: req.body.lote_nombre,
       fechas: req.body.lote_fecha,
+      diasNotificacion: req.body.lote_dias_notificacion,
     });
     if (result.error) {
       return renderLotes(res.status(400), {

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title><%= title %> · Easy</title>
-  <link rel="stylesheet" href="/css/app-ios.css?v=vence-rojo" />
+  <link rel="stylesheet" href="/css/app-ios.css?v=lote-notif" />
 </head>
 <body class="ios-app">
   <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
@@ -29,24 +29,43 @@
       <h3 class="ios-section-title">Nuevo lote</h3>
       <form class="ios-form" method="POST" action="<%= appBase %>/lotes">
         <section class="ios-form-card ios-lote-card">
-          <div class="ios-lote-nuevo">
+          <label class="ios-field">
+            <span>Nombre del lote</span>
             <input
               type="text"
               name="lote_nombre"
               maxlength="64"
-              placeholder="Nombre del lote"
+              placeholder="Ej. LOTELECHE2028"
               value="<%= (fila && fila.nombre) || '' %>"
               autocomplete="off"
               required
             />
-            <input
-              type="date"
-              name="lote_fecha"
-              value="<%= (fila && fila.fecha_vencimiento) || '' %>"
-              aria-label="Fecha de vencimiento"
-            />
+          </label>
+          <div class="ios-lote-nuevo">
+            <label class="ios-field">
+              <span>Fecha de vencimiento</span>
+              <input
+                type="date"
+                name="lote_fecha"
+                value="<%= (fila && fila.fecha_vencimiento) || '' %>"
+                aria-label="Fecha de vencimiento"
+              />
+            </label>
+            <label class="ios-field">
+              <span>Notificar antes</span>
+              <input
+                type="number"
+                name="lote_dias_notificacion"
+                min="1"
+                max="3650"
+                step="1"
+                placeholder="Días"
+                value="<%= (fila && fila.dias_notificacion) != null && fila.dias_notificacion !== '' ? fila.dias_notificacion : '60' %>"
+                aria-label="Días de notificación"
+              />
+            </label>
           </div>
-          <p class="ios-hint">La fecha puede quedar vacía.</p>
+          <p class="ios-hint">Cuántos días antes del vencimiento se avisa. La fecha puede quedar vacía.</p>
           <button type="submit" class="ios-btn-primary">Guardar lote</button>
         </section>
       </form>
@@ -74,6 +93,8 @@
             var partes = raw.split('-');
             var meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
             var vencePronto = false;
+            var diasAviso = Number(lote.dias_notificacion);
+            if (!Number.isFinite(diasAviso) || diasAviso < 1) diasAviso = 60;
             if (partes.length === 3 && meses[Number(partes[1]) - 1]) {
               fecha = Number(partes[2]) + ' de ' + meses[Number(partes[1]) - 1] + ' ' + partes[0];
               var y = Number(partes[0]);
@@ -84,7 +105,7 @@
                 var hoy = new Date();
                 var hoyMs = Date.UTC(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
                 var dias = (venceMs - hoyMs) / 86400000;
-                vencePronto = dias <= 60;
+                vencePronto = dias <= diasAviso;
               }
             }
             var qty = lote.cantidad != null ? String(lote.cantidad) : '';
