@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title><%= title %> · Easy</title>
-  <link rel="stylesheet" href="/css/app-ios.css?v=valor-der" />
+  <link rel="stylesheet" href="/css/app-ios.css?v=vence-rojo" />
 </head>
 <body class="ios-app">
   <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
@@ -249,9 +249,25 @@
           items.forEach(function (s) {
             var btn = document.createElement('div');
             btn.className = 'ios-sheet-item';
-            var meta = [s.estado || ''];
-            if (s.almacen_nombre) meta.push(s.almacen_nombre);
-            btn.innerHTML = '<strong>' + esc(s.numero_serie || '—') + '</strong><span>' + esc(meta.filter(Boolean).join(' · ')) + '</span>';
+            var estado = String(s.estado || '').toUpperCase();
+            var chipClass = 'ios-status-chip';
+            if (estado === 'DISPONIBLE') chipClass += ' is-ok';
+            else if (estado === 'ENTREGADO' || estado === 'VENDIDO') chipClass += ' is-out';
+            else if (estado === 'RESERVADO') chipClass += ' is-warn';
+            else if (estado === 'BAJA') chipClass += ' is-mute';
+            var label = estado === 'DISPONIBLE' ? 'Disponible'
+              : estado === 'ENTREGADO' ? 'Entregado'
+              : estado === 'VENDIDO' ? 'Vendido'
+              : estado === 'RESERVADO' ? 'Reservado'
+              : estado === 'BAJA' ? 'Baja'
+              : (estado || '—');
+            var alm = s.almacen_nombre ? ('<span class="ios-serie-alm">' + esc(s.almacen_nombre) + '</span>') : '';
+            btn.innerHTML =
+              '<strong>' + esc(s.numero_serie || '—') + '</strong>' +
+              '<span class="ios-serie-meta">' +
+                '<span class="' + chipClass + '">' + esc(label) + '</span>' +
+                alm +
+              '</span>';
             lista.appendChild(btn);
           });
         })

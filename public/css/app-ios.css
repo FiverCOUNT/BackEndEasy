@@ -1938,6 +1938,45 @@ a.ios-selected-card-change {
 .ios-inline input { flex: 1; min-width: 0; }
 .ios-hint { font-size: 12px; color: var(--ios-muted); }
 
+.ios-serie-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+.ios-serie-alm {
+  font-size: 12px;
+  color: var(--ios-muted);
+}
+.ios-status-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  background: #F2F2F7;
+  color: #636366;
+}
+.ios-status-chip.is-ok {
+  background: #E8F8EE;
+  color: #1B7A3D;
+}
+.ios-status-chip.is-out {
+  background: #EEF1F6;
+  color: #3A4450;
+}
+.ios-status-chip.is-warn {
+  background: #FFF4E5;
+  color: #B25E00;
+}
+.ios-status-chip.is-mute {
+  background: #F2F2F7;
+  color: #8E8E93;
+}
 .ios-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .ios-chip {
   padding: 8px 12px;
@@ -4472,6 +4511,11 @@ select.ios-hist-input,
   font-weight: 500;
   color: #8E8E93;
   margin-top: 2px;
+}
+.ios-lote-nombre.is-vence-rojo,
+.ios-lote-fecha.is-vence-rojo {
+  color: #FF3B30;
+  font-weight: 700;
 }
 .ios-lote-nuevo {
   display: grid;

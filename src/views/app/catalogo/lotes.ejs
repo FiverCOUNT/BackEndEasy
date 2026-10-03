@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title><%= title %> · Easy</title>
-  <link rel="stylesheet" href="/css/app-ios.css?v=lote-tap" />
+  <link rel="stylesheet" href="/css/app-ios.css?v=vence-rojo" />
 </head>
 <body class="ios-app">
   <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
@@ -73,8 +73,19 @@
             var raw = String(lote.fecha_vencimiento || '').slice(0, 10);
             var partes = raw.split('-');
             var meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+            var vencePronto = false;
             if (partes.length === 3 && meses[Number(partes[1]) - 1]) {
               fecha = Number(partes[2]) + ' de ' + meses[Number(partes[1]) - 1] + ' ' + partes[0];
+              var y = Number(partes[0]);
+              var m = Number(partes[1]);
+              var d = Number(partes[2]);
+              if (y && m && d) {
+                var venceMs = Date.UTC(y, m - 1, d);
+                var hoy = new Date();
+                var hoyMs = Date.UTC(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+                var dias = (venceMs - hoyMs) / 86400000;
+                vencePronto = dias <= 60;
+              }
             }
             var qty = lote.cantidad != null ? String(lote.cantidad) : '';
             var und = lote.unidad || '';
@@ -90,7 +101,9 @@
               <span class="ios-row-icon">▣</span>
               <span class="ios-row-text">
                 <strong><%= productoNombre %></strong>
-                <span class="ios-lote-nombre"><%= lote.nombre %><%= fecha ? (' · ' + fecha) : '' %></span>
+                <span class="ios-lote-nombre<%= vencePronto ? ' is-vence-rojo' : '' %>">
+                  <%= lote.nombre %><%= fecha ? (' · Vence ' + fecha) : ' · Sin fecha' %>
+                </span>
               </span>
               <span class="ios-valor"><%= qty %><%= und ? (' ' + und) : '' %></span>
             </button>
@@ -99,7 +112,7 @@
               <span class="ios-row-icon">▣</span>
               <span class="ios-row-text">
                 <strong><%= lote.nombre %></strong>
-                <small class="<%= fecha ? 'ios-lote-fecha' : '' %>"><%= fecha || 'Sin fecha' %></small>
+                <small class="<%= fecha ? (vencePronto ? 'ios-lote-fecha is-vence-rojo' : 'ios-lote-fecha') : '' %>"><%= fecha ? ('Vence ' + fecha) : 'Sin fecha' %></small>
               </span>
               <details class="ios-menu">
                 <summary aria-label="Opciones del lote">⋯</summary>
@@ -204,11 +217,18 @@
         series.forEach(function (s) {
           var row = document.createElement('div');
           row.className = 'ios-sheet-item is-side';
-          var meta = [s.estado || '', s.almacen_nombre || ''].filter(Boolean).join(' · ');
+          var estado = String(s.estado || '').toUpperCase();
+          var chipClass = 'ios-status-chip';
+          if (estado === 'DISPONIBLE' || estado === 'DISPONIBLE') chipClass += ' is-ok';
+          else if (estado.indexOf('ENTREG') >= 0) chipClass += ' is-out';
+          else if (estado.indexOf('RESERV') >= 0) chipClass += ' is-warn';
+          var label = estado === 'DISPONIBLE' ? 'Disponible'
+            : (estado.indexOf('ENTREG') >= 0 ? 'Entregado' : (s.estado || '—'));
+          var alm = s.almacen_nombre ? ('<span class="ios-serie-alm">' + esc(s.almacen_nombre) + '</span>') : '';
           row.innerHTML =
             '<div class="ios-sheet-item-copy">' +
-              '<strong>' + esc(productoNombre || it.nombre) + '</strong>' +
-              '<span>Serie ' + esc(s.numero_serie || '—') + (meta ? (' · ' + esc(meta)) : '') + '</span>' +
+              '<strong>' + esc(s.numero_serie || '—') + '</strong>' +
+              '<span class="ios-serie-meta"><span class="' + chipClass + '">' + esc(label) + '</span>' + alm + '</span>' +
             '</div>' +
             '<span class="ios-valor">1 und</span>';
           lista.appendChild(row);
