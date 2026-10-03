@@ -138,10 +138,15 @@ async function list(req, res, next) {
       almacenId,
     });
 
-    const alertas = await productoLoteModel.alertasVencimientoPorItems(
-      companyRuc,
-      pageItems.map((it) => it.id),
-    );
+    // Aviso "Por vencer" solo para ADMIN y acotado al almacén filtrado.
+    let alertas = new Map();
+    if (isAdmin) {
+      alertas = await productoLoteModel.alertasVencimientoPorItems(
+        companyRuc,
+        pageItems.map((it) => it.id),
+        { almacenId },
+      );
+    }
 
     const loadMore = buildLoadMoreMeta({
       total,
@@ -166,7 +171,7 @@ async function list(req, res, next) {
         compraLabel: (it.precioCompra ?? it.precio_compra) != null
           ? formatMoney(it.precioCompra ?? it.precio_compra)
           : null,
-        avisoVence: alertas.get(it.id) || null,
+        avisoVence: isAdmin ? (alertas.get(it.id) || null) : null,
       })),
       total,
       q,

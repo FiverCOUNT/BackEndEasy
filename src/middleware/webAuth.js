@@ -128,9 +128,14 @@ async function requireWebApp(req, res, next) {
   } catch {
     res.locals.ordenesNoVistas = 0;
   }
+  // Badge "por vencer" solo para ADMIN (no rol usuario / otro almacén).
   try {
-    const productoLoteModel = require('../models/productoLoteModel');
-    res.locals.catalogoPorVencer = await productoLoteModel.countAlertasVencimiento(user.companyRuc);
+    if (isWebCompanyAdmin(user)) {
+      const productoLoteModel = require('../models/productoLoteModel');
+      res.locals.catalogoPorVencer = await productoLoteModel.countAlertasVencimiento(user.companyRuc);
+    } else {
+      res.locals.catalogoPorVencer = 0;
+    }
   } catch {
     res.locals.catalogoPorVencer = 0;
   }

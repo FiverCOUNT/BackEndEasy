@@ -87,7 +87,7 @@
             <% } %>
               <div class="ios-catalog-title">
                 <strong><%= it.nombre %></strong>
-                <% if (it.avisoVence) { %>
+                <% if (isWebAdmin && it.avisoVence) { %>
                   <span
                     class="ios-vence-pill<%= it.avisoVence.vencido ? ' is-vencido' : '' %>"
                     title="<%= it.avisoVence.lote ? ('Lote ' + it.avisoVence.lote + ' · ') : '' %><%= it.avisoVence.detalle %>"

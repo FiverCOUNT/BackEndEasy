@@ -320,8 +320,9 @@ function diasHastaYmd(ymd) {
 
 /** Mapa catalogItemId → aviso de vencimiento cercano (con stock del lote).
  *  Si `catalogItemIds` es null/undefined, evalúa todos los ítems de la empresa.
+ *  `almacenId` opcional: solo cuenta stock de ese almacén (serie o línea).
  */
-async function alertasVencimientoPorItems(companyRuc, catalogItemIds) {
+async function alertasVencimientoPorItems(companyRuc, catalogItemIds, { almacenId = null } = {}) {
   const out = new Map();
   if (!companyRuc) return out;
   const filtrarIds = Array.isArray(catalogItemIds);
@@ -329,6 +330,7 @@ async function alertasVencimientoPorItems(companyRuc, catalogItemIds) {
     ? [...new Set(catalogItemIds.map((id) => String(id || '').trim()).filter(Boolean))]
     : null;
   if (filtrarIds && !ids.length) return out;
+  const soloAlmacen = String(almacenId || '').trim() || null;
 
   const where = {
     productoLoteId: { not: null },
@@ -343,8 +345,9 @@ async function alertasVencimientoPorItems(companyRuc, catalogItemIds) {
       cantidad: true,
       catalogItemId: true,
       productoSerieId: true,
+      almacenId: true,
       movimiento: { select: { tipo: true, referenciaTipo: true } },
-      productoSerie: { select: { id: true, estado: true } },
+      productoSerie: { select: { id: true, estado: true, almacenId: true } },
       productoLote: {
         select: {
           id: true,
@@ -374,10 +377,13 @@ async function alertasVencimientoPorItems(companyRuc, catalogItemIds) {
     }
     const g = stockPorClave.get(key);
     if (linea.productoSerieId && linea.productoSerie) {
+      const almSerie = String(linea.productoSerie.almacenId || '');
+      if (soloAlmacen && almSerie !== soloAlmacen) continue;
       const estado = linea.productoSerie.estado;
       if (estado === 'DISPONIBLE' || estado === 'RESERVADO') g.series.add(linea.productoSerie.id);
       continue;
     }
+    if (soloAlmacen && String(linea.almacenId || '') !== soloAlmacen) continue;
     const traslado = linea.movimiento?.referenciaTipo === 'TRASLADO';
     const salida = linea.movimiento?.tipo === 'SALIDA' && !traslado;
     g.cantidad += (salida ? -1 : 1) * Number(linea.cantidad || 0);
@@ -409,8 +415,8 @@ async function alertasVencimientoPorItems(companyRuc, catalogItemIds) {
 }
 
 /** Cantidad de productos del catálogo con lote por vencer / vencido (stock > 0). */
-async function countAlertasVencimiento(companyRuc) {
-  const map = await alertasVencimientoPorItems(companyRuc);
+async function countAlertasVencimiento(companyRuc, { almacenId = null } = {}) {
+  const map = await alertasVencimientoPorItems(companyRuc, null, { almacenId });
   return map.size;
 }
 
