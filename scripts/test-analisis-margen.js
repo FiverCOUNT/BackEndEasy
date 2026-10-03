@@ -287,6 +287,12 @@ test('más vendido no tiene por qué ser el de mayor margen', () => {
   assert.strictEqual(r.charts.top_unidades[0].id, 'volumen');
   assert.strictEqual(r.charts.top_margen_pct[0].id, 'premium');
   assert.notStrictEqual(r.charts.top_unidades[0].id, r.charts.top_margen_pct[0].id);
+  // Precios medios: venta 400/2=200, compra 50, margen unitario 150 → 75%
+  const prem = r.charts.top_margen_pct[0];
+  assert.strictEqual(prem.precio_venta_medio, 200);
+  assert.strictEqual(prem.precio_compra_medio, 50);
+  assert.strictEqual(prem.margen_unitario, 150);
+  assert.strictEqual(prem.margen_pct, 75);
 });
 
 console.log('\n== snapshot precio_compra (emisión) ==');

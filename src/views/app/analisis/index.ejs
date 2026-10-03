@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title><%= title %> · Easy</title>
-  <link rel="stylesheet" href="/css/app-ios.css?v=analisis-tips" />
+  <link rel="stylesheet" href="/css/app-ios.css?v=analisis-tips2" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js" defer></script>
 </head>
 <body class="ios-app">
@@ -111,16 +111,18 @@
           if (!p.tiene_costo || pct == null) {
             return { cls: 'is-mute', text: 'Sin precio de compra: aún no se puede calcular el margen.' };
           }
+          var pv = money2(p.precio_venta_medio);
+          var pc = money2(p.precio_compra_medio);
           if (pct >= 50) {
-            return { cls: 'is-good', text: 'Buen margen. Conviene impulsar este producto.' };
+            return { cls: 'is-good', text: 'Buen margen: vendes a S/ ' + pv + ' y compras a S/ ' + pc + ' en promedio.' };
           }
           if (pct >= 30) {
-            return { cls: 'is-mid', text: 'Margen aceptable. Revisa si puedes mejorar el costo o el precio.' };
+            return { cls: 'is-mid', text: 'Margen aceptable (venta S/ ' + pv + ' · compra S/ ' + pc + '). Puedes afinar precio o costo.' };
           }
           if (pct >= 0) {
-            return { cls: 'is-low', text: 'Margen bajo. Vende mucho volumen, pero deja poca ganancia.' };
+            return { cls: 'is-low', text: 'Margen bajo: entre S/ ' + pc + ' de compra y S/ ' + pv + ' de venta queda poca ganancia.' };
           }
-          return { cls: 'is-bad', text: 'Margen negativo: se está vendiendo por debajo del costo.' };
+          return { cls: 'is-bad', text: 'Margen negativo: el precio medio de venta (S/ ' + pv + ') está bajo el de compra (S/ ' + pc + ').' };
         }
         var topVenta = (charts.top_venta || [])[0] || null;
         var topQty = (charts.top_unidades || [])[0] || null;
@@ -133,7 +135,7 @@
       <section class="ios-analisis-tips">
         <div class="ios-analisis-tips-head">
           <h2>Tip de productos</h2>
-          <p>Resumen claro del Top <%= filtros.top %>: cantidad, ingresos y margen.</p>
+          <p>Precios medios del periodo (pueden variar) y margen unitario.</p>
         </div>
 
         <div class="ios-analisis-highlights">
@@ -141,21 +143,21 @@
           <article class="ios-analisis-hl is-blue">
             <span class="ios-analisis-hl-tag">Más vendido</span>
             <strong><%= topQty.nombre %></strong>
-            <p><%= Number(topQty.unidades).toLocaleString('es-PE') %> <%= undLbl(topQty.unidad) %> · S/ <%= money2(topQty.venta) %></p>
+            <p><%= Number(topQty.unidades).toLocaleString('es-PE') %> <%= undLbl(topQty.unidad) %> · venta media S/ <%= money2(topQty.precio_venta_medio) %></p>
           </article>
           <% } %>
           <% if (topVenta) { %>
           <article class="ios-analisis-hl is-navy">
             <span class="ios-analisis-hl-tag">Más ingresos</span>
             <strong><%= topVenta.nombre %></strong>
-            <p>S/ <%= money2(topVenta.venta) %> · margen <%= topVenta.margen_pct != null ? topVenta.margen_pct + '%' : '—' %></p>
+            <p>Venta media S/ <%= money2(topVenta.precio_venta_medio) %> · margen <%= topVenta.margen_pct != null ? topVenta.margen_pct + '%' : '—' %></p>
           </article>
           <% } %>
           <% if (topPct) { %>
           <article class="ios-analisis-hl is-green">
             <span class="ios-analisis-hl-tag">Mejor margen %</span>
             <strong><%= topPct.nombre %></strong>
-            <p><%= topPct.margen_pct %>% · ganancia S/ <%= money2(topPct.margen) %></p>
+            <p><%= topPct.margen_pct %>% · +S/ <%= money2(topPct.margen_unitario) %> por <%= undLbl(topPct.unidad) %></p>
           </article>
           <% } %>
         </div>
@@ -177,16 +179,16 @@
                     <strong><%= Number(p.unidades).toLocaleString('es-PE') %> <%= undLbl(p.unidad) %></strong>
                   </div>
                   <div>
-                    <span>Ingresos</span>
-                    <strong>S/ <%= money2(p.venta) %></strong>
+                    <span>P. venta medio</span>
+                    <strong>S/ <%= p.precio_venta_medio != null ? money2(p.precio_venta_medio) : '—' %></strong>
+                  </div>
+                  <div>
+                    <span>P. compra medio</span>
+                    <strong>S/ <%= p.precio_compra_medio != null ? money2(p.precio_compra_medio) : '—' %></strong>
                   </div>
                   <div>
                     <span>Margen</span>
-                    <strong class="<%= p.margen >= 0 ? 'is-ok' : 'is-bad' %>">S/ <%= money2(p.margen) %></strong>
-                  </div>
-                  <div>
-                    <span>Margen %</span>
-                    <strong class="<%= (p.margen_pct || 0) >= 40 ? 'is-ok' : '' %>"><%= p.margen_pct != null ? p.margen_pct + '%' : '—' %></strong>
+                    <strong class="<%= (p.margen_pct || 0) >= 0 ? 'is-ok' : 'is-bad' %>"><%= p.margen_pct != null ? p.margen_pct + '%' : '—' %><% if (p.margen_unitario != null) { %> <small>· +S/ <%= money2(p.margen_unitario) %></small><% } %></strong>
                   </div>
                 </div>
                 <p class="ios-analisis-tip-note <%= tip.cls %>"><%= tip.text %></p>

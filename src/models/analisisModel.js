@@ -145,13 +145,28 @@ function buildResumenFromDetails(details, filters = {}, rango = null) {
   }
 
   let productos = [...byProduct.values()].map((p) => {
-    const margenPct = p.venta > 0 && p.tiene_costo ? (p.margen / p.venta) * 100 : null;
+    const unidades = Math.round(p.unidades * 10000) / 10000;
+    const venta = Math.round(p.venta * 100) / 100;
+    const costo = Math.round(p.costo * 100) / 100;
+    const margen = Math.round(p.margen * 100) / 100;
+    // Precios medios ponderados por cantidad (varían en el tiempo).
+    const precioVentaMedio = unidades > 0 ? Math.round((venta / unidades) * 100) / 100 : null;
+    const precioCompraMedio = unidades > 0 && p.tiene_costo
+      ? Math.round((costo / unidades) * 100) / 100
+      : null;
+    const margenUnitario = precioVentaMedio != null && precioCompraMedio != null
+      ? Math.round((precioVentaMedio - precioCompraMedio) * 100) / 100
+      : null;
+    const margenPct = venta > 0 && p.tiene_costo ? (margen / venta) * 100 : null;
     return {
       ...p,
-      unidades: Math.round(p.unidades * 10000) / 10000,
-      venta: Math.round(p.venta * 100) / 100,
-      costo: Math.round(p.costo * 100) / 100,
-      margen: Math.round(p.margen * 100) / 100,
+      unidades,
+      venta,
+      costo,
+      margen,
+      precio_venta_medio: precioVentaMedio,
+      precio_compra_medio: precioCompraMedio,
+      margen_unitario: margenUnitario,
       margen_pct: margenPct != null ? Math.round(margenPct * 10) / 10 : null,
     };
   });
