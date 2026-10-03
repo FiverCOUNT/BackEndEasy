@@ -373,6 +373,7 @@ async function buscarPorNombre({ companyRuc, q, almacenId, limit = 50 }) {
 }
 
 module.exports = {
+  resolveOrigenDestino,
   buscarPorSerie,
   buscarPorNombre,
   historialPorProducto,

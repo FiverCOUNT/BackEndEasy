@@ -425,6 +425,7 @@ async function countAlertasVencimiento(companyRuc, { almacenId = null } = {}) {
 module.exports = {
   toApi,
   normalizarFilas,
+  diasHastaYmd,
   listByCompany,
   listByCatalogItem,
   guardarFilas,
