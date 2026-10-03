@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title><%= title %> · Easy</title>
-  <link rel="stylesheet" href="/css/app-ios.css?v=lote-series" />
+  <link rel="stylesheet" href="/css/app-ios.css?v=lote-entregar" />
 </head>
 <body class="ios-app">
   <%- include('../../partials/app-nav', { active: active, navItems: navItems, webUser: webUser, appBase: appBase }) %>
@@ -114,10 +114,11 @@
             <% if (productoId) { %>
             <button
               type="button"
-              class="ios-row ios-lote-row is-tap"
+              class="ios-row ios-lote-row is-tap<%= vencePronto ? ' is-vence' : '' %>"
               data-lote-detalle="<%= lote.id %>"
               data-lote-nombre="<%= lote.nombre %>"
               data-lote-tipo="<%= lote.tipo || 'cantidad' %>"
+              data-lote-vence="<%= vencePronto ? '1' : '0' %>"
             >
               <span class="ios-row-icon">▣</span>
               <span class="ios-row-text">
@@ -138,7 +139,12 @@
               <details class="ios-menu">
                 <summary aria-label="Opciones del lote">⋯</summary>
                 <div class="ios-menu-panel">
-                  <button type="button" data-lote-productos="<%= lote.id %>" data-lote-nombre="<%= lote.nombre %>">Ver productos</button>
+                  <button
+                    type="button"
+                    data-lote-productos="<%= lote.id %>"
+                    data-lote-nombre="<%= lote.nombre %>"
+                    data-lote-vence="<%= vencePronto ? '1' : '0' %>"
+                  >Ver productos</button>
                 </div>
               </details>
             </article>
@@ -164,14 +170,43 @@
       </div>
       <div class="ios-sheet-status" id="loteProductosStatus">Cargando…</div>
       <div class="ios-sheet-list" id="loteProductosLista"></div>
+      <div class="ios-lote-entregar-bar" id="loteEntregarBar" hidden>
+        <p class="ios-lote-entregar-hint" id="loteEntregarHint">Lote por vencer · entrega al cliente</p>
+        <button type="button" class="ios-btn-primary" id="loteEntregarBtn">Entregar al cliente</button>
+      </div>
     </div>
   </div>
+
+  <div id="loteEntregarSheet" class="ios-sheet ios-sheet-compact" hidden aria-hidden="true">
+    <div class="ios-sheet-panel" role="dialog" aria-modal="true">
+      <div class="ios-sheet-head">
+        <button type="button" class="ios-sheet-back" id="loteEntregarCerrar">← Volver</button>
+        <div class="ios-sheet-head-titles">
+          <h3>Entregar lote</h3>
+          <p class="ios-sheet-head-sub" id="loteEntregarSub">Salida al cliente</p>
+        </div>
+        <span style="width:56px;"></span>
+      </div>
+      <div class="ios-lote-entregar-body">
+        <p class="ios-hint" id="loteEntregarResumen">—</p>
+        <label class="ios-field">
+          <span>Cliente *</span>
+          <input type="search" id="loteClienteBusqueda" placeholder="Buscar cliente…" autocomplete="off" />
+        </label>
+        <div class="ios-sheet-list" id="loteClienteLista"></div>
+        <button type="button" class="ios-btn-primary" id="loteEntregarConfirmar" disabled>Confirmar entrega</button>
+        <p class="ios-sheet-status" id="loteEntregarStatus"></p>
+      </div>
+    </div>
+  </div>
+
   <%- include('../../partials/app-tabbar', { active: active, appBase: appBase }) %>
   <script>
   (function () {
     var appBase = '<%= appBase %>';
     var productoId = '<%= productoId || '' %>';
     var productoNombre = <%- JSON.stringify(productoNombre || '') %>;
+    var clientes = <%- JSON.stringify(clientes || []) %>;
     var sheet = document.getElementById('loteProductosSheet');
     if (!sheet) return;
     var titulo = document.getElementById('loteProductosTitulo');
@@ -179,9 +214,25 @@
     var statusEl = document.getElementById('loteProductosStatus');
     var lista = document.getElementById('loteProductosLista');
     var filtros = document.getElementById('loteSeriesFiltros');
+    var entregarBar = document.getElementById('loteEntregarBar');
+    var entregarHint = document.getElementById('loteEntregarHint');
+    var entregarBtn = document.getElementById('loteEntregarBtn');
+    var entregarSheet = document.getElementById('loteEntregarSheet');
+    var entregarSub = document.getElementById('loteEntregarSub');
+    var entregarResumen = document.getElementById('loteEntregarResumen');
+    var entregarStatus = document.getElementById('loteEntregarStatus');
+    var entregarConfirmar = document.getElementById('loteEntregarConfirmar');
+    var clienteBusqueda = document.getElementById('loteClienteBusqueda');
+    var clienteLista = document.getElementById('loteClienteLista');
     var estadoFiltro = 'DISPONIBLE';
     var cacheSeries = [];
     var cacheMeta = null;
+    var cacheItems = [];
+    var currentLoteId = '';
+    var currentLoteNombre = '';
+    var currentVence = false;
+    var selectedClienteId = '';
+    var entregarBusy = false;
 
     function esc(s) {
       return String(s == null ? '' : s)
@@ -218,16 +269,63 @@
       if (on) pintarFiltros();
     }
 
+    function seriesDisponibles() {
+      var fromCache = cacheSeries.filter(function (s) {
+        var k = estadoInfo(s.estado).key;
+        return k === 'DISPONIBLE' && s.id;
+      });
+      if (fromCache.length) return fromCache;
+      var out = [];
+      (cacheItems || []).forEach(function (it) {
+        if (it.tipo !== 'serie') return;
+        (it.series || []).forEach(function (s) {
+          if (estadoInfo(s.estado).key === 'DISPONIBLE' && s.id) out.push(s);
+        });
+      });
+      return out;
+    }
+
+    function syncEntregarBar() {
+      if (!entregarBar) return;
+      var disp = seriesDisponibles();
+      var qtySinSerie = (cacheItems || []).some(function (it) {
+        return it.tipo === 'cantidad' && Number(it.cantidad) > 0;
+      });
+      var show = currentVence && (disp.length > 0 || qtySinSerie);
+      entregarBar.hidden = !show;
+      if (entregarHint) {
+        entregarHint.textContent = disp.length
+          ? ('Por vencer · ' + disp.length + ' serie' + (disp.length === 1 ? '' : 's') + ' lista' + (disp.length === 1 ? '' : 's') + ' para entregar')
+          : 'Por vencer · entregar cantidad disponible al cliente';
+      }
+    }
+
+    function cerrarEntregar() {
+      if (!entregarSheet) return;
+      entregarSheet.hidden = true;
+      entregarSheet.setAttribute('aria-hidden', 'true');
+      selectedClienteId = '';
+      if (entregarConfirmar) entregarConfirmar.disabled = true;
+      if (entregarStatus) entregarStatus.textContent = '';
+      if (clienteBusqueda) clienteBusqueda.value = '';
+    }
+
     function cerrar() {
       sheet.hidden = true;
       sheet.setAttribute('aria-hidden', 'true');
       document.body.classList.remove('ios-sheet-open');
       setFiltrosVisible(false);
+      if (entregarBar) entregarBar.hidden = true;
+      cerrarEntregar();
       cacheSeries = [];
       cacheMeta = null;
+      cacheItems = [];
+      currentLoteId = '';
+      currentVence = false;
     }
 
-    function abrirSheet(tituloTxt, subTxt) {
+    function abrirSheet(tituloTxt, subTxt, opts) {
+      opts = opts || {};
       titulo.textContent = tituloTxt;
       sub.textContent = subTxt || '';
       statusEl.textContent = 'Cargando…';
@@ -236,9 +334,111 @@
       setFiltrosVisible(false);
       cacheSeries = [];
       cacheMeta = null;
+      cacheItems = [];
+      currentLoteId = opts.loteId || '';
+      currentLoteNombre = opts.loteNombre || subTxt || '';
+      currentVence = opts.vence === true;
+      if (entregarBar) entregarBar.hidden = true;
+      cerrarEntregar();
       sheet.hidden = false;
       sheet.setAttribute('aria-hidden', 'false');
       document.body.classList.add('ios-sheet-open');
+    }
+
+    function renderClientes(q) {
+      if (!clienteLista) return;
+      clienteLista.innerHTML = '';
+      var term = String(q || '').trim().toLowerCase();
+      var list = (clientes || []).filter(function (c) {
+        if (!term) return true;
+        return String(c.nombre || '').toLowerCase().indexOf(term) >= 0
+          || String(c.doc || '').indexOf(term) >= 0;
+      }).slice(0, 40);
+      if (!list.length) {
+        clienteLista.innerHTML = '<div class="ios-sheet-item"><strong>Sin clientes</strong></div>';
+        return;
+      }
+      list.forEach(function (c) {
+        var row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'ios-sheet-item is-side' + (selectedClienteId === c.id ? ' is-selected' : '');
+        row.innerHTML =
+          '<div class="ios-sheet-item-copy"><strong>' + esc(c.nombre || 'Cliente') + '</strong>' +
+          '<small>' + esc(c.doc || '') + '</small></div>';
+        row.addEventListener('click', function () {
+          selectedClienteId = c.id;
+          if (entregarConfirmar) entregarConfirmar.disabled = false;
+          renderClientes(clienteBusqueda ? clienteBusqueda.value : '');
+        });
+        clienteLista.appendChild(row);
+      });
+    }
+
+    function abrirEntregar() {
+      var disp = seriesDisponibles();
+      var qty = (cacheItems || []).filter(function (it) {
+        return it.tipo === 'cantidad' && Number(it.cantidad) > 0;
+      });
+      if (!disp.length && !qty.length) {
+        window.alert('No hay stock disponible para entregar.');
+        return;
+      }
+      selectedClienteId = '';
+      if (entregarConfirmar) entregarConfirmar.disabled = true;
+      if (entregarStatus) entregarStatus.textContent = '';
+      if (entregarSub) entregarSub.textContent = currentLoteNombre || 'Lote';
+      if (entregarResumen) {
+        entregarResumen.textContent = disp.length
+          ? ('Se entregarán ' + disp.length + ' serie(s) con número al cliente (salida / devolución).')
+          : ('Se entregará la cantidad disponible del lote al cliente.');
+      }
+      if (entregarSheet) {
+        entregarSheet.hidden = false;
+        entregarSheet.setAttribute('aria-hidden', 'false');
+      }
+      renderClientes('');
+      setTimeout(function () { clienteBusqueda && clienteBusqueda.focus(); }, 40);
+    }
+
+    function confirmarEntrega() {
+      if (entregarBusy || !selectedClienteId || !currentLoteId) return;
+      var disp = seriesDisponibles();
+      var payload = {
+        cliente_id: selectedClienteId,
+        catalog_item_id: productoId || undefined,
+        serie_ids: disp.map(function (s) { return s.id; }),
+      };
+      entregarBusy = true;
+      if (entregarConfirmar) entregarConfirmar.disabled = true;
+      if (entregarStatus) entregarStatus.textContent = 'Registrando entrega…';
+      fetch(appBase + '/lotes/' + encodeURIComponent(currentLoteId) + '/entregar', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(payload),
+      })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (res) {
+          entregarBusy = false;
+          if (!res.ok || !res.j || res.j.success === false) {
+            if (entregarStatus) entregarStatus.textContent = (res.j && res.j.message) || 'No se pudo entregar.';
+            if (entregarConfirmar) entregarConfirmar.disabled = !selectedClienteId;
+            return;
+          }
+          if (entregarStatus) entregarStatus.textContent = res.j.message || 'Entrega registrada.';
+          setTimeout(function () {
+            cerrar();
+            window.location.href = appBase + '/salidas?msg=' + encodeURIComponent(res.j.message || 'Entrega registrada.') + '&tipo=ok';
+          }, 500);
+        })
+        .catch(function () {
+          entregarBusy = false;
+          if (entregarStatus) entregarStatus.textContent = 'Error de red al entregar.';
+          if (entregarConfirmar) entregarConfirmar.disabled = !selectedClienteId;
+        });
     }
 
     function renderSeriesLista() {
@@ -282,13 +482,16 @@
       cacheSeries = it.series || [];
       setFiltrosVisible(true);
       renderSeriesLista();
+      syncEntregarBar();
     }
 
     function pintarProductos(items) {
       lista.innerHTML = '';
+      cacheItems = items || [];
       if (!items.length) {
         statusEl.textContent = 'Este lote no tiene productos en stock.';
         setFiltrosVisible(false);
+        syncEntregarBar();
         return;
       }
       var soloSerie = items.length === 1 && items[0].tipo === 'serie';
@@ -326,14 +529,17 @@
         }
         lista.appendChild(row);
       });
+      syncEntregarBar();
     }
 
     function pintarDetalleProducto(items) {
       lista.innerHTML = '';
+      cacheItems = items || [];
       var it = (items || [])[0];
       if (!it) {
         statusEl.textContent = 'Sin stock disponible en este lote.';
         setFiltrosVisible(false);
+        syncEntregarBar();
         return;
       }
       if (it.tipo === 'serie') {
@@ -350,6 +556,7 @@
         '</div>' +
         '<span class="ios-valor">' + esc(String(it.cantidad || '') + ' ' + String(it.unidad || '')) + '</span>';
       lista.appendChild(row);
+      syncEntregarBar();
     }
 
     filtros && filtros.addEventListener('click', function (ev) {
@@ -358,6 +565,7 @@
       estadoFiltro = btn.getAttribute('data-lote-serie-estado') || 'DISPONIBLE';
       pintarFiltros();
       renderSeriesLista();
+      syncEntregarBar();
     });
 
     document.addEventListener('click', function (ev) {
@@ -366,7 +574,12 @@
         ev.preventDefault();
         var loteId = detalleBtn.getAttribute('data-lote-detalle');
         var loteNombre = detalleBtn.getAttribute('data-lote-nombre') || 'Lote';
-        abrirSheet(productoNombre || 'Producto', loteNombre);
+        var vence = detalleBtn.getAttribute('data-lote-vence') === '1';
+        abrirSheet(productoNombre || 'Producto', loteNombre, {
+          loteId: loteId,
+          loteNombre: loteNombre,
+          vence: vence,
+        });
         fetch(appBase + '/lotes/' + encodeURIComponent(loteId) + '/productos?producto=' + encodeURIComponent(productoId), {
           headers: { Accept: 'application/json' },
           credentials: 'same-origin',
@@ -377,7 +590,7 @@
               statusEl.textContent = 'No se pudo cargar el detalle.';
               return;
             }
-            pintarDetalleProducto(data.items || [], loteNombre);
+            pintarDetalleProducto(data.items || []);
           })
           .catch(function () {
             statusEl.textContent = 'No se pudo cargar el detalle.';
@@ -392,7 +605,12 @@
       if (details) details.open = false;
       var id = btn.getAttribute('data-lote-productos');
       var nombre = btn.getAttribute('data-lote-nombre') || 'Lote';
-      abrirSheet('Productos', nombre);
+      var venceAll = btn.getAttribute('data-lote-vence') === '1';
+      abrirSheet('Productos', nombre, {
+        loteId: id,
+        loteNombre: nombre,
+        vence: venceAll,
+      });
       fetch(appBase + '/lotes/' + encodeURIComponent(id) + '/productos', {
         headers: { Accept: 'application/json' },
         credentials: 'same-origin',
@@ -414,6 +632,17 @@
     sheet.addEventListener('click', function (ev) {
       if (ev.target === sheet) cerrar();
     });
+    entregarBtn && entregarBtn.addEventListener('click', abrirEntregar);
+    document.getElementById('loteEntregarCerrar') && document.getElementById('loteEntregarCerrar').addEventListener('click', function () {
+      cerrarEntregar();
+    });
+    entregarSheet && entregarSheet.addEventListener('click', function (ev) {
+      if (ev.target === entregarSheet) cerrarEntregar();
+    });
+    clienteBusqueda && clienteBusqueda.addEventListener('input', function () {
+      renderClientes(clienteBusqueda.value);
+    });
+    entregarConfirmar && entregarConfirmar.addEventListener('click', confirmarEntrega);
   })();
   </script>
 </body>

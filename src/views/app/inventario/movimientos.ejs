@@ -41,6 +41,7 @@
         COMPRA: 'Compra',
         DEVOLUCION_CLIENTE: 'Devolución',
         REGRESO_SALIDA: 'Devolución',
+        ENTREGA_CLIENTE: 'Entrega',
         INGRESO_CLIENTE: 'Cliente',
         GUIA_REMISION: 'Guía',
         ORDEN: 'Orden',
@@ -159,6 +160,7 @@
                   else if (refKey === 'TRASLADO') pillClass = 'is-traslado';
                   else if (refKey === 'COMPRA') pillClass = 'is-compra';
                   else if (refKey === 'DEVOLUCION_CLIENTE' || refKey === 'REGRESO_SALIDA') pillClass = 'is-dev';
+                  else if (refKey === 'ENTREGA_CLIENTE') pillClass = 'is-venta';
                   else if (refKey === 'GUIA_REMISION') pillClass = 'is-guia';
                 %>
                   <span class="ios-mov-pill <%= pillClass %>"><%= pill %></span>
@@ -238,7 +240,8 @@
       VENTA: 'Venta',
       COMPRA: 'Compra',
       DEVOLUCION_CLIENTE: 'Devolución',
-      REGRESO_SALIDA: 'Regreso',
+      REGRESO_SALIDA: 'Devolución',
+      ENTREGA_CLIENTE: 'Entrega',
       GUIA_REMISION: 'Guía',
       ORDEN: 'Orden',
     };

@@ -253,8 +253,10 @@ async function productosDelLote(companyRuc, loteId, { almacenId = null, catalogI
       if (soloAlmacen && almSerie !== soloAlmacen) continue;
       if (estado === 'DISPONIBLE' || estado === 'RESERVADO' || estado === 'ENTREGADO' || estado === 'VENDIDO') {
         grupo.series.set(linea.productoSerie.id, {
+          id: linea.productoSerie.id,
           numero_serie: linea.productoSerie.numeroSerie,
           estado,
+          almacen_id: almSerie || null,
           almacen_nombre: linea.productoSerie.almacen?.nombre || '',
         });
       }

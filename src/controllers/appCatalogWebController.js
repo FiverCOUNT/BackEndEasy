@@ -1,6 +1,8 @@
 const catalogItemModel = require('../models/catalogItemModel');
 const productoLoteModel = require('../models/productoLoteModel');
 const almacenModel = require('../models/almacenModel');
+const clienteModel = require('../models/clienteModel');
+const movimientoModel = require('../models/movimientoModel');
 const codigoProductoSunatModel = require('../models/codigoProductoSunatModel');
 const { parseLoadMoreQuery, buildLoadMoreMeta, parseListQuery } = require('../utils/pagination');
 const { appPath } = require('../config/appPanel');
@@ -511,9 +513,12 @@ async function renderLotes(res, {
 } = {}) {
   const companyRuc = companyRucOf(res);
   const catalogItemId = String(productoId || '').trim();
-  const lotes = catalogItemId
-    ? await productoLoteModel.listByCatalogItem(companyRuc, catalogItemId)
-    : await productoLoteModel.listByCompany(companyRuc, { recientes: true });
+  const [lotes, clientes] = await Promise.all([
+    catalogItemId
+      ? productoLoteModel.listByCatalogItem(companyRuc, catalogItemId)
+      : productoLoteModel.listByCompany(companyRuc, { recientes: true }),
+    clienteModel.findAllByCompany(companyRuc, { soloActivos: true }),
+  ]);
   res.render('app/catalogo/lotes', layoutLocalsCatalog(res, {
     title: productoNombre ? `Lotes · ${productoNombre}` : 'Lotes',
     active: 'lotes',
@@ -523,6 +528,11 @@ async function renderLotes(res, {
     productoId: catalogItemId,
     productoNombre: productoNombre || '',
     flash: flash || null,
+    clientes: (clientes || []).map((c) => ({
+      id: c.id,
+      nombre: c.razonSocial || c.razon_social || '',
+      doc: c.numeroDoc || c.numero_doc || '',
+    })),
   }));
 }
 
@@ -571,6 +581,114 @@ async function productosLoteJson(req, res, next) {
   }
 }
 
+/** Entrega (salida) al cliente desde un lote por vencer: captura series disponibles. */
+async function entregarLote(req, res, next) {
+  try {
+    const companyRuc = companyRucOf(res);
+    const loteId = String(req.params.id || '').trim();
+    const clienteId = String(req.body.cliente_id || req.body.clienteId || '').trim();
+    const catalogItemId = String(req.body.catalog_item_id || req.body.producto || '').trim() || null;
+    const serieIdsRaw = req.body.serie_ids || req.body.serieIds || [];
+    const serieIds = (Array.isArray(serieIdsRaw) ? serieIdsRaw : String(serieIdsRaw).split(','))
+      .map((s) => String(s || '').trim())
+      .filter(Boolean);
+    const wantAllSeries = serieIds.length === 0;
+
+    if (!clienteId) {
+      return res.status(400).json({ success: false, message: 'Selecciona un cliente.' });
+    }
+
+    const data = await productoLoteModel.productosDelLote(companyRuc, loteId, { catalogItemId });
+    if (!data) {
+      return res.status(404).json({ success: false, message: 'Lote no encontrado.' });
+    }
+
+    const lineas = [];
+    for (const it of data.items || []) {
+      if (it.tipo === 'serie') {
+        const disponibles = (it.series || []).filter((s) => {
+          const est = String(s.estado || '').toUpperCase();
+          if (est !== 'DISPONIBLE' && est !== 'RESERVADO') return false;
+          if (!wantAllSeries && !serieIds.includes(String(s.id))) return false;
+          return Boolean(s.id);
+        });
+        for (const s of disponibles) {
+          lineas.push({
+            catalog_item_id: it.id,
+            cantidad: 1,
+            producto_serie_id: s.id,
+            almacen_id: s.almacen_id || null,
+            producto_lote_id: loteId,
+          });
+        }
+      } else if (it.tipo === 'cantidad' && Number(it.cantidad) > 0 && wantAllSeries) {
+        // Sin series: entrega toda la cantidad disponible del lote.
+        lineas.push({
+          catalog_item_id: it.id,
+          cantidad: Number(it.cantidad),
+          producto_lote_id: loteId,
+        });
+      }
+    }
+
+    if (!lineas.length) {
+      return res.status(400).json({
+        success: false,
+        message: 'No hay series/cantidad disponibles para entregar en este lote.',
+      });
+    }
+
+    let origenId = lineas.map((l) => l.almacen_id).find(Boolean)
+      || res.locals.userAlmacenId
+      || null;
+    if (!origenId) {
+      const alms = await almacenModel.findByCompanyRuc(companyRuc, { soloActivos: true });
+      if (!alms.length) {
+        return res.status(400).json({ success: false, message: 'No hay almacén para registrar la salida.' });
+      }
+      origenId = alms[0].id;
+    }
+    lineas.forEach((l) => { if (!l.almacen_id) l.almacen_id = origenId; });
+
+    const webUser = res.locals.webUser || {};
+    const loteNombre = data.lote?.nombre || 'lote';
+    const result = await movimientoModel.registrarSalida({
+      companyRuc,
+      almacenId: origenId,
+      lineas,
+      clienteId,
+      observaciones: `Entrega lote por vencer · ${loteNombre}`,
+      referenciaTipo: 'ENTREGA_CLIENTE',
+      usuarioId: webUser.id != null ? Number(webUser.id) : null,
+    });
+
+    if (result.error) {
+      const map = {
+        cliente_requerido: 'Selecciona un cliente.',
+        almacen_not_found: 'Almacén no encontrado.',
+        series_requeridas: 'Faltan series para entregar.',
+        series_no_disponibles: 'Alguna serie ya no está disponible.',
+        stock_insuficiente: 'Stock insuficiente.',
+        lineas_vacias: 'Sin productos para entregar.',
+      };
+      return res.status(400).json({
+        success: false,
+        message: map[result.error] || result.message || 'No se pudo registrar la entrega.',
+        error: result.error,
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: `Entrega ${result.movimiento?.numero || ''} registrada.`,
+      movimiento: result.movimiento,
+      series: lineas.length,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function saveLotes(req, res, next) {
   try {
     const companyRuc = companyRucOf(res);
@@ -611,6 +729,7 @@ module.exports = {
   list,
   showLotes,
   productosLoteJson,
+  entregarLote,
   saveLotes,
   showCreateForm,
   create,

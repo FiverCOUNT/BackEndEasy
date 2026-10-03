@@ -4084,6 +4084,30 @@ html.is-emit-busy #emitLoading {
   color: #0A84FF !important;
   font-weight: 600;
 }
+.ios-lote-entregar-bar {
+  position: sticky;
+  bottom: 0;
+  padding: 12px 14px 16px;
+  background: linear-gradient(180deg, rgba(255,255,255,0), #fff 28%);
+  border-top: 0.5px solid rgba(60, 60, 67, 0.12);
+}
+.ios-lote-entregar-hint {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #C2410C;
+}
+.ios-lote-entregar-body {
+  padding: 12px 14px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ios-lote-entregar-body .ios-btn-primary { margin-top: 4px; }
+.ios-sheet-item.is-selected {
+  background: #EAF3FF;
+  border-radius: 12px;
+}
 .ios-mov-linea {
   display: flex;
   flex-direction: row;

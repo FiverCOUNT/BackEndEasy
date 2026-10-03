@@ -978,8 +978,10 @@ async function registrarSalida({
   clienteId = null,
   cliente = null,
   usuarioId = null,
+  referenciaTipo = null,
 }) {
   const esTraslado = Boolean(almacenDestinoId);
+  const refTipoExplicit = String(referenciaTipo || '').trim().toUpperCase() || null;
 
   const almacen = await prisma.almacen.findFirst({
     where: { id: almacenId, companyRuc },
@@ -1184,7 +1186,8 @@ async function registrarSalida({
           observaciones: observaciones?.trim() || null,
           referenciaTipo: esTraslado
             ? 'TRASLADO'
-            : (comprobanteId ? 'VENTA' : (guiaRemisionId ? 'GUIA_REMISION' : 'SALIDA_MANUAL')),
+            : (refTipoExplicit
+              || (comprobanteId ? 'VENTA' : (guiaRemisionId ? 'GUIA_REMISION' : 'SALIDA_MANUAL'))),
           numero,
           estado: 'DESPACHADA',
           comprobanteId: comprobanteId || null,
@@ -1194,8 +1197,7 @@ async function registrarSalida({
           usuarioId: usuarioId != null && Number.isFinite(Number(usuarioId))
             ? Number(usuarioId)
             : null,
-          lineas: {            create: lineasCreate,
-          },
+          lineas: { create: lineasCreate },
         },
       });
     }, MOVIMIENTO_TX_OPTS);
